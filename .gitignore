@@ -14,9 +14,16 @@ xcuserdata/
 Package.resolved
 .swiftpm/
 
-# Vendored binaries (re-downloaded by scripts/fetch-ghosttykit.sh)
+# Build output of scripts/setup-ghosttykit.sh (zig builds it from the
+# ghostty submodule; not committed)
 Vendor/GhosttyKit.xcframework/
+Vendor/.ghosttykit-sha
 Vendor/*.tar.gz
+
+# ghostty build cache (created when zig builds the xcframework)
+ghostty/zig-cache/
+ghostty/zig-out/
+ghostty/.zig-cache/
 
 # Release artifacts (built by GitHub Actions, not committed)
 dist/

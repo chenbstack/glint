@@ -28,6 +28,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Derive version from tag
         id: version
@@ -47,18 +48,29 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Cache GhosttyKit
+      - name: Resolve ghostty SHA
+        id: ghostty
+        run: |
+          set -euo pipefail
+          sha="$(git -C ghostty rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Cache GhosttyKit.xcframework
         id: ghostty-cache
         uses: actions/cache@v4
         with:
-          path: Vendor/GhosttyKit.xcframework
-          key: ghosttykit-${{ hashFiles('scripts/fetch-ghosttykit.sh') }}
+          path: |
+            Vendor/GhosttyKit.xcframework
+            Vendor/.ghosttykit-sha
+          key: ghosttykit-${{ runner.os }}-${{ steps.ghostty.outputs.sha }}
 
-      - name: Fetch GhosttyKit
+      - name: Install zig
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
-        env:
-          GHOSTTYKIT_URL: ${{ secrets.GHOSTTYKIT_URL }}
-        run: bash scripts/fetch-ghosttykit.sh
+        run: brew install zig
+
+      - name: Build GhosttyKit
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        run: bash scripts/setup-ghosttykit.sh
 
       - name: Stamp version into Info.plist
         env:

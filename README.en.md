@@ -45,16 +45,29 @@ This also clears `~/Library/Application Support/Glint` and your preferences.
 
 ## Build from source
 
-Requires Xcode 16+ and macOS 14+.
+Requires Xcode 16+, macOS 14+, and [zig](https://ziglang.org).
 
 ```bash
-git clone https://github.com/chenbstack/glint.git
+git clone --recurse-submodules https://github.com/chenbstack/glint.git
 cd glint
-# Fetch the Ghostty xcframework (~500 MB, not committed).
-# Host it yourself or point GHOSTTYKIT_URL at a release asset.
-export GHOSTTYKIT_URL='https://…/GhosttyKit.xcframework.tar.gz'
-bash scripts/fetch-ghosttykit.sh
+
+# Build GhosttyKit.xcframework from the pinned ghostty submodule
+# (10-20 min on a cold cache; subsequent runs are cached by SHA).
+brew install zig
+bash scripts/setup-ghosttykit.sh
+
 open Glint.xcodeproj
+```
+
+Ghostty lives as a git submodule under `ghostty/`. Bump it like this:
+
+```bash
+cd ghostty
+git fetch --tags
+git checkout v1.4.0     # target tag
+cd ..
+git add ghostty && git commit -m "bump ghostty to v1.4.0"
+bash scripts/setup-ghosttykit.sh   # rebuild
 ```
 
 ## Releasing
@@ -71,9 +84,7 @@ Tag a commit `vX.Y.Z` on `main`. The `.github/workflows/release.yml` workflow th
 
 ### Required secret
 
-| Secret | Purpose |
-|---|---|
-| `GHOSTTYKIT_URL` | Public URL of `GhosttyKit.xcframework.tar.gz` (or `.tar.xz` / `.zip`). |
+None — GhosttyKit is built directly from the pinned ghostty submodule, so the version is locked to the submodule SHA.
 
 ### Optional secrets — enable signing + Sparkle
 

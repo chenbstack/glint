@@ -45,16 +45,28 @@ brew uninstall --cask glint
 
 ## 从源码构建
 
-需要 Xcode 16+ 和 macOS 14+。
+需要 Xcode 16+、macOS 14+、[zig](https://ziglang.org)。
 
 ```bash
-git clone https://github.com/chenbstack/glint.git
+git clone --recurse-submodules https://github.com/chenbstack/glint.git
 cd glint
-# Ghostty 的 xcframework 体积约 500 MB,没有入库。
-# 自己 host 一个,或者把 GHOSTTYKIT_URL 指向某个 release 资产。
-export GHOSTTYKIT_URL='https://…/GhosttyKit.xcframework.tar.gz'
-bash scripts/fetch-ghosttykit.sh
+
+# 从 ghostty submodule 编译 GhosttyKit.xcframework(首次 10-20 分钟,后续基于 SHA 缓存)
+brew install zig
+bash scripts/setup-ghosttykit.sh
+
 open Glint.xcodeproj
+```
+
+Ghostty 作为 git submodule 锁在 `ghostty/` 目录,版本由 submodule 的 commit SHA 决定。要升级 ghostty:
+
+```bash
+cd ghostty
+git fetch --tags
+git checkout v1.4.0     # 切到目标 tag
+cd ..
+git add ghostty && git commit -m "bump ghostty to v1.4.0"
+bash scripts/setup-ghosttykit.sh   # 重新编译
 ```
 
 ## 发布流程
@@ -71,9 +83,7 @@ open Glint.xcodeproj
 
 ### 必需 secret
 
-| Secret | 用途 |
-|---|---|
-| `GHOSTTYKIT_URL` | `GhosttyKit.xcframework.tar.gz`(或 `.tar.xz` / `.zip`)的公开 URL |
+无 —— GhosttyKit 从 ghostty submodule 直接 build,版本绑定 submodule SHA。
 
 ### 可选 secret —— 启用签名 + Sparkle
 
