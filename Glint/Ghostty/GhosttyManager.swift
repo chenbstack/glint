@@ -2,18 +2,20 @@ import Foundation
 import AppKit
 import GhosttyKit
 
-/// Owns the single `ghostty_app_t` for the process and pumps its tick loop.
+/// Owns the single `ghostty_app_t` for the process and drives its tick loop.
 ///
 /// Lifecycle:
 ///   ghostty_init() → ghostty_config_new + load_default_files + finalize →
-///   ghostty_app_new(runtime_config, config) → timer fires ghostty_app_tick
-///   while alive.
+///   ghostty_app_new(runtime_config, config) → wakeup_cb dispatches
+///   ghostty_app_tick on the main queue whenever ghostty has work pending
+///   (PTY bytes, cursor blink, animation frames, etc.). Matches upstream
+///   ghostty's macOS apprt — no standing main-queue timer competing with
+///   keyDown dispatch.
 final class GhosttyManager {
     static let shared = GhosttyManager()
 
     private(set) var app: ghostty_app_t?
     private var config: ghostty_config_t?
-    private var timer: DispatchSourceTimer?
     private var appearanceObservation: NSKeyValueObservation?
 
     private init() {
@@ -55,7 +57,6 @@ final class GhosttyManager {
         }
         self.app = app
 
-        startTickLoop()
         observeColorScheme()
     }
 
@@ -77,18 +78,6 @@ final class GhosttyManager {
             ? GHOSTTY_COLOR_SCHEME_DARK
             : GHOSTTY_COLOR_SCHEME_LIGHT
         ghostty_app_set_color_scheme(app, scheme)
-    }
-
-    private func startTickLoop() {
-        let t = DispatchSource.makeTimerSource(queue: .main)
-        // 60 Hz tick for steady output draining + animation
-        t.schedule(deadline: .now() + .milliseconds(16), repeating: .milliseconds(16))
-        t.setEventHandler { [weak self] in
-            guard let app = self?.app else { return }
-            ghostty_app_tick(app)
-        }
-        t.resume()
-        self.timer = t
     }
 
     private func tickSoon() {
