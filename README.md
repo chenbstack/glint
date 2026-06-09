@@ -28,7 +28,7 @@ Cask 安装方式会自动帮你做这一步。
 ## 升级与卸载
 
 ```bash
-brew upgrade --cask glint
+brew update && brew upgrade --cask glint
 brew uninstall --cask glint
 ```
 
