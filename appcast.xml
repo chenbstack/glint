@@ -6,6 +6,15 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
+      <title>Glint 0.0.3</title>
+      <sparkle:version>0.0.3</sparkle:version>
+      <sparkle:shortVersionString>0.0.3</sparkle:shortVersionString>
+      <pubDate>Tue, 09 Jun 2026 11:49:06 +0000</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/chenbstack/glint/releases/tag/v0.0.3</sparkle:releaseNotesLink>
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.0.3/Glint-0.0.3.dmg" length="9059446" type="application/octet-stream" sparkle:edSignature="NiqgLAWk5mak5dCini3bsQe0EKqItP5wtS1rq89qdRUhnXWhjSaAhwBNPdKOvdD2lcKsCsLjIgXiIeWwosveAw==" />
+    </item>
+    <item>
       <title>Glint 0.0.2</title>
       <sparkle:version>0.0.2</sparkle:version>
       <sparkle:shortVersionString>0.0.2</sparkle:shortVersionString>
