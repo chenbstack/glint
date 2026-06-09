@@ -14,6 +14,7 @@ final class GhosttyManager {
     private(set) var app: ghostty_app_t?
     private var config: ghostty_config_t?
     private var timer: DispatchSourceTimer?
+    private var appearanceObservation: NSKeyValueObservation?
 
     private init() {
         bootstrap()
@@ -55,6 +56,27 @@ final class GhosttyManager {
         self.app = app
 
         startTickLoop()
+        observeColorScheme()
+    }
+
+    /// Push the system Light/Dark setting into ghostty and re-push on
+    /// every change. Terminal apps that read the appearance (e.g. for
+    /// tmux status lines, neovim themes, claude's dim mode) will switch
+    /// without a restart.
+    private func observeColorScheme() {
+        pushColorScheme()
+        appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            self?.pushColorScheme()
+        }
+    }
+
+    private func pushColorScheme() {
+        guard let app else { return }
+        let name = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) ?? .aqua
+        let scheme: ghostty_color_scheme_e = (name == .darkAqua)
+            ? GHOSTTY_COLOR_SCHEME_DARK
+            : GHOSTTY_COLOR_SCHEME_LIGHT
+        ghostty_app_set_color_scheme(app, scheme)
     }
 
     private func startTickLoop() {
@@ -161,21 +183,65 @@ final class GhosttyManager {
     }
 
     /// ghostty action dispatcher. Most actions we ignore (return true to say
-    /// "handled"); we intercept GHOSTTY_ACTION_PWD to drive event-driven cwd
-    /// updates instead of polling.
+    /// "handled"); we intercept a handful that need AppKit cooperation:
+    ///   * PWD          → event-driven cwd updates instead of polling
+    ///   * MOUSE_SHAPE  → swap NSCursor when ghostty hovers a link or
+    ///                    enters mouse-mode rendering
+    ///   * OPEN_URL     → forward to NSWorkspace so cmd-click on a URL
+    ///                    actually opens it
+    ///   * RING_BELL    → system beep (silent terminal bells were eating
+    ///                    every shell `\a`)
     private static let handleAction: ghostty_runtime_action_cb = { _, target, action in
-        if action.tag == GHOSTTY_ACTION_PWD,
-           target.tag == GHOSTTY_TARGET_SURFACE,
-           let surface = target.target.surface,
-           let pwdC = action.action.pwd.pwd {
-            let cwd = String(cString: pwdC)
-            if let ud = ghostty_surface_userdata(surface) {
-                let view = Unmanaged<GhosttySurfaceView>.fromOpaque(ud).takeUnretainedValue()
+        guard target.tag == GHOSTTY_TARGET_SURFACE,
+              let surface = target.target.surface else {
+            return true
+        }
+        let view: GhosttySurfaceView? = ghostty_surface_userdata(surface).map {
+            Unmanaged<GhosttySurfaceView>.fromOpaque($0).takeUnretainedValue()
+        }
+
+        switch action.tag {
+        case GHOSTTY_ACTION_PWD:
+            if let pwdC = action.action.pwd.pwd, let view {
+                let cwd = String(cString: pwdC)
                 DispatchQueue.main.async {
                     view.cachedCwd = cwd
                     NotificationCenter.default.post(name: .ghosttyCwdChanged, object: view)
                 }
             }
+
+        case GHOSTTY_ACTION_MOUSE_SHAPE:
+            let shape = action.action.mouse_shape
+            DispatchQueue.main.async { view?.mouseShape = shape }
+
+        case GHOSTTY_ACTION_OPEN_URL:
+            let info = action.action.open_url
+            guard let cstr = info.url, info.len > 0 else { break }
+            // ghostty passes the URL as `const char*` with an explicit
+            // length (not guaranteed to be nul-terminated). Reinterpret
+            // the CChar buffer as UInt8 so String(decoding:as:) accepts it.
+            let urlString = cstr.withMemoryRebound(to: UInt8.self, capacity: Int(info.len)) { bytes in
+                String(decoding: UnsafeBufferPointer(start: bytes, count: Int(info.len)), as: UTF8.self)
+            }
+            DispatchQueue.main.async {
+                if let u = URL(string: urlString) {
+                    NSWorkspace.shared.open(u)
+                }
+            }
+
+        case GHOSTTY_ACTION_RING_BELL:
+            DispatchQueue.main.async {
+                NSSound.beep()
+                // Also bounce the dock icon if we're not the active app —
+                // a backgrounded build/test that beeps is exactly when
+                // the user wants their attention pulled back.
+                if !NSApp.isActive {
+                    NSApp.requestUserAttention(.informationalRequest)
+                }
+            }
+
+        default:
+            break
         }
         return true
     }

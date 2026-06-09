@@ -377,10 +377,7 @@ final class WorkspaceStore: ObservableObject {
         // leaves recent dirs persisted. Uses a Timer.weakWrapper so we don't
         // retain self forever.
         cwdTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.captureCwdsFromLiveSurfaces()
-                self?.pruneStuckAgentStates()
-            }
+            Task { @MainActor in self?.captureCwdsFromLiveSurfaces() }
         }
 
         // Final flush + save on app terminate.
@@ -528,30 +525,6 @@ final class WorkspaceStore: ObservableObject {
                 NSSound(named: "Funk")?.play()
             case .justCompleted where soundOnTurnComplete:
                 NSSound(named: "Glass")?.play()
-            default:
-                break
-            }
-        }
-    }
-
-    /// Self-healing watchdog. Agent hooks ride on a Unix-domain socket via
-    /// `nc -U`; one missed `Stop` (Glint restarted mid-turn, transient
-    /// socket failure, claude subagent that only emits `SubagentStop`)
-    /// would otherwise leave the sidebar pinned to "thinking" forever.
-    /// If a pane is in a working state with no event for > 5 minutes we
-    /// quietly drop it back to `.idle`. `.needsPermission` is deliberately
-    /// excluded — that one needs the user to actually respond.
-    func pruneStuckAgentStates() {
-        let now = Date()
-        let stale: TimeInterval = 5 * 60
-        for (key, state) in paneAgentState {
-            switch state.status {
-            case .thinking, .tool, .compacting:
-                if now.timeIntervalSince(state.updatedAt) > stale {
-                    paneAgentState[key]?.status = .idle
-                    paneAgentState[key]?.updatedAt = now
-                    NSLog("[glint] watchdog: pane \(key.workspace.uuidString.prefix(8))/\(key.pane.value) stuck in \(state.status.rawValue) > \(Int(stale))s → idle")
-                }
             default:
                 break
             }

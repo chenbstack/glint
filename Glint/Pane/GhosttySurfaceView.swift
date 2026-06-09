@@ -29,6 +29,16 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// area drag the whole window. Force NO so clicks here only go to ghostty.
     override var mouseDownCanMoveWindow: Bool { false }
 
+    /// Cursor shape currently advertised by ghostty (default: text I-beam).
+    /// Updated when ghostty emits `GHOSTTY_ACTION_MOUSE_SHAPE` while the
+    /// pointer hovers over a link or enters mouse-mode rendering.
+    var mouseShape: ghostty_action_mouse_shape_e = GHOSTTY_MOUSE_SHAPE_TEXT {
+        didSet {
+            guard mouseShape != oldValue else { return }
+            window?.invalidateCursorRects(for: self)
+        }
+    }
+
     init(frame: NSRect,
          initialCwd: String? = nil,
          paneKey: String? = nil,
@@ -39,6 +49,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = NSColor(red: 0.043, green: 0.039, blue: 0.078, alpha: 1.0).cgColor
+        // Accept file drops from Finder; on drop we paste the shell-quoted
+        // path so users can `cd <drop>` without typing it.
+        registerForDraggedTypes([.fileURL])
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -318,11 +331,248 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         return ghostty_input_mods_e(rawValue: raw)
     }
 
-    // MARK: - mouse (minimal: focus on click)
+    // MARK: - mouse
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        super.mouseDown(with: event)
+        forwardMousePos(event)
+        forwardMouseButton(event, state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        forwardMousePos(event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        forwardMousePos(event)
+        forwardMouseButton(event, state: GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        forwardMousePos(event)
+        forwardMouseButton(event, state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_RIGHT)
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        forwardMousePos(event)
+        forwardMouseButton(event, state: GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_RIGHT)
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        forwardMousePos(event)
+        let btn = mouseButton(forNumber: event.buttonNumber)
+        forwardMouseButton(event, state: GHOSTTY_MOUSE_PRESS, button: btn)
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        forwardMousePos(event)
+        let btn = mouseButton(forNumber: event.buttonNumber)
+        forwardMouseButton(event, state: GHOSTTY_MOUSE_RELEASE, button: btn)
+    }
+
+    /// ghostty's mouse_pos is in the same scaled-pixel space as
+    /// `ghostty_surface_set_size`: origin top-left, Y growing downward.
+    /// NSEvent gives us window coords with origin bottom-left, so flip Y.
+    private func forwardMousePos(_ event: NSEvent) {
+        guard let s = surface else { return }
+        let local = convert(event.locationInWindow, from: nil)
+        let scale = window?.backingScaleFactor ?? 2.0
+        let px = local.x * scale
+        let py = (bounds.height - local.y) * scale
+        ghostty_surface_mouse_pos(s, px, py, currentMods(event.modifierFlags))
+    }
+
+    private func forwardMouseButton(_ event: NSEvent,
+                                    state: ghostty_input_mouse_state_e,
+                                    button: ghostty_input_mouse_button_e) {
+        guard let s = surface else { return }
+        _ = ghostty_surface_mouse_button(s, state, button, currentMods(event.modifierFlags))
+    }
+
+    private func mouseButton(forNumber n: Int) -> ghostty_input_mouse_button_e {
+        switch n {
+        case 2:  return GHOSTTY_MOUSE_MIDDLE
+        case 3:  return GHOSTTY_MOUSE_FOUR
+        case 4:  return GHOSTTY_MOUSE_FIVE
+        case 5:  return GHOSTTY_MOUSE_SIX
+        case 6:  return GHOSTTY_MOUSE_SEVEN
+        case 7:  return GHOSTTY_MOUSE_EIGHT
+        case 8:  return GHOSTTY_MOUSE_NINE
+        case 9:  return GHOSTTY_MOUSE_TEN
+        case 10: return GHOSTTY_MOUSE_ELEVEN
+        default: return GHOSTTY_MOUSE_UNKNOWN
+        }
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        forwardMousePos(event)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        forwardMousePos(event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        // Send -1,-1 so ghostty stops drawing hover effects (link
+        // underline, mouse-mode cursor highlight) when the pointer
+        // leaves the surface entirely.
+        guard let s = surface else { return }
+        ghostty_surface_mouse_pos(s, -1, -1, currentMods(event.modifierFlags))
+    }
+
+    /// Install / refresh the tracking area so we receive `mouseMoved` and
+    /// `mouseEntered`/`mouseExited` while the window is key. Without this,
+    /// hover-only features (link underline, tmux mouse mode highlights,
+    /// cursor shape changes) wouldn't fire.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let t = trackingArea { removeTrackingArea(t) }
+        let t = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited, .cursorUpdate],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(t)
+        trackingArea = t
+    }
+
+    /// macOS cursor lookup whenever the pointer enters our tracking area
+    /// or after we invalidate cursor rects. Maps ghostty's CSS-flavored
+    /// `mouse_shape` enum onto AppKit's cursor catalogue.
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: cursor(for: mouseShape))
+    }
+
+    private func cursor(for shape: ghostty_action_mouse_shape_e) -> NSCursor {
+        switch shape {
+        case GHOSTTY_MOUSE_SHAPE_POINTER:        return .pointingHand
+        case GHOSTTY_MOUSE_SHAPE_CROSSHAIR:      return .crosshair
+        case GHOSTTY_MOUSE_SHAPE_TEXT,
+             GHOSTTY_MOUSE_SHAPE_CELL:           return .iBeam
+        case GHOSTTY_MOUSE_SHAPE_VERTICAL_TEXT:  return .iBeamCursorForVerticalLayout
+        case GHOSTTY_MOUSE_SHAPE_NOT_ALLOWED,
+             GHOSTTY_MOUSE_SHAPE_NO_DROP:        return .operationNotAllowed
+        case GHOSTTY_MOUSE_SHAPE_GRAB:           return .openHand
+        case GHOSTTY_MOUSE_SHAPE_GRABBING:       return .closedHand
+        case GHOSTTY_MOUSE_SHAPE_COL_RESIZE,
+             GHOSTTY_MOUSE_SHAPE_EW_RESIZE,
+             GHOSTTY_MOUSE_SHAPE_E_RESIZE,
+             GHOSTTY_MOUSE_SHAPE_W_RESIZE:       return .resizeLeftRight
+        case GHOSTTY_MOUSE_SHAPE_ROW_RESIZE,
+             GHOSTTY_MOUSE_SHAPE_NS_RESIZE,
+             GHOSTTY_MOUSE_SHAPE_N_RESIZE,
+             GHOSTTY_MOUSE_SHAPE_S_RESIZE:       return .resizeUpDown
+        default:                                 return .iBeam
+        }
+    }
+
+    // MARK: - drag-and-drop
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        return sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: nil)
+            ? .copy
+            : []
+    }
+
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        return draggingEntered(sender)
+    }
+
+    /// Paste shell-quoted paths into the terminal. Joins multiple files
+    /// with a space — handy for `mv a.txt b.txt dest/` style commands.
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        guard let s = surface,
+              let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
+              !urls.isEmpty else {
+            return false
+        }
+        let joined = urls.map { shellQuote($0.path) }.joined(separator: " ")
+        joined.withCString { ptr in
+            ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
+        }
+        return true
+    }
+
+    /// Single-quote a path, escaping embedded single quotes as `'\''`.
+    /// Matches what `printf %q` would do for POSIX shells (good enough for
+    /// zsh/bash; fish users can adjust their shell anyway).
+    private func shellQuote(_ path: String) -> String {
+        if !path.contains("'") { return "'\(path)'" }
+        return "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    // MARK: - gestures
+
+    /// Pinch to zoom font size. Tracks accumulated magnification and fires
+    /// ghostty's font-size binding action once the delta crosses a small
+    /// threshold, so the gesture feels continuous instead of step-like.
+    private var pinchAccum: CGFloat = 0
+    override func magnify(with event: NSEvent) {
+        guard let s = surface else { return }
+        pinchAccum += event.magnification
+        let step: CGFloat = 0.18
+        while pinchAccum >= step {
+            triggerBindingAction(s, "increase_font_size:1")
+            pinchAccum -= step
+        }
+        while pinchAccum <= -step {
+            triggerBindingAction(s, "decrease_font_size:1")
+            pinchAccum += step
+        }
+    }
+
+    /// Smart-magnify (double-tap on trackpad) → reset font size.
+    override func smartMagnify(with event: NSEvent) {
+        guard let s = surface else { return }
+        triggerBindingAction(s, "reset_font_size")
+    }
+
+    @discardableResult
+    private func triggerBindingAction(_ s: ghostty_surface_t, _ name: String) -> Bool {
+        return name.withCString { ptr in
+            ghostty_surface_binding_action(s, ptr, UInt(strlen(ptr)))
+        }
+    }
+
+    // MARK: - context menu
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let m = NSMenu()
+        m.addItem(withTitle: String(localized: "Copy"),
+                  action: #selector(menuCopy(_:)),
+                  keyEquivalent: "c").target = self
+        m.addItem(withTitle: String(localized: "Paste"),
+                  action: #selector(menuPaste(_:)),
+                  keyEquivalent: "v").target = self
+        m.addItem(NSMenuItem.separator())
+        m.addItem(withTitle: String(localized: "Select All"),
+                  action: #selector(menuSelectAll(_:)),
+                  keyEquivalent: "a").target = self
+        m.addItem(withTitle: String(localized: "Clear"),
+                  action: #selector(menuClear(_:)),
+                  keyEquivalent: "k").target = self
+        return m
+    }
+
+    @objc private func menuCopy(_ sender: Any?) {
+        guard let s = surface else { return }
+        triggerBindingAction(s, "copy_to_clipboard")
+    }
+
+    @objc private func menuPaste(_ sender: Any?) {
+        guard let s = surface else { return }
+        triggerBindingAction(s, "paste_from_clipboard")
+    }
+
+    @objc private func menuSelectAll(_ sender: Any?) {
+        guard let s = surface else { return }
+        triggerBindingAction(s, "select_all")
+    }
+
+    @objc private func menuClear(_ sender: Any?) {
+        guard let s = surface else { return }
+        triggerBindingAction(s, "clear_screen")
     }
 
     /// Forward scroll wheel events to ghostty. Without this, `scrollWheel`
@@ -427,12 +677,23 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         []
     }
 
+    /// Anchor IME candidate windows under the real terminal cursor.
+    /// Without `ghostty_surface_ime_point` IME would render at our view's
+    /// top-left corner; Chinese / Japanese / Korean input would float in
+    /// the wrong place.
     func firstRect(forCharacterRange range: NSRange,
                    actualRange: NSRangePointer?) -> NSRect {
-        guard let window else { return .zero }
-        let rectInView = NSRect(x: 0, y: 0, width: 1, height: 16)
-        let rectInWindow = convert(rectInView, to: nil)
-        return window.convertToScreen(rectInWindow)
+        guard let window, let s = surface else { return .zero }
+        var x: Double = 0, y: Double = 0, w: Double = 0, h: Double = 0
+        ghostty_surface_ime_point(s, &x, &y, &w, &h)
+        let scale = window.backingScaleFactor
+        // ghostty returns the cursor box in scaled pixels with top-left
+        // origin; AppKit wants view-local points with bottom-left origin.
+        let widthPt = w / scale
+        let heightPt = h / scale
+        let viewY = bounds.height - (y / scale) - heightPt
+        let rectInView = NSRect(x: x / scale, y: viewY, width: widthPt, height: heightPt)
+        return window.convertToScreen(convert(rectInView, to: nil))
     }
 
     func characterIndex(for point: NSPoint) -> Int {
