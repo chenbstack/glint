@@ -45,15 +45,17 @@ This also clears `~/Library/Application Support/Glint` and your preferences.
 
 ## Build from source
 
-Requires Xcode 16+, macOS 14+, and [zig](https://ziglang.org).
+Requires Xcode 16+, macOS 14+, and [zig](https://ziglang.org) — the exact version pinned in `ghostty/build.zig.zon` as `minimum_zig_version` (currently **0.15.2**). Homebrew's `zig` tracks the latest release and will fail.
 
 ```bash
 git clone --recurse-submodules https://github.com/chenbstack/glint.git
 cd glint
 
+# Install the right zig (mise example; or grab the tarball from ziglang.org/download/)
+mise use zig@0.15.2
+
 # Build GhosttyKit.xcframework from the pinned ghostty submodule
 # (10-20 min on a cold cache; subsequent runs are cached by SHA).
-brew install zig
 bash scripts/setup-ghosttykit.sh
 
 open Glint.xcodeproj

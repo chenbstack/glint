@@ -45,14 +45,16 @@ brew uninstall --cask glint
 
 ## 从源码构建
 
-需要 Xcode 16+、macOS 14+、[zig](https://ziglang.org)。
+需要 Xcode 16+、macOS 14+、[zig](https://ziglang.org)(版本必须跟 `ghostty/build.zig.zon` 里的 `minimum_zig_version` 一致,当前是 **0.15.2**;Homebrew 的 `zig` 默认装最新版会编译失败)。
 
 ```bash
 git clone --recurse-submodules https://github.com/chenbstack/glint.git
 cd glint
 
+# 装对版本的 zig(以 mise 为例,或者从 ziglang.org/download/ 下对应 tarball)
+mise use zig@0.15.2
+
 # 从 ghostty submodule 编译 GhosttyKit.xcframework(首次 10-20 分钟,后续基于 SHA 缓存)
-brew install zig
 bash scripts/setup-ghosttykit.sh
 
 open Glint.xcodeproj
