@@ -31,22 +31,7 @@
 		CEA0A8FF66046FEFA80FAC0C /* GlintApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB74659D174004C620D538A /* GlintApp.swift */; };
 		D1BDE1E5DE8D4FE1F96822D1 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8933F67B4B6EEA3FD4E603 /* WorkspaceStore.swift */; };
 		E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05F2CA2243872C8111048EF2 /* AgentBridge.swift */; };
-		FE165C9B0CB2598BDE8C6434 /* Sparkle in Embed Frameworks */ = {isa = PBXBuildFile; productRef = AA4A898F3E802B8C793D7611 /* Sparkle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		89E4E08444260EFEAA1CD788 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				FE165C9B0CB2598BDE8C6434 /* Sparkle in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		050E267AE14712D4D6633B4F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -212,7 +197,6 @@
 				86AD9E59837D6EEC7E56E0F0 /* Sources */,
 				15DB57E4B5291059A1FB8D4A /* Resources */,
 				98BEE1CADB909FBA0A70E63B /* Frameworks */,
-				89E4E08444260EFEAA1CD788 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
