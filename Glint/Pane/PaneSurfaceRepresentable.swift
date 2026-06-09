@@ -45,8 +45,40 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     /// Container subclass that disables borderless-window drag in the pane
     /// area. Without this, any whitespace not covered by the ghostty surface
     /// (e.g. during a resize) would let the user drag the window.
+    ///
+    /// Also snaps its own frame to backing-store pixels — SwiftUI's layout
+    /// regularly hands us fractional origins (e.g. y=52.5 after the 52pt
+    /// toolbar on an odd-height window). Ghostty's CAMetalLayer then lives
+    /// at a fractional screen position, Core Animation resamples it to the
+    /// pixel grid, and during fast scrollback (`cat` of a big file) each
+    /// row falls on a slightly different sub-pixel offset — the eye reads
+    /// the result as a 1px "fault line" tearing through the rows.
     private final class NoDragContainerView: NSView {
         override var mouseDownCanMoveWindow: Bool { false }
+
+        override func setFrameOrigin(_ newOrigin: NSPoint) {
+            super.setFrameOrigin(snappedOrigin(newOrigin))
+        }
+
+        override func setFrameSize(_ newSize: NSSize) {
+            super.setFrameSize(snappedSize(newSize))
+        }
+
+        private func snappedOrigin(_ p: NSPoint) -> NSPoint {
+            guard window != nil else { return p }
+            return backingAlignedRect(
+                NSRect(origin: p, size: frame.size),
+                options: [.alignAllEdgesNearest]
+            ).origin
+        }
+
+        private func snappedSize(_ s: NSSize) -> NSSize {
+            guard window != nil else { return s }
+            return backingAlignedRect(
+                NSRect(origin: frame.origin, size: s),
+                options: [.alignAllEdgesNearest]
+            ).size
+        }
     }
 
     private func attach(_ surface: GhosttySurfaceView, to container: NSView) {

@@ -325,6 +325,36 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         super.mouseDown(with: event)
     }
 
+    /// Forward scroll wheel events to ghostty. Without this, `scrollWheel`
+    /// bubbles up through SwiftUI and ghostty never sees it — scrollback
+    /// can't be navigated and mouse-mode apps (vim, htop, claude) miss
+    /// their wheel input.
+    ///
+    /// `ghostty_input_scroll_mods_t` is a packed byte:
+    ///   bit 0     — precision (trackpad / Magic Mouse give pixel deltas)
+    ///   bits 1-3  — momentum phase (none/began/stationary/changed/ended/…)
+    /// see `src/input/mouse.zig` in ghostty for the source of truth.
+    override func scrollWheel(with event: NSEvent) {
+        guard let s = surface else { super.scrollWheel(with: event); return }
+        var packed: Int32 = 0
+        if event.hasPreciseScrollingDeltas { packed |= 1 }
+        let momentum: Int32
+        switch event.momentumPhase {
+        case .began:      momentum = 1
+        case .stationary: momentum = 2
+        case .changed:    momentum = 3
+        case .ended:      momentum = 4
+        case .cancelled:  momentum = 5
+        case .mayBegin:   momentum = 6
+        default:          momentum = 0
+        }
+        packed |= momentum << 1
+        ghostty_surface_mouse_scroll(s,
+                                     event.scrollingDeltaX,
+                                     event.scrollingDeltaY,
+                                     packed)
+    }
+
     // MARK: - NSTextInputClient (printable text + IME)
 
     func insertText(_ string: Any, replacementRange: NSRange) {

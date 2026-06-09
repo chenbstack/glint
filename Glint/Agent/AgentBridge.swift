@@ -19,8 +19,21 @@ final class AgentBridge {
     private init() {}
 
     /// Bind + listen. Path is short on purpose (sun_path is 104 chars on Darwin).
+    ///
+    /// Debug builds use a separate socket path so a running dev Glint and
+    /// a running production Glint don't fight over `/tmp/glint-<uid>-agent.sock`.
+    /// Without this split, whichever process started last `unlink()`s the
+    /// other's bound entry and steals every incoming hook event — the other
+    /// Glint's sidebar would freeze on whatever status the pane was in when
+    /// the steal happened (e.g. "thinking" with no Stop to clear it).
+    /// The path is baked into each pane's `$GLINT_AGENT_SOCK` at creation,
+    /// so panes consistently report back to the Glint that launched them.
     func start() {
+        #if DEBUG
+        let path = "/tmp/glint-\(getuid())-dev-agent.sock"
+        #else
         let path = "/tmp/glint-\(getuid())-agent.sock"
+        #endif
         socketPath = path
 
         // Reap any stale socket from a previous run.
