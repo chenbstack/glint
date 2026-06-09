@@ -410,7 +410,7 @@ private struct GeneralPane: View {
             }
             SettingsDivider()
             SettingsRow("Collapse sidebar on launch",
-                        subtitle: "Start with the sidebar hidden. ⌃⌘S to toggle.") {
+                        subtitle: "Start with the sidebar hidden. ⌘/ to toggle.") {
                 Toggle("", isOn: $store.sidebarCollapsed)
                     .toggleStyle(.switch).labelsHidden()
             }
@@ -635,12 +635,12 @@ private struct AgentsPane: View {
 
 private struct ShortcutsPane: View {
     var body: some View {
-        SettingsCard("Window") {
-            shortcutRow("Toggle Sidebar", keys: ["⌃", "⌘", "S"])
+        SettingsCard("Workspace") {
+            shortcutRow("New Workspace", keys: ["⌘", "N"])
             SettingsDivider()
-            shortcutRow("Command Palette", keys: ["⌘", "K"])
+            shortcutRow("Next Workspace", keys: ["⌘", "↓"])
             SettingsDivider()
-            shortcutRow("Settings", keys: ["⌘", ","])
+            shortcutRow("Previous Workspace", keys: ["⌘", "↑"])
         }
         SettingsCard("Panes") {
             shortcutRow("Split Horizontal", keys: ["⌘", "D"])
@@ -650,6 +650,31 @@ private struct ShortcutsPane: View {
             shortcutRow("Close Pane", keys: ["⌘", "W"])
             SettingsDivider()
             shortcutRow("Focus Next Pane", keys: ["⌘", "]"])
+        }
+        SettingsCard("Window") {
+            shortcutRow("Toggle Sidebar", keys: ["⌘", "/"])
+            SettingsDivider()
+            shortcutRow("Command Palette", keys: ["⌘", "K"])
+            SettingsDivider()
+            shortcutRow("Find in Sidebar", keys: ["⌘", "F"])
+            SettingsDivider()
+            shortcutRow("Settings", keys: ["⌘", ","])
+            SettingsDivider()
+            shortcutRow("Minimize", keys: ["⌘", "M"])
+            SettingsDivider()
+            shortcutRow("Hide Glint", keys: ["⌘", "H"])
+            SettingsDivider()
+            shortcutRow("Quit Glint", keys: ["⌘", "Q"])
+        }
+        SettingsCard("In Command Palette",
+                     footer: "Visible only when the palette is open.") {
+            shortcutRow("Move Selection Up", keys: ["↑"])
+            SettingsDivider()
+            shortcutRow("Move Selection Down", keys: ["↓"])
+            SettingsDivider()
+            shortcutRow("Run Selection", keys: ["⏎"])
+            SettingsDivider()
+            shortcutRow("Close Palette", keys: ["⎋"])
         }
     }
 

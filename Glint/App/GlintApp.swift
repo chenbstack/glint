@@ -32,6 +32,13 @@ struct GlintApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {
+                Button("New Workspace") { workspaceStore.addWorkspace() }
+                    .keyboardShortcut("n", modifiers: .command)
+                Button("Next Workspace") { workspaceStore.selectNextWorkspace() }
+                    .keyboardShortcut(.downArrow, modifiers: .command)
+                Button("Previous Workspace") { workspaceStore.selectPreviousWorkspace() }
+                    .keyboardShortcut(.upArrow, modifiers: .command)
+                Divider()
                 Button("Split Horizontal") { workspaceStore.splitFocused(.horizontal) }
                     .keyboardShortcut("d", modifiers: .command)
                 Button("Split Vertical") { workspaceStore.splitFocused(.vertical) }
@@ -46,6 +53,10 @@ struct GlintApp: App {
                     workspaceStore.commandPaletteOpen.toggle()
                 }
                 .keyboardShortcut("k", modifiers: .command)
+                Button("Find in Sidebar") {
+                    workspaceStore.focusSidebarSearch()
+                }
+                .keyboardShortcut("f", modifiers: .command)
             }
             // Hijack the App menu's Settings… so ⌘, opens our in-window
             // sheet instead of trying to summon a separate scene.

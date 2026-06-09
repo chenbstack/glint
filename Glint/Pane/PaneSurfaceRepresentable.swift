@@ -19,8 +19,19 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
         if surfaceView.superview !== nsView {
             attach(surfaceView, to: nsView)
         }
-        surfaceView.setGhosttyFocus(focused)
-        if focused, surfaceView.window?.firstResponder !== surfaceView {
+        // Don't yank focus out of a text editor (sidebar search, rename
+        // field, …). SwiftUI re-runs updateNSView roughly every second
+        // because of the sidebar's per-workspace elapsed-time
+        // TimelineView, so any unconditional sync here would steal focus
+        // and re-light the terminal cursor ~1s after the user clicks the
+        // search box. resignFirstResponder already pushed ghostty into
+        // the unfocused state; leave it alone until the responder dance
+        // unwinds naturally.
+        let textEditorActive = surfaceView.window?.firstResponder is NSText
+        if !textEditorActive {
+            surfaceView.setGhosttyFocus(focused)
+        }
+        if focused, !textEditorActive, surfaceView.window?.firstResponder !== surfaceView {
             DispatchQueue.main.async {
                 surfaceView.window?.makeFirstResponder(surfaceView)
             }

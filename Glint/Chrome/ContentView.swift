@@ -35,7 +35,6 @@ struct ContentView: View {
                 ToolbarHeader()
                 PaneTreeView(node: store.currentRoot)
                     .background(Theme.bgPane)
-                StatusbarView()
             }
             .background(Theme.bgPane)
         }
@@ -75,7 +74,7 @@ struct ToolbarHeader: View {
             .buttonStyle(.plain)
             .foregroundStyle(Theme.text3)
             .help(store.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar")
-            .keyboardShortcut("s", modifiers: [.command, .control])
+            .keyboardShortcut("/", modifiers: .command)
 
             GlintBrandMark()
 
@@ -85,28 +84,13 @@ struct ToolbarHeader: View {
             }
 
             Spacer(minLength: 12)
-            HStack(spacing: 2) {
-                Button {
+            HStack(spacing: 4) {
+                ToolbarIconButton(symbol: "command", help: "Command Palette (⌘K)") {
                     store.commandPaletteOpen = true
-                } label: {
-                    Image(systemName: "command")
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(width: 28, height: 28)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Theme.text3)
-                .help("Command Palette (⌘K)")
-
-                Button {
+                ToolbarIconButton(symbol: "gearshape", help: "Settings (⌘,)") {
                     store.settingsOpen = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(width: 28, height: 28)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Theme.text3)
-                .help("Settings (⌘,)")
             }
         }
         // Traffic lights take ~78pt when sidebar is collapsed; otherwise the
@@ -138,6 +122,35 @@ struct ToolbarHeader: View {
 // MARK: - Brand mark
 
 /// Glint wordmark: a custom-drawn four-point spark with an asymmetric long
+/// Header toolbar icon button. The full square is hit-testable (via
+/// `.contentShape(Rectangle())`) so a click that lands on padding still
+/// fires — without it, `.buttonStyle(.plain)` lets the Image be the only
+/// hit target and a 13pt SF Symbol leaves a lot of dead space inside the
+/// button's frame.
+private struct ToolbarIconButton: View {
+    let symbol: String
+    let help: LocalizedStringKey
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 32, height: 32)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.white.opacity(hovering ? 0.08 : 0))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.text3)
+        .help(help)
+        .onHover { hovering = $0 }
+    }
+}
+
 /// vertical axis (the "glint" of light on a surface), set next to the
 /// "Glint" wordmark in SF Pro semibold. The spark carries a cool gradient
 /// + soft halo so it reads as the app's signature without needing an asset.

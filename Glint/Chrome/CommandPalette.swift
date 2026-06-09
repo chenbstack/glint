@@ -170,7 +170,7 @@ struct CommandPalette: View {
             title: "Toggle Sidebar",
             subtitle: "Show or hide the workspace sidebar",
             symbol: "sidebar.left",
-            shortcut: "⌃⌘S",
+            shortcut: "⌘/",
             action: { store.sidebarCollapsed.toggle() }
         ))
 

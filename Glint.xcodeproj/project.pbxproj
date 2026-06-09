@@ -25,7 +25,6 @@
 		AB89FA6EF5785EC4026F4402 /* VisualEffectBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */; };
 		AB89FA6EF5785EC4026F4502 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0656F7C1D48AE0429C1888D /* SettingsView.swift */; };
 		AB89FA6EF5785EC4026F4503 /* CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0656F7C1D48AE0429C1888E /* CommandPalette.swift */; };
-		BD7AFD1D448B827DCD0D9C0C /* StatusbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A17C4ADD788ABC0A9BB2EE5 /* StatusbarView.swift */; };
 		CD30F5E1B78B3C46C9990FD6 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8C269A6E9AE87961C3356DC /* SidebarView.swift */; };
 		CD7908F096580864CB2992ED /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BE4DBC7E2579823474466E9 /* ContentView.swift */; };
 		CEA0A8FF66046FEFA80FAC0C /* GlintApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB74659D174004C620D538A /* GlintApp.swift */; };
@@ -46,7 +45,6 @@
 		3E2E78BBA22734DD486C760B /* Glint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glint.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		41DDB9C7B5A277B7924270A3 /* PaneAgentState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneAgentState.swift; sourceTree = "<group>"; };
 		4BE4DBC7E2579823474466E9 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		5A17C4ADD788ABC0A9BB2EE5 /* StatusbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusbarView.swift; sourceTree = "<group>"; };
 		5A8933F67B4B6EEA3FD4E603 /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStore.swift; sourceTree = "<group>"; };
 		7CB74659D174004C620D538A /* GlintApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintApp.swift; sourceTree = "<group>"; };
 		81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GhosttyKit.xcframework; path = Vendor/GhosttyKit.xcframework; sourceTree = "<group>"; };
@@ -102,7 +100,6 @@
 			children = (
 				4BE4DBC7E2579823474466E9 /* ContentView.swift */,
 				A8C269A6E9AE87961C3356DC /* SidebarView.swift */,
-				5A17C4ADD788ABC0A9BB2EE5 /* StatusbarView.swift */,
 				050E267AE14712D4D6633B4F /* Theme.swift */,
 				C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */,
 				C0656F7C1D48AE0429C1888D /* SettingsView.swift */,
@@ -278,7 +275,6 @@
 				6D74FE6545631EB8193C82E1 /* PaneView.swift in Sources */,
 				175E069EE844FB32C6EE51BB /* Persistence.swift in Sources */,
 				CD30F5E1B78B3C46C9990FD6 /* SidebarView.swift in Sources */,
-				BD7AFD1D448B827DCD0D9C0C /* StatusbarView.swift in Sources */,
 				7FC12666816053BEB64079CB /* Theme.swift in Sources */,
 				AB89FA6EF5785EC4026F4402 /* VisualEffectBackground.swift in Sources */,
 				AB89FA6EF5785EC4026F4502 /* SettingsView.swift in Sources */,
@@ -405,7 +401,7 @@
 		D716E255757C327EE86E1B65 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon-Dev";
 				CODE_SIGN_ENTITLEMENTS = Glint/Resources/Glint.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;

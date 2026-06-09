@@ -199,6 +199,18 @@ final class WorkspaceStore: ObservableObject {
     /// of-the-OS.
     @Published var settingsOpen: Bool = false
 
+    /// Tick incremented whenever the global ⌘F is fired. `SidebarView`
+    /// observes this and pulls focus into its search field. Using a tick
+    /// (vs. a `Bool` toggle) avoids the bool's "already true" no-op when
+    /// the user fires the shortcut twice without an intervening blur.
+    @Published var sidebarSearchFocusTick: Int = 0
+    func focusSidebarSearch() {
+        // Auto-expand sidebar if collapsed — otherwise ⌘F appears to
+        // do nothing because the search field isn't on screen.
+        if sidebarCollapsed { sidebarCollapsed = false }
+        sidebarSearchFocusTick &+= 1
+    }
+
     /// Preferred UI language identifier. `"system"` follows the OS; any
     /// other value is a BCP-47 tag (e.g. `"en"`, `"zh-Hans"`). Persists
     /// across launches via UserDefaults so the choice survives quits.
@@ -619,6 +631,25 @@ final class WorkspaceStore: ObservableObject {
     func selectWorkspace(_ id: UUID) {
         selectedWorkspaceID = id
         acknowledgeCompletionIfNeeded(for: id)
+    }
+
+    /// Cycle to the next workspace in sidebar order, wrapping at the end.
+    /// Used by the ⌘⇧] menu command — paired with `selectPreviousWorkspace`
+    /// so keyboard-only navigation has parity with clicking the sidebar.
+    func selectNextWorkspace() {
+        guard let id = selectedWorkspaceID,
+              let idx = workspaces.firstIndex(where: { $0.id == id }),
+              !workspaces.isEmpty else { return }
+        let next = (idx + 1) % workspaces.count
+        selectWorkspace(workspaces[next].id)
+    }
+
+    func selectPreviousWorkspace() {
+        guard let id = selectedWorkspaceID,
+              let idx = workspaces.firstIndex(where: { $0.id == id }),
+              !workspaces.isEmpty else { return }
+        let prev = (idx - 1 + workspaces.count) % workspaces.count
+        selectWorkspace(workspaces[prev].id)
     }
 
     func deleteWorkspace(_ id: UUID) {

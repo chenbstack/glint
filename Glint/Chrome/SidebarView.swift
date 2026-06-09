@@ -3,6 +3,7 @@ import SwiftUI
 struct SidebarView: View {
     @EnvironmentObject var store: WorkspaceStore
     @State private var searchText: String = ""
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -12,6 +13,9 @@ struct SidebarView: View {
             searchField
                 .padding(.horizontal, 12)
                 .padding(.bottom, 4)
+                .onChange(of: store.sidebarSearchFocusTick) { _, _ in
+                    searchFocused = true
+                }
 
             ScrollView {
                 VStack(spacing: 0) {
@@ -83,22 +87,36 @@ struct SidebarView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.text2)
-            Text("⌘K")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(Theme.text3)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1.5)
-                .background(
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(Color.white.opacity(0.06))
-                )
+                .focused($searchFocused)
+                .onKeyPress(.escape) {
+                    searchText = ""
+                    searchFocused = false
+                    return .handled
+                }
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                    searchFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.text4)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.horizontal, 10)
         .frame(height: 28)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.white.opacity(0.04))
+                .fill(Color.white.opacity(searchFocused ? 0.08 : 0.04))
         )
+        // Make the entire pill hit-testable so clicking anywhere (the
+        // magnifying glass, the empty padding, the trailing ⌘K tag) hands
+        // focus to the TextField. Without contentShape SwiftUI only routes
+        // hits that land directly on the TextField's text baseline.
+        .contentShape(Rectangle())
+        .onTapGesture { searchFocused = true }
     }
 
     private func sectionHeader(_ title: String, count: Int) -> some View {
