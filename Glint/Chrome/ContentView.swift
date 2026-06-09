@@ -168,12 +168,43 @@ struct GlintBrandMark: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Theme.text1)
                 .kerning(-0.2)
+            #if DEBUG
+            DevBadge()
+            #endif
         }
         .padding(.leading, 2)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Glint")
     }
 }
+
+#if DEBUG
+private struct DevBadge: View {
+    var body: some View {
+        Text("DEV")
+            .font(.system(size: 9, weight: .bold))
+            .kerning(0.4)
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(LinearGradient(
+                        colors: [Color(red: 0.95, green: 0.30, blue: 0.55),
+                                 Color(red: 0.55, green: 0.30, blue: 0.95)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+            )
+            .shadow(color: Color(red: 0.95, green: 0.30, blue: 0.55).opacity(0.35),
+                    radius: 4, y: 0)
+            .accessibilityLabel("Development build")
+    }
+}
+#endif
 
 /// Asymmetric four-point spark — vertical arms are longer than horizontal,
 /// matching the cliché "twinkle" silhouette without using SF Symbol's
