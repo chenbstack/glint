@@ -422,6 +422,7 @@ private struct GeneralPane: View {
 
 private struct UpdatesCard: View {
     @EnvironmentObject var updater: UpdaterController
+    @EnvironmentObject var store: WorkspaceStore
 
     var body: some View {
         SettingsCard("Updates",
@@ -434,8 +435,18 @@ private struct UpdatesCard: View {
             SettingsDivider()
             SettingsRow("Check now",
                         subtitle: "Manually look for a new release right now.") {
-                Button("Check") { updater.checkForUpdates() }
-                    .disabled(!updater.canCheckForUpdates)
+                Button("Check") {
+                    // Sparkle attaches its update dialog to the key window.
+                    // The Settings sheet keeps the main window non-key, so
+                    // the dialog gets stuck behind it — dismiss the sheet
+                    // first, then kick off the check on the next runloop
+                    // tick so AppKit has unwound the sheet.
+                    store.settingsOpen = false
+                    DispatchQueue.main.async {
+                        updater.checkForUpdates()
+                    }
+                }
+                .disabled(!updater.canCheckForUpdates)
             }
         }
     }
