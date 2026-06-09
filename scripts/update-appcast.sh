@@ -39,18 +39,15 @@ XML
 fi
 
 # Use python3 (preinstalled on macOS runners) to splice a new <item> in.
-# defusedxml hardens parsing against XXE / billion-laughs even though the
-# appcast is our own artifact — defense-in-depth.
-python3 -m pip install --quiet --user defusedxml >/dev/null
+# We use stdlib ElementTree instead of defusedxml because:
+#   1. The appcast is our own artifact — there's no untrusted producer.
+#   2. macos runners ship a PEP-668-managed Python that refuses pip
+#      installs without a venv, so adding defusedxml would mean spinning
+#      up a venv on every release for no real security gain.
 
 python3 - "$APPCAST" <<PY
 import os, sys
-import xml.etree.ElementTree as _ET_writer
-from defusedxml.ElementTree import parse as _safe_parse
-
-# defusedxml exposes only safe parsing; writing/element construction uses
-# the stdlib API on the parsed tree.
-ET = _ET_writer
+import xml.etree.ElementTree as ET
 
 path = sys.argv[1]
 version    = os.environ["VERSION"]
@@ -63,7 +60,7 @@ release_notes_link = f"https://github.com/${REPO}/releases/tag/${TAG}"
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 ET.register_namespace("sparkle", SPARKLE)
 
-tree = _safe_parse(path)
+tree = ET.parse(path)
 root = tree.getroot()
 channel = root.find("channel")
 assert channel is not None, "appcast.xml missing <channel>"
