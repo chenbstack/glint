@@ -4,6 +4,7 @@ import SwiftUI
 struct GlintApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var workspaceStore = WorkspaceStore()
+    @StateObject private var updater = UpdaterController()
 
     init() {
         // Apply the stored language choice BEFORE any view materializes so
@@ -23,6 +24,7 @@ struct GlintApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(workspaceStore)
+                .environmentObject(updater)
                 .frame(minWidth: 980, minHeight: 600)
                 .preferredColorScheme(.dark)
         }

@@ -416,15 +416,26 @@ private struct GeneralPane: View {
             }
         }
 
-        SettingsCard("Updates", footer: "Auto-update is not wired yet. Pull main and rebuild for now.") {
-            SettingsRow("Check for updates automatically", subtitle: nil, wip: true) {
-                Toggle("", isOn: .constant(false))
-                    .toggleStyle(.switch).labelsHidden().disabled(true)
+        UpdatesCard()
+    }
+}
+
+private struct UpdatesCard: View {
+    @EnvironmentObject var updater: UpdaterController
+
+    var body: some View {
+        SettingsCard("Updates",
+                     footer: "Glint uses Sparkle to check the GitHub Releases feed and install updates in place.") {
+            SettingsRow("Check for updates automatically",
+                        subtitle: "Glint will look for new releases in the background.") {
+                Toggle("", isOn: $updater.automaticallyChecksForUpdates)
+                    .toggleStyle(.switch).labelsHidden()
             }
             SettingsDivider()
-            SettingsRow("Beta channel", subtitle: "Receive pre-release builds.", wip: true) {
-                Toggle("", isOn: .constant(false))
-                    .toggleStyle(.switch).labelsHidden().disabled(true)
+            SettingsRow("Check now",
+                        subtitle: "Manually look for a new release right now.") {
+                Button("Check") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheckForUpdates)
             }
         }
     }
