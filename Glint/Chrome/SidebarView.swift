@@ -15,9 +15,9 @@ struct SidebarView: View {
 
             ScrollView {
                 VStack(spacing: 0) {
-                    sectionHeader("Workspaces", count: store.workspaces.count)
+                    sectionHeader("Workspaces", count: filteredWorkspaces.count)
                     VStack(spacing: 6) {
-                        ForEach(store.workspaces) { ws in
+                        ForEach(filteredWorkspaces) { ws in
                             WorkspaceCard(ws: ws)
                         }
                     }
@@ -34,6 +34,15 @@ struct SidebarView: View {
                 .overlay(alignment: .top) {
                     Rectangle().fill(Theme.divider).frame(height: 1)
                 }
+        }
+    }
+
+    private var filteredWorkspaces: [Workspace] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return store.workspaces }
+        return store.workspaces.filter { ws in
+            ws.displayName.lowercased().contains(query)
+                || ws.name.lowercased().contains(query)
         }
     }
 
@@ -94,7 +103,8 @@ struct SidebarView: View {
 
     private func sectionHeader(_ title: String, count: Int) -> some View {
         HStack {
-            Text(title.uppercased())
+            Text(LocalizedStringKey(title))
+                .textCase(.uppercase)
                 .font(.glintSection)
                 .kerning(0.8)
                 .foregroundStyle(Theme.text4)
@@ -313,22 +323,22 @@ private struct WorkspaceCard: View {
 
     private var cwdLine: String {
         let n = ws.panes.count
-        let unit = n == 1 ? "pane" : "panes"
+        let unit = String(localized: n == 1 ? "pane" : "panes")
         let focused = ws.panes[ws.focusedPane]?.workingDirectory
         let firstCwd = ws.panes.values.compactMap(\.workingDirectory).first
         let cwd = focused ?? firstCwd
-        let shortCwd = cwd.map(prettyCwd) ?? "no cwd"
+        let shortCwd = cwd.map(prettyCwd) ?? String(localized: "no cwd")
         return "\(n) \(unit) · \(shortCwd)"
     }
 
-    private func statusText(_ s: PaneAgentStatus) -> String {
+    private func statusText(_ s: PaneAgentStatus) -> LocalizedStringKey {
         switch s {
-        case .thinking:        return "thinking…"
-        case .tool:            return "running tool"
-        case .needsPermission: return "needs approval"
-        case .compacting:      return "compacting…"
-        case .justCompleted:   return "✓ done"
-        case .idle:            return ""
+        case .thinking:        return LocalizedStringKey("thinking…")
+        case .tool:            return LocalizedStringKey("running tool")
+        case .needsPermission: return LocalizedStringKey("needs approval")
+        case .compacting:      return LocalizedStringKey("compacting…")
+        case .justCompleted:   return LocalizedStringKey("✓ done")
+        case .idle:            return LocalizedStringKey("")
         }
     }
 

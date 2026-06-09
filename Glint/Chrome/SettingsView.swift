@@ -713,7 +713,7 @@ private struct AboutPane: View {
                 }
                 SettingsDivider()
                 SettingsRow("Channel", subtitle: nil) {
-                    StatusPill(label: "Local Dev", tone: .neutral)
+                    StatusPill(label: channelLabel, tone: channelTone)
                 }
                 SettingsDivider()
                 SettingsRow("Auto-update", subtitle: nil) {
@@ -732,4 +732,15 @@ private struct AboutPane: View {
     private var bundleID: String {
         Bundle.main.bundleIdentifier ?? "app.glint.Glint"
     }
+
+    /// Release builds stamp CFBundleVersion with a 12-digit YYYYMMDDHHmm
+    /// timestamp via the CI workflow; locally-built debug bundles inherit
+    /// the project's default "1" / Xcode-generated value. Use that shape
+    /// as a fast proxy for "is this a released build."
+    private var isReleaseBuild: Bool {
+        let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? ""
+        return build.count >= 10 && build.allSatisfy(\.isNumber)
+    }
+    private var channelLabel: String { isReleaseBuild ? "Stable" : "Local Dev" }
+    private var channelTone: StatusPill.Tone { isReleaseBuild ? .ok : .neutral }
 }

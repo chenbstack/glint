@@ -427,16 +427,17 @@ private struct WorkspaceSwitcherRow: View {
     private func secondaryText(summary: (status: PaneAgentStatus, since: Date)?) -> String {
         if let s = summary, s.status != .idle {
             switch s.status {
-            case .thinking:        return "thinking…"
-            case .tool:            return "running tool"
-            case .needsPermission: return "needs approval"
-            case .compacting:      return "compacting…"
-            case .justCompleted:   return "✓ done"
+            case .thinking:        return String(localized: "thinking…")
+            case .tool:            return String(localized: "running tool")
+            case .needsPermission: return String(localized: "needs approval")
+            case .compacting:      return String(localized: "compacting…")
+            case .justCompleted:   return String(localized: "✓ done")
             case .idle:            break
             }
         }
         let n = ws.panes.count
-        return "\(n) \(n == 1 ? "pane" : "panes")"
+        let unit = String(localized: n == 1 ? "pane" : "panes")
+        return "\(n) \(unit)"
     }
 
     private func secondaryColor(_ s: PaneAgentStatus) -> Color? {

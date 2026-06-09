@@ -63,6 +63,11 @@
     "Updates" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新" } } } },
     "Auto-update is not wired yet. Pull main and rebuild for now." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动更新尚未接入,现阶段请拉取 main 重新编译。" } } } },
     "Check for updates automatically" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动检查更新" } } } },
+    "Glint will look for new releases in the background." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Glint 会在后台查找新版本。" } } } },
+    "Check now" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "立即检查" } } } },
+    "Check" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "检查" } } } },
+    "Manually look for a new release right now." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "立即手动查找新版本。" } } } },
+    "Glint uses Sparkle to check the GitHub Releases feed and install updates in place." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Glint 使用 Sparkle 检查 GitHub Releases 并原地安装更新。" } } } },
     "Beta channel" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Beta 通道" } } } },
     "Receive pre-release builds." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "接收预发布版本。" } } } },
 
@@ -142,6 +147,10 @@
     "Version" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "版本" } } } },
     "Channel" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通道" } } } },
     "Local Dev" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地开发" } } } },
+    "Stable" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "稳定版" } } } },
+    "Bundle ID" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Bundle ID" } } } },
+    "Auto-update" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动更新" } } } },
+    "no cwd" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无目录" } } } },
     "A native mac terminal made for AI agents." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "为 AI 代理打造的原生 Mac 终端。" } } } },
 
     "Close (Esc)" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭 (Esc)" } } } }

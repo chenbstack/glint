@@ -217,12 +217,12 @@ private struct PaletteRow: View {
         HStack(spacing: 12) {
             leading
             VStack(alignment: .leading, spacing: 1) {
-                Text(item.title)
+                Text(LocalizedStringKey(item.title))
                     .font(.system(size: 13.5, weight: selected ? .semibold : .medium))
                     .foregroundStyle(Theme.text1)
                     .lineLimit(1)
                 if let s = item.subtitle {
-                    Text(s)
+                    Text(LocalizedStringKey(s))
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.text4)
                         .lineLimit(1)
@@ -287,7 +287,7 @@ private struct PaletteRow: View {
                         .fill(Color.white.opacity(0.06))
                 )
         case .kind(let label):
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.system(size: 10, weight: .semibold))
                 .kerning(0.6)
                 .foregroundStyle(Theme.text4)
