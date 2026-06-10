@@ -704,6 +704,16 @@
         }
       }
     },
+    "Get pre-release builds early. Beta builds ship new work before it has fully settled." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提前收到预发布版本。Beta 版本包含尚未完全稳定的新功能。"
+          }
+        }
+      }
+    },
     "Glass effect" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1156,6 +1166,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新选中上次退出 Glint 时聚焦的工作区。"
+          }
+        }
+      }
+    },
+    "Receive beta updates" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接收 Beta 更新"
           }
         }
       }
