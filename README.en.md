@@ -4,6 +4,8 @@ English · [中文](README.md)
 
 A polished macOS terminal made for AI agents. SwiftUI + AppKit, with [Ghostty](https://ghostty.org) under the hood.
 
+![Glint screenshot](docs/screenshot.png)
+
 ## Install
 
 ### Homebrew (recommended)

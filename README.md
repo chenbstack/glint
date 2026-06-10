@@ -4,6 +4,8 @@
 
 为 AI 代理打造的精致 macOS 终端。底层基于 [Ghostty](https://ghostty.org),界面用 SwiftUI + AppKit。
 
+![Glint 截图](docs/screenshot.png)
+
 ## 安装
 
 ### Homebrew(推荐)
