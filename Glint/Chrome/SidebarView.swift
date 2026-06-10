@@ -331,9 +331,21 @@ private struct WorkspaceCard: View {
             if case .claude = kind { return true }
             return false
         }()
+        let isCodex: Bool = {
+            if case .codex = kind { return true }
+            return false
+        }()
+        // Claude's gif mascot and Codex's official gradient mark both ship
+        // their own colors — render them bare, no accent squircle behind.
+        let bare = isClaude || isCodex
         return Group {
             if isClaude {
                 ClaudeMascotIcon(status: status)
+            } else if isCodex {
+                Image("CodexMark")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 24, height: 24)
             } else if let sf = kind.sfSymbol {
                 Image(systemName: sf)
                     .font(.system(size: 13, weight: .medium))
@@ -348,8 +360,8 @@ private struct WorkspaceCard: View {
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isClaude ? Color.clear : ws.accent)
-                if active && !isClaude {
+                    .fill(bare ? Color.clear : ws.accent)
+                if active && !bare {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .fill(
                             LinearGradient(
@@ -365,7 +377,16 @@ private struct WorkspaceCard: View {
             AgentStatusDot(status: status)
                 .offset(x: 3, y: 3)
         }
-        .shadow(color: active ? (isClaude ? Color(red: 0.92, green: 0.55, blue: 0.32).opacity(0.5) : ws.accent.opacity(0.5)) : .clear, radius: 8)
+        .shadow(
+            color: active
+                ? (isClaude
+                    ? Color(red: 0.92, green: 0.55, blue: 0.32).opacity(0.5)
+                    : isCodex
+                        ? Color(red: 0.32, green: 0.38, blue: 1.0).opacity(0.5)
+                        : ws.accent.opacity(0.5))
+                : .clear,
+            radius: 8
+        )
     }
 
     @ViewBuilder
