@@ -6,19 +6,26 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.13</title>
-      <sparkle:version>202606100745</sparkle:version>
-      <sparkle:shortVersionString>0.1.13</sparkle:shortVersionString>
-      <pubDate>Wed, 10 Jun 2026 07:47:12 +0000</pubDate>
+      <title>Glint 0.1.14</title>
+      <sparkle:version>202606100911</sparkle:version>
+      <sparkle:shortVersionString>0.1.14</sparkle:shortVersionString>
+      <pubDate>Wed, 10 Jun 2026 09:12:50 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.13</h3><ul>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.14</h3><ul>
+    <li><strong>ghosttykit: publish artifact releases as prereleases</strong><br><span style="color:#666">修复 GhosttyKit 构建产物抢占 GitHub Latest 位置的问题</span></li>
+    <li><strong>l10n: translate the beta updates toggle</strong><br><span style="color:#666">补上「接收 Beta 更新」开关的中文文案</span></li>
+    <li><strong>ghosttykit: publish xcframework-e9120d4-v1</strong><br><span style="color:#666">登记新的 GhosttyKit 预构建产物（含后台工作区内存优化）</span></li>
+    <li><strong>release: Sparkle beta channel for prerelease tags</strong><br><span style="color:#666">新增 Beta 更新通道——设置里开启「接收 Beta 更新」即可提前收到预发布版本；正式版用户不受影响，brew 始终安装稳定版</span></li>
+    <li><strong>ghostty: switch submodule to chenbstack fork with occlusion memory fix</strong><br><span style="color:#666">修复隐藏工作区的显存占用——被遮挡的 pane 释放 3 张全尺寸渲染缓冲，3 个后台工作区约省 110MB 内存；子模块改指自有 fork，让登记的 SHA 与产物真实来源一致</span></li>
+    <li>release: appcast for v0.1.13</li>
+  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.13</h3><ul>
     <li><strong>sidebar: traffic-light status pill, edge beacon and unified card chrome</strong><br><span style="color:#666">卡片状态改为红绿灯胶囊+左缘呼吸光条,统一边框与图标配色,新建按钮更醒目</span></li>
     <li><strong>icons: animated Codex mascot in three agent states</strong><br><span style="color:#666">Codex 窗格图标升级为三态动画吉祥物(工作/思考/空闲)</span></li>
     <li><strong>pane: resolve npm-shim CLIs through node argv for the sidebar icon</strong><br><span style="color:#666">侧栏图标支持 npm 安装的 codex/claude——穿透 node shim 识别真实 agent</span></li>
     <li><strong>ci: auto-bump homebrew tap cask on release</strong><br><span style="color:#666">发版时自动更新 Homebrew tap 的 cask 版本,brew 安装不再是老版本</span></li>
     <li>release: bilingual notes for v0.1.12</li>
     <li>release: appcast for v0.1.12</li>
-  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.12</h3><ul>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.12</h3><ul>
     <li><strong>app: check for updates hourly instead of daily</strong><br><span style="color:#666">自动更新检查间隔从每天一次缩短到每小时一次</span></li>
     <li><strong>app: localize destructive-confirm alerts, fill missing zh-Hans strings</strong><br><span style="color:#666">退出/关闭面板/删除工作区等确认弹窗汉化,并补齐右键菜单等缺失的中文翻译</span></li>
     <li>release: appcast for v0.1.11</li>
@@ -60,12 +67,70 @@
     <li><strong>pane: fix ⌘V typing literal &quot;v&quot; instead of pasting</strong><br><span style="color:#666">终端:修复 ⌘V 粘贴变成输入字母 v 的问题;粘贴图片到 claude/codex 仍按 ⌃V 转发,右键 Paste 仍粘贴 shell-quoted 路径</span></li>
     <li><strong>sidebar: drag-to-reorder + float just-completed to top</strong><br><span style="color:#666">侧栏:工作区可拖动排序;新设置「刚完成的置顶」开启后 agent 完成一轮的工作区会浮到最上,打开后落回原位</span></li>
     <li>release: appcast for v0.1.4</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.4</h3><ul>
-    <li><strong>pane: snap surface frame to backing pixel grid</strong><br><span style="color:#666">Pane:surface 自身 setFrameSize/Origin 也走 backingAlignedRect 对齐,修复 SwiftUI 给出半像素帧导致 IOSurface 合成时出现 1px 撕裂线</span></li>
-    <li><strong>ghostty: drive tick loop from wakeup_cb, not a 60Hz main-queue timer</strong><br><span style="color:#666">Ghostty:tick 改成 wakeup_cb 触发,去掉常驻 16ms 主队列定时器,避免和 keyDown 派发抢主队列时序</span></li>
-    <li><strong>chrome: DEV badge on debug builds</strong><br><span style="color:#666">Chrome:Debug 构建在品牌标识旁挂一个粉紫渐变 DEV 胶囊,避免开发版和正式版混淆</span></li>
-    <li>release: appcast for v0.1.3</li>
   </ul></div>]]></description>
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.14/Glint-0.1.14.dmg" length="12419007" type="application/octet-stream" sparkle:edSignature="zlSozVbwFNfZTRQU9CPQCb8q9+HF1nFgdtHKVrpBXLh+pejHU+wDyBoVCUS1VgI40uVhKRQdzfoAGGONnXPdCw==" />
+    </item>
+    <item>
+      <title>Glint 0.1.13</title>
+      <sparkle:version>202606100745</sparkle:version>
+      <sparkle:shortVersionString>0.1.13</sparkle:shortVersionString>
+      <pubDate>Wed, 10 Jun 2026 07:47:12 +0000</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description>&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.13&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;sidebar: traffic-light status pill, edge beacon and unified card chrome&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;卡片状态改为红绿灯胶囊+左缘呼吸光条,统一边框与图标配色,新建按钮更醒目&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;icons: animated Codex mascot in three agent states&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Codex 窗格图标升级为三态动画吉祥物(工作/思考/空闲)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;pane: resolve npm-shim CLIs through node argv for the sidebar icon&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;侧栏图标支持 npm 安装的 codex/claude——穿透 node shim 识别真实 agent&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ci: auto-bump homebrew tap cask on release&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;发版时自动更新 Homebrew tap 的 cask 版本,brew 安装不再是老版本&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: bilingual notes for v0.1.12&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.12&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;!--GLINT_HISTORY_BELOW--&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3 style="color:#666;"&gt;历史版本 · Previous releases&lt;/h3&gt;&lt;/div&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.12&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;app: check for updates hourly instead of daily&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;自动更新检查间隔从每天一次缩短到每小时一次&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;app: localize destructive-confirm alerts, fill missing zh-Hans strings&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;退出/关闭面板/删除工作区等确认弹窗汉化,并补齐右键菜单等缺失的中文翻译&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.11&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.11&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;sidebar: run comet, pulse and breathing borders on the render server&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;comet 边框/状态点/权限呼吸边框改为 Core Animation 循环,agent 工作中 CPU 从 ~15% 降到 ~1%&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.10&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.10&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;chrome: fullscreen layout fixes and readable secondary text&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;全屏时不再为红绿灯按钮留空白;次要文字对比度提升到 4.6:1&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;palette: smarter fuzzy matching and steadier selection&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;命令面板:子序列模糊匹配按前缀/词首加权,当前工作区置顶,鼠标悬停不再抢走键盘选中&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;sidebar: play mascot GIFs on the render server, idle CPU hits 0%&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;侧栏 GIF 改为一次解码 + 渲染服务器播放,生产版待机 CPU 从 ~20% 降到 0&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;term: confirm risky pastes, option-as-meta, occlusion-aware rendering&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;注入文本含控制字符时先确认;Option 可作 Meta;窗口被遮挡时暂停渲染;surface 创建失败可重试&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;pane: drag split dividers to resize&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;分屏分隔线支持拖拽调整比例(最小 100pt),空工作区不再误建终端 surface&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;keys: give ⌘F and arrows back to the terminal, add ⌘1-9&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;快捷键重排:⌘F/⌘↑/⌘↓ 还给终端,⌘1-9 直达工作区,⌘D/⌘⇧D 分屏,⌘[ 回到上个面板&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;workspace: ask before closing busy panes or quitting&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;关闭忙碌面板/删工作区/退出应用前先确认(可勾选不再询问);钩子安装改为先征求同意&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;workspace: quarantine corrupt state files instead of overwriting&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;状态文件损坏时先改名保留再重建,不再静默覆盖用户数据&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;updates: check for new versions automatically&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;默认开启自动检查更新,不用再手动点 Check for Updates&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;app: drop unneeded entitlements and the ATS exception&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;收紧运行时:移除 JIT/未签名内存/库校验豁免等 entitlements 和 ATS 全放行&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: pin Sparkle&amp;#x27;s sha256 before it touches signing keys&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;发布流程:下载 Sparkle 工具先校验 sha256,防止被篡改的产物碰到签名私钥&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;agent: lock down the hook socket and installer writes&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Agent 桥接:socket 移入 0700 私有目录并限时读取,安装器保留原文件权限&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.9&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.9&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;pane: drop dead CAMetalLayer scaffolding&lt;/li&gt;
+    &lt;li&gt;sidebar: GPU-composite the card border comet&lt;/li&gt;
+    &lt;li&gt;docs: add app screenshot to README&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.8&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.8&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;agent: saner icon arbitration + first-launch-only hook install&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 claude/codex 先后或同开时图标错乱;hooks 改为仅首次启动自动安装,卸载后不再被装回&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;sidebar: official Codex mark replaces the lambda tile&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Codex 工作区图标换成官方蓝紫渐变云朵 mark,不再是绿色 λ 方块&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.7&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.7&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;agent: clear busy status when the user interrupts with Esc&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;任务进行中按 Esc 中断后,侧栏状态立即回到 idle(对 Claude 和 Codex 都生效)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;chrome: motion polish + animated Claude mascot&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;界面动效:卡片悬停/完成闪光/授权呼吸灯/命令面板入场,Claude 图标换成分状态 GIF 动画&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.6&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.6&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;release: cap update-dialog history to 9 prior versions&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;发布:更新对话框里折叠的历史版本最多保留最近 9 个(加当前共 10 个),以后版本变多不会再叠一长串老 changelog&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;pane: lock CVDisplayLink to surface&amp;#x27;s screen, drop pointless layer alpha&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;终端:渲染锁到当前屏幕的 vsync(滚动更顺、撕裂减少),并把 Metal layer 的透明/合成采样关掉(pane 本来就是纯色,省一份合成开销)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.5&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.5&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;pane: fix ⌘V typing literal &amp;quot;v&amp;quot; instead of pasting&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;终端:修复 ⌘V 粘贴变成输入字母 v 的问题;粘贴图片到 claude/codex 仍按 ⌃V 转发,右键 Paste 仍粘贴 shell-quoted 路径&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;sidebar: drag-to-reorder + float just-completed to top&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;侧栏:工作区可拖动排序;新设置「刚完成的置顶」开启后 agent 完成一轮的工作区会浮到最上,打开后落回原位&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.4&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.4&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;pane: snap surface frame to backing pixel grid&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Pane:surface 自身 setFrameSize/Origin 也走 backingAlignedRect 对齐,修复 SwiftUI 给出半像素帧导致 IOSurface 合成时出现 1px 撕裂线&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ghostty: drive tick loop from wakeup_cb, not a 60Hz main-queue timer&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Ghostty:tick 改成 wakeup_cb 触发,去掉常驻 16ms 主队列定时器,避免和 keyDown 派发抢主队列时序&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;chrome: DEV badge on debug builds&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Chrome:Debug 构建在品牌标识旁挂一个粉紫渐变 DEV 胶囊,避免开发版和正式版混淆&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.3&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;</description>
       <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.13/Glint-0.1.13.dmg" length="12402752" type="application/octet-stream" sparkle:edSignature="2tElCqpuUg04T3e86Dd2rxyd4by9Nk3PmbrFgNd/jlXtD8CB35yrq095DVkuKtXesbVIwcFJmyHaE3N06XSDCA==" />
     </item>
     <item>
