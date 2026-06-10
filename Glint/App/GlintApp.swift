@@ -27,26 +27,45 @@ struct GlintApp: App {
                 .environmentObject(updater)
                 .frame(minWidth: 980, minHeight: 600)
                 .preferredColorScheme(.dark)
+                // Live language switching: AppleLanguages (set in init) only
+                // applies on the next launch; this env value re-resolves
+                // LocalizedStringKey lookups immediately when the user picks
+                // a language in Settings.
+                .environment(\.locale, workspaceStore.preferredLocale)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
         .commands {
+            // Shortcut policy: a terminal app must leave the terminal's own
+            // vocabulary alone. ⌘↑/⌘↓ (prompt-mark jumps) and ⌘F (future
+            // scrollback search) deliberately have NO menu bindings so the
+            // events reach ghostty; workspace switching uses the tab-like
+            // ⌘⇧[ / ⌘⇧] plus ⌘1…⌘9 direct jumps instead.
             CommandGroup(replacing: .newItem) {
                 Button("New Workspace") { workspaceStore.addWorkspace() }
                     .keyboardShortcut("n", modifiers: .command)
                 Button("Next Workspace") { workspaceStore.selectNextWorkspace() }
-                    .keyboardShortcut(.downArrow, modifiers: .command)
+                    .keyboardShortcut("]", modifiers: [.command, .shift])
                 Button("Previous Workspace") { workspaceStore.selectPreviousWorkspace() }
-                    .keyboardShortcut(.upArrow, modifiers: .command)
+                    .keyboardShortcut("[", modifiers: [.command, .shift])
+                ForEach(1..<10, id: \.self) { n in
+                    Button("Workspace \(n)") { workspaceStore.selectWorkspace(at: n - 1) }
+                        .keyboardShortcut(KeyEquivalent(Character("\(n)")), modifiers: .command)
+                }
                 Divider()
-                Button("Split Horizontal") { workspaceStore.splitFocused(.horizontal) }
+                // Direction-explicit names; "horizontal/vertical" read
+                // opposite ways in different terminals and our own palette
+                // copy had it backwards. `.horizontal` = side by side.
+                Button("Split Right") { workspaceStore.splitFocused(.horizontal) }
                     .keyboardShortcut("d", modifiers: .command)
-                Button("Split Vertical") { workspaceStore.splitFocused(.vertical) }
+                Button("Split Down") { workspaceStore.splitFocused(.vertical) }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
                 Button("Close Pane") { workspaceStore.closeFocused() }
                     .keyboardShortcut("w", modifiers: .command)
                 Button("Focus Next Pane") { workspaceStore.focusNext() }
                     .keyboardShortcut("]", modifiers: .command)
+                Button("Focus Previous Pane") { workspaceStore.focusPrevious() }
+                    .keyboardShortcut("[", modifiers: .command)
             }
             CommandGroup(after: .toolbar) {
                 Button("Command Palette") {
@@ -56,7 +75,7 @@ struct GlintApp: App {
                 Button("Find in Sidebar") {
                     workspaceStore.focusSidebarSearch()
                 }
-                .keyboardShortcut("f", modifiers: .command)
+                .keyboardShortcut("f", modifiers: [.command, .option])
             }
             // Hijack the App menu's Settings… so ⌘, opens our in-window
             // sheet instead of trying to summon a separate scene.

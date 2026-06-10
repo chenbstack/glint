@@ -582,21 +582,31 @@ private struct TerminalPane: View {
 
 private struct AgentsPane: View {
     @EnvironmentObject var store: WorkspaceStore
+    @State private var claudeInstallFailed = false
+    @State private var codexInstallFailed = false
 
     var body: some View {
         SettingsCard("Claude Code",
-                     footer: "Glint auto-installs a reporter into ~/.claude/settings.json on launch. Existing hooks are preserved.") {
-            SettingsRow("Status", subtitle: "Hooks merged into your Claude settings.") {
+                     footer: "Glint offers to install a reporter into ~/.claude/settings.json on first launch. Existing hooks are preserved.") {
+            SettingsRow("Status", subtitle: claudeInstallFailed
+                        ? "Install failed — check Console for [glint] logs (often a malformed settings.json)."
+                        : "Hooks merged into your Claude settings.") {
                 HStack(spacing: 8) {
                     StatusPill(
                         label: store.claudeHooksInstalled ? "Installed" : "Not installed",
                         tone: store.claudeHooksInstalled ? .ok : .neutral
                     )
                     if store.claudeHooksInstalled {
-                        Button("Uninstall") { store.uninstallClaudeHooks() }
+                        Button("Uninstall") {
+                            store.uninstallClaudeHooks()
+                            claudeInstallFailed = false
+                        }
                             .controlSize(.small)
                     } else {
-                        Button("Install") { store.installClaudeHooks() }
+                        Button("Install") {
+                            store.installClaudeHooks()
+                            claudeInstallFailed = !store.claudeHooksInstalled
+                        }
                             .controlSize(.small)
                             .tint(store.accent)
                     }
@@ -615,17 +625,25 @@ private struct AgentsPane: View {
 
         SettingsCard("Codex",
                      footer: "Glint writes its hook entries into ~/.codex/hooks.json so codex sessions surface the same status as Claude.") {
-            SettingsRow("Status", subtitle: "Hooks merged into your Codex config.") {
+            SettingsRow("Status", subtitle: codexInstallFailed
+                        ? "Install failed — check Console for [glint] logs (often a malformed hooks.json)."
+                        : "Hooks merged into your Codex config.") {
                 HStack(spacing: 8) {
                     StatusPill(
                         label: store.codexHooksInstalled ? "Installed" : "Not installed",
                         tone: store.codexHooksInstalled ? .ok : .neutral
                     )
                     if store.codexHooksInstalled {
-                        Button("Uninstall") { store.uninstallCodexHooks() }
+                        Button("Uninstall") {
+                            store.uninstallCodexHooks()
+                            codexInstallFailed = false
+                        }
                             .controlSize(.small)
                     } else {
-                        Button("Install") { store.installCodexHooks() }
+                        Button("Install") {
+                            store.installCodexHooks()
+                            codexInstallFailed = !store.codexHooksInstalled
+                        }
                             .controlSize(.small)
                             .tint(store.accent)
                     }
@@ -652,28 +670,33 @@ private struct AgentsPane: View {
 
 private struct ShortcutsPane: View {
     var body: some View {
-        SettingsCard("Workspace") {
+        SettingsCard("Workspace",
+                     footer: "⌘↑ / ⌘↓ and ⌘F are intentionally unbound — they pass through to the terminal.") {
             shortcutRow("New Workspace", keys: ["⌘", "N"])
             SettingsDivider()
-            shortcutRow("Next Workspace", keys: ["⌘", "↓"])
+            shortcutRow("Next Workspace", keys: ["⌘", "⇧", "]"])
             SettingsDivider()
-            shortcutRow("Previous Workspace", keys: ["⌘", "↑"])
+            shortcutRow("Previous Workspace", keys: ["⌘", "⇧", "["])
+            SettingsDivider()
+            shortcutRow("Workspace 1…9", keys: ["⌘", "1…9"])
         }
         SettingsCard("Panes") {
-            shortcutRow("Split Horizontal", keys: ["⌘", "D"])
+            shortcutRow("Split Right", keys: ["⌘", "D"])
             SettingsDivider()
-            shortcutRow("Split Vertical", keys: ["⌘", "⇧", "D"])
+            shortcutRow("Split Down", keys: ["⌘", "⇧", "D"])
             SettingsDivider()
             shortcutRow("Close Pane", keys: ["⌘", "W"])
             SettingsDivider()
             shortcutRow("Focus Next Pane", keys: ["⌘", "]"])
+            SettingsDivider()
+            shortcutRow("Focus Previous Pane", keys: ["⌘", "["])
         }
         SettingsCard("Window") {
             shortcutRow("Toggle Sidebar", keys: ["⌘", "/"])
             SettingsDivider()
             shortcutRow("Command Palette", keys: ["⌘", "K"])
             SettingsDivider()
-            shortcutRow("Find in Sidebar", keys: ["⌘", "F"])
+            shortcutRow("Find in Sidebar", keys: ["⌥", "⌘", "F"])
             SettingsDivider()
             shortcutRow("Settings", keys: ["⌘", ","])
             SettingsDivider()
