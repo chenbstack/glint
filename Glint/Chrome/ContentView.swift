@@ -4,11 +4,6 @@ import AppKit
 struct ContentView: View {
     @EnvironmentObject var store: WorkspaceStore
 
-    static func logRootRender(_ store: WorkspaceStore) {
-        guard ProcessInfo.processInfo.environment["GLINT_LOG_VISIBLE"] != nil else { return }
-        NSLog("[glint.visible] ContentView.body ws=\(store.selectedWorkspaceID?.uuidString.prefix(8) ?? "nil") root=\(store.currentRoot)")
-    }
-
     var body: some View {
         HStack(spacing: 0) {
             if !store.sidebarCollapsed {
@@ -38,7 +33,6 @@ struct ContentView: View {
             }
 
             VStack(spacing: 0) {
-                let _ = Self.logRootRender(store)
                 ToolbarHeader()
                 PaneTreeView(node: store.currentRoot, workspaceID: store.selectedWorkspaceID)
                     .background(Theme.bgPane)
@@ -107,13 +101,14 @@ struct ToolbarHeader: View {
             }
 
             // Tabs ride in the otherwise-empty middle of the header, centered
-            // between the brand group and the trailing buttons by the two
-            // flanking spacers. TabBar renders nothing for a single-tab
+            // between the brand group and the trailing buttons. TabBar owns
+            // the whole flexible middle (it needs to know its width to decide
+            // how far to degrade chips), but renders nothing for a single-tab
             // workspace, so the header looks exactly as before until you open
-            // a second tab.
-            Spacer(minLength: 12)
+            // a second tab. Empty space stays click-through, so window drag
+            // keeps working.
             TabBar()
-            Spacer(minLength: 12)
+                .padding(.horizontal, 12)
             HStack(spacing: 4) {
                 ToolbarIconButton(symbol: "command", help: "Command Palette (⌘K)") {
                     store.commandPaletteOpen = true
@@ -164,19 +159,50 @@ struct ToolbarHeader: View {
 /// Renders nothing until the current workspace has ≥2 tabs, so single-tab
 /// users never see a lone chip — they open a second tab with ⌘T (or the
 /// command palette), at which point the cluster appears with a "+" affordance.
+///
+/// When the middle of the header can't hold every chip at full size,
+/// trailing chips fold into a "+N" capsule whose popover lists them in the
+/// same style language as the workspace switcher. The active tab is never
+/// folded away.
 struct TabBar: View {
     @EnvironmentObject var store: WorkspaceStore
 
     var body: some View {
-        if let ws = store.selectedWorkspace, ws.tabs.count >= 2 {
-            HStack(spacing: 5) {
-                ForEach(ws.tabs) { tab in
-                    TabChip(ws: ws, tab: tab, isActive: tab.id == ws.selectedTabID)
+        GeometryReader { geo in
+            Group {
+                if let ws = store.selectedWorkspace, ws.tabs.count >= 2 {
+                    chips(ws: ws, available: geo.size.width)
                 }
-                newTabButton
             }
-            .fixedSize()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func chips(ws: Workspace, available: CGFloat) -> some View {
+        let plan = TabBarPlan(
+            tabs: ws.tabs,
+            activeID: ws.selectedTabID,
+            names: ws.tabs.map { ws.tabDisplayName($0) },
+            available: available
+        )
+        return HStack(spacing: 5) {
+            ForEach(ws.tabs) { tab in
+                if !plan.overflowed.contains(tab.id) {
+                    TabChip(ws: ws, tab: tab,
+                            isActive: tab.id == ws.selectedTabID)
+                }
+            }
+            if !plan.overflowed.isEmpty {
+                TabOverflowChip(
+                    ws: ws,
+                    tabs: ws.tabs.filter { plan.overflowed.contains($0.id) }
+                )
+            }
+            newTabButton
+        }
+        .fixedSize()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeOut(duration: 0.15), value: plan)
     }
 
     private var newTabButton: some View {
@@ -189,6 +215,71 @@ struct TabBar: View {
         .buttonStyle(.plain)
         .foregroundStyle(Theme.text3)
         .help("New Tab (⌘T)")
+    }
+}
+
+/// Decides, for a given available width, which tabs render as chips and
+/// which fold into the "+N" overflow capsule.
+///
+/// Widths are estimated up front from the chip's known paddings plus a
+/// measured (and cached) text width — the chips themselves stay `fixedSize`,
+/// so the estimate only picks what overflows, it never squeezes a rendered
+/// chip. Overflow always eats trailing tabs first and never touches the
+/// active tab, so leading tabs stay readable.
+private struct TabBarPlan: Equatable {
+    var overflowed: Set<TabID> = []
+
+    // Chip metrics that must mirror TabChip's layout: 9pt leading pad +
+    // 15pt icon + 7pt gaps + 15pt trailing slot + 8pt trailing pad.
+    private static let fullChrome: CGFloat = 61
+    private static let chipGap: CGFloat = 5
+    private static let newTabWidth: CGFloat = 26
+    private static let overflowCapsuleWidth: CGFloat = 48
+
+    init(tabs: [WorkspaceTab], activeID: TabID?, names: [String],
+         available: CGFloat) {
+        let n = tabs.count
+        let activeIdx = tabs.firstIndex { $0.id == activeID } ?? 0
+        let fullW: [CGFloat] = names.map { Self.fullChrome + Self.textWidth($0) }
+
+        var hide = [Bool](repeating: false, count: n)
+        func required() -> CGFloat {
+            var sum: CGFloat = 0
+            var visible = 0
+            for i in 0..<n where !hide[i] {
+                sum += fullW[i]
+                visible += 1
+            }
+            var total = sum + CGFloat(max(visible - 1, 0)) * Self.chipGap
+                + Self.chipGap + Self.newTabWidth
+            if visible < n { total += Self.chipGap + Self.overflowCapsuleWidth }
+            return total
+        }
+
+        // Few-pixel slack so a measurement that runs slightly long of
+        // SwiftUI's own text layout can't leave a chip clipped at the edge.
+        let budget = max(available - 4, 0)
+        if required() > budget {
+            for i in stride(from: n - 1, through: 0, by: -1) where i != activeIdx {
+                hide[i] = true
+                if required() <= budget { break }
+            }
+        }
+        for i in 0..<n where hide[i] {
+            overflowed.insert(tabs[i].id)
+        }
+    }
+
+    /// AppKit-measured width of a chip label, capped to the chip's 150pt
+    /// text limit. Cached: tab names change rarely, layout runs per frame
+    /// during window resizes.
+    private static var textWidthCache: [String: CGFloat] = [:]
+    private static func textWidth(_ s: String) -> CGFloat {
+        if let w = textWidthCache[s] { return w }
+        let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        let w = min(ceil((s as NSString).size(withAttributes: [.font: font]).width), 150)
+        textWidthCache[s] = w
+        return w
     }
 }
 
@@ -266,25 +357,154 @@ private struct TabChip: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(isActive ? Theme.text2 : Theme.text3)
             } else if let status, status != .idle {
-                Circle()
-                    .fill(Self.statusDotColor(status))
-                    .frame(width: 7, height: 7)
-                    .shadow(color: Self.statusDotColor(status).opacity(0.6), radius: 3)
+                TabStatusDot(status: status)
             }
         }
         .frame(width: 15, height: 15)
     }
+}
 
-    // Mirrors SidebarView/WorkspaceSwitcherRow's dot palette so a tab's dot
-    // reads the same color as its workspace card.
-    private static func statusDotColor(_ s: PaneAgentStatus) -> Color {
+/// The status dot on a tab chip (and in the overflow popover's rows).
+/// Same traffic-light logic as the sidebar pane cards' AgentStatusDot,
+/// in the same macOS window-button palette, so the two read as one system:
+///   red    → needsPermission / failed (blocked on the user)
+///   yellow → thinking / tool / compacting (busy)
+///   green  → justCompleted
+/// Busy and blocked states breathe; green holds a steady glow.
+private struct TabStatusDot: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let status: PaneAgentStatus
+
+    var body: some View {
+        StatusBeaconDot(
+            color: Self.nsColor(status),
+            // Reduce Motion: hold steady; the color carries the status.
+            pulsing: !reduceMotion && Self.pulses(status),
+            fast: status == .compacting
+        )
+        .frame(width: 7, height: 7)
+    }
+
+    /// Mirrors AgentStatusDot.needsPulse: anything that wants the user's
+    /// eye — busy or blocked — breathes; terminal states don't.
+    private static func pulses(_ s: PaneAgentStatus) -> Bool {
+        s == .thinking || s == .tool || s == .needsPermission || s == .compacting
+    }
+
+    /// TrafficLightPill's base colors (the macOS window-button palette).
+    private static func nsColor(_ s: PaneAgentStatus) -> NSColor {
         switch s {
-        case .thinking, .tool:  return Color(red: 0.55, green: 0.50, blue: 0.95)
-        case .needsPermission:  return Color(red: 1.0, green: 0.27, blue: 0.23)
-        case .compacting:       return Color(red: 0.35, green: 0.66, blue: 0.82)
-        case .justCompleted:    return Color(red: 0.30, green: 0.78, blue: 0.46)
-        case .failed:           return Color(red: 0.90, green: 0.28, blue: 0.26)
-        case .idle:             return .clear
+        case .needsPermission, .failed:
+            return NSColor(srgbRed: 1.00, green: 0.37, blue: 0.34, alpha: 1)
+        case .thinking, .tool, .compacting:
+            return NSColor(srgbRed: 1.00, green: 0.74, blue: 0.18, alpha: 1)
+        case .justCompleted:
+            return NSColor(srgbRed: 0.16, green: 0.78, blue: 0.25, alpha: 1)
+        case .idle:
+            return .clear
+        }
+    }
+}
+
+/// A glowing dot whose breath runs as a `CABasicAnimation` on the render
+/// server — same rationale as SidebarView's EdgeBeacon: a SwiftUI
+/// `repeatForever` re-resolves the view graph every frame on the main
+/// thread, which starves ghostty's frame presentation.
+private struct StatusBeaconDot: NSViewRepresentable {
+    let color: NSColor
+    let pulsing: Bool
+    /// Compaction breathes quicker so it reads as a distinct, busier state
+    /// (mirrors EdgeBeacon's fast mode).
+    let fast: Bool
+
+    func makeNSView(context: Context) -> DotLayerView {
+        let view = DotLayerView()
+        view.apply(color: color, pulsing: pulsing, fast: fast)
+        return view
+    }
+
+    func updateNSView(_ view: DotLayerView, context: Context) {
+        view.apply(color: color, pulsing: pulsing, fast: fast)
+    }
+
+    final class DotLayerView: NSView {
+        private static let breathKey = "glint.tabdot.breath"
+        private let dot = CALayer()
+        private var color: NSColor = .clear
+        private var pulsing = false
+        private var fast = false
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            dot.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+            dot.shadowOffset = .zero
+        }
+
+        required init?(coder: NSCoder) { fatalError("not used") }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        /// Always reconfigures, even when nothing changed: configuration is
+        /// cheap and idempotent (the breath dedupes on duration), and SwiftUI
+        /// hosting can hand the view a fresh backing layer without a
+        /// window-move callback — re-asserting on every update is what keeps
+        /// the animation from silently dropping.
+        func apply(color: NSColor, pulsing: Bool, fast: Bool) {
+            self.color = color
+            self.pulsing = pulsing
+            self.fast = fast
+            configureLayers()
+        }
+
+        /// Layer-backed views can be handed a fresh layer when re-parented
+        /// or moved between windows, dropping sublayers/animations.
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            configureLayers()
+        }
+
+        override func layout() {
+            super.layout()
+            configureLayers()
+        }
+
+        private func configureLayers() {
+            guard let layer, bounds.width > 1, bounds.height > 1 else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            if dot.superlayer !== layer { layer.addSublayer(dot) }
+            dot.bounds = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height)
+            dot.position = CGPoint(x: bounds.midX, y: bounds.midY)
+            dot.cornerRadius = min(bounds.width, bounds.height) / 2
+            dot.backgroundColor = color.cgColor
+            // The glow is the dot's own shadow, so animating the layer's
+            // opacity breathes the dot and its halo in lockstep.
+            dot.shadowColor = color.cgColor
+            dot.shadowOpacity = 0.65
+            dot.shadowRadius = 3
+            CATransaction.commit()
+
+            guard pulsing else {
+                dot.removeAnimation(forKey: Self.breathKey)
+                return
+            }
+            // The design mockup's pulse, verbatim: `pulse 1.6s ease-in-out
+            // infinite` with opacity 1 → 0.35 → 1. An autoreversing 0.8s
+            // half-cycle is exactly that curve. Fast mode (compacting)
+            // halves the cycle so it reads busier.
+            let duration: CFTimeInterval = fast ? 0.4 : 0.8
+            if let existing = dot.animation(forKey: Self.breathKey),
+               existing.duration == duration { return }
+            let breath = CABasicAnimation(keyPath: "opacity")
+            breath.fromValue = 1.0
+            breath.toValue = 0.35
+            breath.duration = duration
+            breath.autoreverses = true
+            breath.repeatCount = .infinity
+            breath.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            breath.isRemovedOnCompletion = false
+            dot.add(breath, forKey: Self.breathKey)
         }
     }
 }
@@ -298,6 +518,13 @@ private struct TabIcon: View {
     let kind: WorkspaceIconKind
     let size: CGFloat
 
+    /// The mascot assets carry transparent padding, so drawn at `size` they
+    /// read noticeably smaller than an SF Symbol at the same frame. Render
+    /// them oversized inside the same `size` layout footprint (they bleed
+    /// into the surrounding gaps, which are generous enough to absorb it)
+    /// so brand and glyph icons look optically equal.
+    private var brandSize: CGFloat { size * 1.35 }
+
     var body: some View {
         Group {
             switch kind {
@@ -305,10 +532,12 @@ private struct TabIcon: View {
                 Image("Claude")
                     .resizable().interpolation(.high)
                     .aspectRatio(contentMode: .fit)
+                    .frame(width: brandSize, height: brandSize)
             case .codex:
                 Image("CodexMark")
                     .resizable().interpolation(.high)
                     .aspectRatio(contentMode: .fit)
+                    .frame(width: brandSize, height: brandSize)
             default:
                 if let sf = kind.sfSymbol {
                     Image(systemName: sf)
@@ -322,6 +551,256 @@ private struct TabIcon: View {
             }
         }
         .frame(width: size, height: size)
+    }
+}
+
+/// The "+N" capsule that absorbs tabs the header can't fit even icon-only.
+/// Clicking opens a popover listing the folded tabs — same glass styling as
+/// the workspace switcher's dropdown, with select-on-click and hover-close.
+private struct TabOverflowChip: View {
+    @EnvironmentObject var store: WorkspaceStore
+    let ws: Workspace
+    let tabs: [WorkspaceTab]
+    @State private var isOpen = false
+    @State private var hover = false
+
+    var body: some View {
+        Button { isOpen.toggle() } label: {
+            HStack(spacing: 4) {
+                Text("+\(tabs.count)")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .bold))
+                    .rotationEffect(.degrees(isOpen ? 180 : 0))
+            }
+            .foregroundStyle(Theme.text3)
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(capsuleFill)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .help("\(tabs.count) more tabs")
+        .animation(.easeOut(duration: 0.12), value: hover)
+        .animation(.easeOut(duration: 0.15), value: isOpen)
+        .popover(isPresented: $isOpen, arrowEdge: .bottom) {
+            TabOverflowPopover(ws: ws, tabs: tabs) { isOpen = false }
+                .environmentObject(store)
+        }
+    }
+
+    private var capsuleFill: Color {
+        if isOpen { return Color.white.opacity(0.10) }
+        if hover  { return Color.white.opacity(0.07) }
+        return Color.white.opacity(0.04)
+    }
+}
+
+private struct TabOverflowPopover: View {
+    @EnvironmentObject var store: WorkspaceStore
+    let ws: Workspace
+    let tabs: [WorkspaceTab]
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            ScrollView {
+                LazyVStack(spacing: 1) {
+                    ForEach(tabs) { tab in
+                        TabOverflowRow(ws: ws, tab: tab) {
+                            store.selectTab(tab.id)
+                            dismiss()
+                        }
+                        .environmentObject(store)
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.bottom, 6)
+            }
+            .frame(maxHeight: 320)
+
+            Rectangle()
+                .fill(Color.white.opacity(0.05))
+                .frame(height: 1)
+
+            newTabRow
+        }
+        .frame(width: 260)
+        .background(
+            ZStack {
+                // Tinted glass matching the workspace switcher popover so
+                // both header dropdowns feel like the same surface.
+                VisualEffectBackground(material: .menu)
+                LinearGradient(
+                    colors: [
+                        Theme.sidebarTintTop.opacity(0.96),
+                        Theme.sidebarTintBottom.opacity(0.96),
+                    ],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+            }
+        )
+    }
+
+    private var header: some View {
+        HStack {
+            Text("TABS")
+                .font(.system(size: 10, weight: .semibold))
+                .kerning(1.1)
+                .foregroundStyle(Theme.text4)
+            Spacer()
+            Text("\(tabs.count)")
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(Theme.text4)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+    }
+
+    /// Footer mirroring the workspace switcher's "New Workspace" row, so the
+    /// two header dropdowns close on the same affordance.
+    private var newTabRow: some View {
+        Button {
+            store.newTab()
+            dismiss()
+        } label: {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(Theme.divider,
+                                      style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.text3)
+                }
+                .frame(width: 24, height: 24)
+                Text("New Tab")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(Theme.text3)
+                Spacer()
+                Text("⌘T")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Theme.text4)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1.5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(Color.white.opacity(0.05))
+                    )
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(6)
+    }
+}
+
+/// A folded tab's row: icon in a soft squircle well, name over a live status
+/// line (colored like the workspace switcher's rows), and a trailing slot
+/// that swaps the breathing status dot for a close (×) on hover.
+private struct TabOverflowRow: View {
+    @EnvironmentObject var store: WorkspaceStore
+    let ws: Workspace
+    let tab: WorkspaceTab
+    let onSelect: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        let status = store.tabAgentStatus(tab, in: ws)
+        Button(action: onSelect) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.white.opacity(0.06))
+                    TabIcon(kind: store.tabIconKind(tab, in: ws), size: 15)
+                }
+                .frame(width: 24, height: 24)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(ws.tabDisplayName(tab))
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(hover ? Theme.text1 : Theme.text2)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(secondaryText(status))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(status.flatMap(secondaryColor) ?? Theme.text4)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                trailingSlot(status: status)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(hover ? Color.white.opacity(0.05) : .clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.12), value: hover)
+    }
+
+    /// Fixed-size slot mirroring TabChip's: status dot at rest, close (×)
+    /// on hover, so rows don't shift as the pointer moves down the list.
+    @ViewBuilder
+    private func trailingSlot(status: PaneAgentStatus?) -> some View {
+        ZStack {
+            if hover {
+                Button { store.closeTab(tab.id) } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .frame(width: 16, height: 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(Color.white.opacity(0.06))
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.text3)
+            } else if let status, status != .idle {
+                TabStatusDot(status: status)
+            }
+        }
+        .frame(width: 16, height: 16)
+    }
+
+    /// Same vocabulary as the workspace switcher rows: a live status phrase
+    /// while an agent is busy, otherwise the tab's pane count.
+    private func secondaryText(_ status: PaneAgentStatus?) -> String {
+        if let status, status != .idle {
+            switch status {
+            case .thinking, .tool: return String(localized: "running…")
+            case .needsPermission: return String(localized: "needs approval")
+            case .compacting:      return String(localized: "compacting…")
+            case .justCompleted:   return String(localized: "✓ done")
+            case .failed:          return String(localized: "error")
+            case .idle:            break
+            }
+        }
+        let n = tab.root.leaves.count
+        return "\(n) \(String(localized: n == 1 ? "pane" : "panes"))"
+    }
+
+    private func secondaryColor(_ s: PaneAgentStatus) -> Color? {
+        switch s {
+        case .thinking, .tool:  return Color(red: 0.72, green: 0.68, blue: 1.0)
+        case .needsPermission:  return Color(red: 1.0, green: 0.45, blue: 0.42)
+        case .compacting:       return Color(red: 0.43, green: 0.72, blue: 0.86)
+        case .justCompleted:    return Color(red: 0.40, green: 0.86, blue: 0.55)
+        case .failed:           return Color(red: 0.96, green: 0.36, blue: 0.34)
+        case .idle:             return nil
+        }
     }
 }
 

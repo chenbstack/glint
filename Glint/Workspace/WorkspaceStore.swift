@@ -816,12 +816,13 @@ final class WorkspaceStore: ObservableObject {
         case "PreCompact":        state.status = .compacting
         case "Stop":
             // `.justCompleted` persists until the user actually views this
-            // workspace — see `acknowledgeCompletionIfNeeded(for:)`. This is
-            // an unread-style badge: switching to it clears it. We only skip
+            // pane — see `acknowledgeCompletionIfNeeded(for:)`. This is an
+            // unread-style badge: switching to it clears it. We only skip
             // the badge when the user is actually watching: Glint frontmost
-            // AND on this workspace. If Glint is hidden behind other apps,
-            // leave the badge up so they see it on return.
-            if NSApp.isActive && selectedWorkspaceID == key.workspace {
+            // AND this pane on screen (its workspace selected and its tab
+            // the selected tab). A finish in a background tab of the current
+            // workspace still earns its green dot on the tab chip.
+            if NSApp.isActive && isPaneVisible(key) {
                 state.status = .idle
             } else {
                 state.status = .justCompleted
@@ -855,10 +856,10 @@ final class WorkspaceStore: ObservableObject {
         paneAgentState[key] = state
 
         // Audio cues fire whenever the user is NOT actively watching this
-        // pane — that means either Glint isn't the frontmost app, or it is
-        // but the user is on a different workspace. If Glint has focus AND
-        // they're already looking at this workspace, stay quiet.
-        let userIsWatching = NSApp.isActive && (selectedWorkspaceID == key.workspace)
+        // pane — that means Glint isn't the frontmost app, or the user is on
+        // a different workspace, or on a different tab of this workspace. If
+        // Glint has focus AND the pane is on screen, stay quiet.
+        let userIsWatching = NSApp.isActive && isPaneVisible(key)
         if !userIsWatching && oldStatus != state.status {
             switch state.status {
             case .needsPermission where soundOnPermissionRequest:
@@ -896,15 +897,29 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
-    /// Clear any `.justCompleted` / `.failed` panes in `workspaceID` back to
-    /// `.idle`. Called whenever the user selects a workspace — that act is
-    /// treated as "I saw it finished / saw it errored".
+    /// Clear any `.justCompleted` / `.failed` panes back to `.idle` — but
+    /// only the ones actually on screen: panes in `workspaceID`'s *selected
+    /// tab*. Called when the user selects the workspace, switches to a tab,
+    /// or ⌘Tabs back to Glint — each is "I saw it finished / saw it
+    /// errored". Background tabs keep their badge until visited.
     func acknowledgeCompletionIfNeeded(for workspaceID: UUID) {
+        guard let ws = workspaces.first(where: { $0.id == workspaceID }),
+              let tab = ws.selectedTab else { return }
+        let visible = Set(tab.root.leaves)
         for (key, state) in paneAgentState
-        where key.workspace == workspaceID && (state.status == .justCompleted || state.status == .failed) {
+        where key.workspace == workspaceID && visible.contains(key.pane)
+            && (state.status == .justCompleted || state.status == .failed) {
             paneAgentState[key]?.status = .idle
             paneAgentState[key]?.updatedAt = Date()
         }
+    }
+
+    /// True when `key`'s pane is on screen right now: its workspace is the
+    /// selected workspace AND it lives in that workspace's selected tab.
+    private func isPaneVisible(_ key: WorkspacePaneKey) -> Bool {
+        guard selectedWorkspaceID == key.workspace,
+              let tab = selectedWorkspace?.selectedTab else { return false }
+        return tab.root.leaves.contains(key.pane)
     }
 
     private static func parsePaneKey(_ s: String) -> WorkspacePaneKey? {
@@ -1176,6 +1191,8 @@ final class WorkspaceStore: ObservableObject {
         guard let i = currentIndex,
               workspaces[i].tabs.contains(where: { $0.id == tabID }) else { return }
         workspaces[i].selectedTabID = tabID
+        // Viewing the tab is what "reads" its ✓ done / error badges.
+        acknowledgeCompletionIfNeeded(for: workspaces[i].id)
     }
 
     func nextTab() {
@@ -1183,6 +1200,7 @@ final class WorkspaceStore: ObservableObject {
               workspaces[i].tabs.count > 1 else { return }
         let n = (t + 1) % workspaces[i].tabs.count
         workspaces[i].selectedTabID = workspaces[i].tabs[n].id
+        acknowledgeCompletionIfNeeded(for: workspaces[i].id)
     }
 
     func previousTab() {
@@ -1190,6 +1208,7 @@ final class WorkspaceStore: ObservableObject {
               workspaces[i].tabs.count > 1 else { return }
         let n = (t - 1 + workspaces[i].tabs.count) % workspaces[i].tabs.count
         workspaces[i].selectedTabID = workspaces[i].tabs[n].id
+        acknowledgeCompletionIfNeeded(for: workspaces[i].id)
     }
 
     /// Cycle to the next workspace in sidebar order, wrapping at the end.
