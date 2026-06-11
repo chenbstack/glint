@@ -736,6 +736,8 @@ private struct ShortcutsPane: View {
 }
 
 private struct AboutPane: View {
+    @EnvironmentObject var updater: UpdaterController
+
     var body: some View {
         VStack(spacing: 24) {
             VStack(spacing: 14) {
@@ -783,8 +785,12 @@ private struct AboutPane: View {
                         .foregroundStyle(Theme.text3)
                 }
                 SettingsDivider()
-                SettingsRow("Channel", subtitle: nil) {
-                    StatusPill(label: channelLabel, tone: channelTone)
+                SettingsRow("Build channel", subtitle: nil) {
+                    StatusPill(label: buildChannelLabel, tone: buildChannelTone)
+                }
+                SettingsDivider()
+                SettingsRow("Update channel", subtitle: nil) {
+                    StatusPill(label: updateChannelLabel, tone: updateChannelTone)
                 }
                 SettingsDivider()
                 SettingsRow("Auto-update", subtitle: nil) {
@@ -804,6 +810,12 @@ private struct AboutPane: View {
         Bundle.main.bundleIdentifier ?? "app.glint.Glint"
     }
 
+    private enum BuildChannel {
+        case localDev
+        case beta
+        case stable
+    }
+
     /// Release builds stamp CFBundleVersion with a 12-digit YYYYMMDDHHmm
     /// timestamp via the CI workflow; locally-built debug bundles inherit
     /// the project's default "1" / Xcode-generated value. Use that shape
@@ -812,6 +824,34 @@ private struct AboutPane: View {
         let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? ""
         return build.count >= 10 && build.allSatisfy(\.isNumber)
     }
-    private var channelLabel: String { isReleaseBuild ? "Stable" : "Local Dev" }
-    private var channelTone: StatusPill.Tone { isReleaseBuild ? .ok : .neutral }
+
+    private var buildChannel: BuildChannel {
+        guard isReleaseBuild else { return .localDev }
+        let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? ""
+        return version.contains("-") ? .beta : .stable
+    }
+
+    private var buildChannelLabel: String {
+        switch buildChannel {
+        case .localDev: return "Local Dev"
+        case .beta: return "Beta"
+        case .stable: return "Stable"
+        }
+    }
+
+    private var buildChannelTone: StatusPill.Tone {
+        switch buildChannel {
+        case .localDev: return .neutral
+        case .beta: return .warn
+        case .stable: return .ok
+        }
+    }
+
+    private var updateChannelLabel: String {
+        updater.receiveBetaUpdates ? "Beta" : "Stable"
+    }
+
+    private var updateChannelTone: StatusPill.Tone {
+        updater.receiveBetaUpdates ? .warn : .ok
+    }
 }

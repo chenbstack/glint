@@ -303,11 +303,13 @@ enum AgentHookInstaller {
 /// shared `glint-report.sh` swallows it and only forwards the event name
 /// plus the agent kind ("codex") to Glint's local socket.
 enum CodexHookInstaller {
-    /// Events Glint reacts to. Mirrors the Claude set, with one tweak:
-    /// Codex uses PostToolUse → thinking too, no Notification event exists.
+    /// Events Glint reacts to. Codex has no Notification event, but it does
+    /// expose tool boundaries; PreToolUse is important for clearing a pending
+    /// permission prompt once the approved tool actually starts.
     private static let hookEvents: [String] = [
         "SessionStart",
         "UserPromptSubmit",
+        "PreToolUse",
         "PostToolUse",
         "PermissionRequest",
         "PreCompact",

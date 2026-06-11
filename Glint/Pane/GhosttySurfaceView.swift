@@ -1162,13 +1162,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         guard let window, let s = surface else { return .zero }
         var x: Double = 0, y: Double = 0, w: Double = 0, h: Double = 0
         ghostty_surface_ime_point(s, &x, &y, &w, &h)
-        let scale = window.backingScaleFactor
-        // ghostty returns the cursor box in scaled pixels with top-left
-        // origin; AppKit wants view-local points with bottom-left origin.
-        let widthPt = w / scale
-        let heightPt = h / scale
-        let viewY = bounds.height - (y / scale) - heightPt
-        let rectInView = NSRect(x: x / scale, y: viewY, width: widthPt, height: heightPt)
+        // ghostty returns the cursor box in view points with top-left origin;
+        // AppKit wants view-local points with bottom-left origin. Do not apply
+        // backingScaleFactor here: upstream ghostty already reports points.
+        let rectInView = NSRect(x: x, y: bounds.height - y, width: w, height: h)
         return window.convertToScreen(convert(rectInView, to: nil))
     }
 

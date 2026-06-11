@@ -162,6 +162,16 @@
         }
       }
     },
+    "Beta" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beta 版"
+          }
+        }
+      }
+    },
     "Blink" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -212,6 +222,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "构建"
+          }
+        }
+      }
+    },
+    "Build channel" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "构建通道"
           }
         }
       }
@@ -1697,6 +1717,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "卸载"
+          }
+        }
+      }
+    },
+    "Update channel" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新通道"
           }
         }
       }

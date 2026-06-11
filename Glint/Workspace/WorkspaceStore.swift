@@ -359,20 +359,20 @@ final class WorkspaceStore: ObservableObject {
     /// never re-prompts and launches never silently re-add the entries;
     /// the Settings → Install button is the only way back in.
     ///
-    /// For agents that remain installed, the shared reporter script is
-    /// still refreshed every launch — script-body updates shipped with
-    /// new Glint versions must propagate even though the settings merge
-    /// is skipped.
+    /// For agents that remain installed, Glint-owned hook entries are
+    /// refreshed every launch — script-body and event-list updates shipped
+    /// with new Glint versions must propagate even though the prompt is
+    /// skipped.
     private static func autoInstallAgentHooksOnFirstLaunch(socketPath: String) {
         let defaults = UserDefaults.standard
         let claudeHandled = defaults.bool(forKey: "glint.claudeHooksAutoInstalled")
         let codexHandled = defaults.bool(forKey: "glint.codexHooksAutoInstalled")
 
         if claudeHandled, AgentHookInstaller.isInstalled() {
-            _ = AgentHookInstaller.ensureReporterScript()
+            AgentHookInstaller.installIfNeeded(socketPath: socketPath)
         }
         if codexHandled, CodexHookInstaller.isInstalled() {
-            _ = AgentHookInstaller.ensureReporterScript()
+            CodexHookInstaller.installIfNeeded(socketPath: socketPath)
         }
         guard !claudeHandled || !codexHandled else { return }
 
@@ -636,11 +636,22 @@ final class WorkspaceStore: ObservableObject {
             ?? PaneAgentState(kind: kind, status: .idle, detail: nil, updatedAt: Date())
         state.kind = kind
         let oldStatus = state.status
+        let now = Date()
         switch hook {
         case "SessionStart":      state.status = .idle
         case "UserPromptSubmit":  state.status = .thinking
         case "PreToolUse":        state.status = .tool
-        case "PostToolUse":       state.status = .thinking
+        case "PostToolUse":
+            // Hook delivery is one process per event, so a PostToolUse from
+            // the previous tool can arrive just after PermissionRequest and
+            // incorrectly hide an active approval prompt. A real approval
+            // should be followed by PreToolUse, which clears this state once
+            // the requested tool actually starts.
+            if state.status == .needsPermission,
+               now.timeIntervalSince(state.updatedAt) < 2 {
+                return
+            }
+            state.status = .thinking
         case "Notification":      break   // noisy: background/idle prompts, ignore
         case "PermissionRequest": state.status = .needsPermission
         case "PreCompact":        state.status = .compacting
@@ -658,7 +669,7 @@ final class WorkspaceStore: ObservableObject {
             }
         default: break
         }
-        state.updatedAt = Date()
+        state.updatedAt = now
         paneAgentState[key] = state
 
         // Audio cues fire whenever the user is NOT actively watching this
