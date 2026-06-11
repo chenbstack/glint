@@ -228,12 +228,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Switch to main so the appcast lives on a stable branch GitHub
-          # Pages / Sparkle can poll from a permalink. The freshly
-          # generated appcast.xml in the workspace is untracked, so
-          # `git checkout main` keeps it around — just stage it directly
-          # (the tag's commit on main never carried an appcast.xml).
+          # Pages / Sparkle can poll from a permalink.
+          # appcast.xml may be tracked in the tag's tree (e.g. when the tag
+          # commit descends from a prior "release: appcast for …" commit), so
+          # `git checkout main` would refuse to overwrite it. Copy it to a
+          # temp location first, then restore after switching branches.
+          cp appcast.xml "$RUNNER_TEMP/appcast.xml"
           git fetch origin main
           git checkout main
+          cp "$RUNNER_TEMP/appcast.xml" appcast.xml
           git add appcast.xml
           if git diff --cached --quiet; then
             echo "appcast already up to date"
