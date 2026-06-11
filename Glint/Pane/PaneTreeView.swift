@@ -3,6 +3,15 @@ import AppKit
 
 struct PaneTreeView: View {
     let node: SplitNode
+    /// The workspace this tree belongs to, captured by value at render time.
+    /// PaneView must NOT read `store.selectedWorkspaceID` live instead: when
+    /// the selection changes, SwiftUI still evaluates the outgoing tree's
+    /// PaneViews once before dismantling them, and a live read there pairs
+    /// the NEW workspace ID with the OLD tree's pane IDs — minting phantom
+    /// surfaces (spawning shells!) and re-parenting the new workspace's
+    /// surface into a container that is about to be torn down, leaving the
+    /// real pane blank.
+    let workspaceID: UUID?
     /// Branch choices from the root to `node` (false = first child, true =
     /// second). Identifies this subtree to `WorkspaceStore.setSplitRatio`.
     var path: [Bool] = []
@@ -10,9 +19,10 @@ struct PaneTreeView: View {
     var body: some View {
         switch node {
         case .leaf(let id):
-            PaneView(paneID: id)
+            PaneView(workspaceID: workspaceID, paneID: id)
         case .split(let dir, let ratio, let a, let b):
-            SplitContainer(direction: dir, ratio: ratio, path: path, a: a, b: b)
+            SplitContainer(direction: dir, ratio: ratio, path: path,
+                           workspaceID: workspaceID, a: a, b: b)
         }
     }
 }
@@ -25,6 +35,7 @@ private struct SplitContainer: View {
     let direction: SplitDirection
     let ratio: CGFloat
     let path: [Bool]
+    let workspaceID: UUID?
     let a: SplitNode
     let b: SplitNode
 
@@ -47,17 +58,17 @@ private struct SplitContainer: View {
             ZStack(alignment: .topLeading) {
                 if isHorizontal {
                     HStack(spacing: 0) {
-                        PaneTreeView(node: a, path: path + [false])
+                        PaneTreeView(node: a, workspaceID: workspaceID, path: path + [false])
                             .frame(width: firstLength)
                         divider
-                        PaneTreeView(node: b, path: path + [true])
+                        PaneTreeView(node: b, workspaceID: workspaceID, path: path + [true])
                     }
                 } else {
                     VStack(spacing: 0) {
-                        PaneTreeView(node: a, path: path + [false])
+                        PaneTreeView(node: a, workspaceID: workspaceID, path: path + [false])
                             .frame(height: firstLength)
                         divider
-                        PaneTreeView(node: b, path: path + [true])
+                        PaneTreeView(node: b, workspaceID: workspaceID, path: path + [true])
                     }
                 }
 

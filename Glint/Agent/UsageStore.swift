@@ -25,9 +25,14 @@ struct AgentQuota: Equatable, Codable {
 /// Polls per-agent usage/rate-limit data and republishes it for the sidebar.
 ///
 /// Data sources are asymmetric on purpose:
-///   • Codex persists `rate_limits` into every session rollout JSONL under
-///     `~/.codex/sessions/…`, so we can read the latest snapshot straight off
-///     disk with no auth. This is the reliable path.
+///   • Codex (ChatGPT login) is read live from the same `/backend-api/wham/usage`
+///     endpoint the Codex TUI polls, authorizing with the OAuth token in
+///     `~/.codex/auth.json` — so the numbers refresh even with no session
+///     running (`CodexLiveReader`). When that's unavailable (API-key login,
+///     expired token, network/shape failure) it falls back to the `rate_limits`
+///     block Codex persists into every session rollout JSONL under
+///     `~/.codex/sessions/…`, which needs no auth but only updates while Codex
+///     is active (`CodexUsageReader`).
 ///   • Claude Code does NOT persist account-level 5h/weekly limits to disk —
 ///     it only sees them in live API response headers. The only way to read
 ///     them out-of-process is the OAuth usage endpoint using the token in the
@@ -68,8 +73,6 @@ final class UsageStore: ObservableObject {
     private static let claudeKey = "glint.showClaudeUsage"
     private static let codexKey = "glint.showCodexUsage"
     private var timer: Timer?
-    /// Serializes the disk reads off the main thread.
-    private let queue = DispatchQueue(label: "app.glint.usage", qos: .utility)
     /// Refresh cadence. Rate-limit windows move on the order of minutes, so a
     /// minute of staleness is invisible and keeps disk/network churn trivial.
     private let interval: TimeInterval = 60
@@ -108,11 +111,9 @@ final class UsageStore: ObservableObject {
     /// Refresh whichever agents are currently enabled and publish results.
     func refreshNow() {
         if codexEnabled {
-            queue.async {
-                let codex = CodexUsageReader.read()
-                Task { @MainActor [weak self] in
-                    self?.apply(codex, to: .codex)
-                }
+            Task { [weak self] in
+                let codex = await CodexUsageReader.readPreferLive()
+                await MainActor.run { self?.apply(codex, to: .codex) }
             }
         }
         if claudeEnabled {
@@ -176,6 +177,15 @@ enum CodexUsageReader {
         let plan_type: String?
     }
 
+    /// Prefer the live ChatGPT usage endpoint (current numbers even with no
+    /// active session, ChatGPT login only); fall back to the on-disk session
+    /// snapshot on any failure or in API-key mode. The disk read is bounced off
+    /// the main actor since it touches the filesystem.
+    static func readPreferLive() async -> AgentQuota? {
+        if let live = await CodexLiveReader.read() { return live }
+        return await Task.detached(priority: .utility) { read() }.value
+    }
+
     static func read() -> AgentQuota? {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let sessions = home.appendingPathComponent(".codex/sessions", isDirectory: true)
@@ -233,6 +243,89 @@ enum CodexUsageReader {
             )
         }
         return nil
+    }
+}
+
+// MARK: - Codex (live ChatGPT usage endpoint, best-effort)
+
+/// Reads Codex's rate limits from the same ChatGPT backend endpoint the Codex
+/// TUI polls — `GET https://chatgpt.com/backend-api/wham/usage` — authorizing
+/// with the OAuth token in `~/.codex/auth.json`. Unlike the on-disk snapshot
+/// (which only moves while Codex is running), this reflects the current window
+/// usage at any time, the same way `ClaudeUsageReader` does for Claude.
+///
+/// Best-effort and fails closed: API-key login (no OAuth token), an expired
+/// token, a network error, or an unexpected response shape all return `nil`,
+/// and the caller falls back to the disk snapshot. The endpoint, headers, and
+/// payload mirror Codex's own `backend-client` as of mid-2026 (ChatGPT-plan
+/// mode only); if they drift, only this type needs updating.
+enum CodexLiveReader {
+    private static let endpoint = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
+
+    /// `~/.codex/auth.json`. ChatGPT logins carry `tokens.access_token` +
+    /// `tokens.account_id`; API-key logins leave the token empty/absent.
+    private struct Auth: Decodable {
+        struct Tokens: Decodable {
+            let access_token: String?
+            let account_id: String?
+        }
+        let tokens: Tokens?
+    }
+
+    /// Mirrors Codex's `RateLimitStatusPayload` — note this is the RAW endpoint
+    /// shape (`rate_limit.{primary,secondary}_window`), NOT the already-mapped
+    /// `rate_limits` block Codex persists to its session files.
+    private struct Payload: Decodable {
+        struct Window: Decodable {
+            let used_percent: Double?   // 0–100 (integer over the wire)
+            let reset_at: Double?       // unix seconds
+        }
+        struct RateLimit: Decodable {
+            let primary_window: Window?
+            let secondary_window: Window?
+        }
+        let plan_type: String?
+        let rate_limit: RateLimit?
+    }
+
+    static func read() async -> AgentQuota? {
+        guard let (token, accountId) = loadAuth() else { return nil }
+        var req = URLRequest(url: endpoint)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let accountId { req.setValue(accountId, forHTTPHeaderField: "ChatGPT-Account-Id") }
+        req.setValue("codex-cli", forHTTPHeaderField: "User-Agent")
+        req.timeoutInterval = 10
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+        return decode(data)
+    }
+
+    /// (access token, account id) when in ChatGPT-OAuth mode. The access token
+    /// is owned and rotated by Codex; we only read it. An empty/absent token
+    /// (API-key login) yields `nil` so the caller uses the disk fallback.
+    private static func loadAuth() -> (String, String?)? {
+        let path = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/auth.json")
+        guard let data = try? Data(contentsOf: path),
+              let auth = try? JSONDecoder().decode(Auth.self, from: data),
+              let token = auth.tokens?.access_token, !token.isEmpty else { return nil }
+        let account = auth.tokens?.account_id.flatMap { $0.isEmpty ? nil : $0 }
+        return (token, account)
+    }
+
+    private static func decode(_ data: Data) -> AgentQuota? {
+        guard let p = try? JSONDecoder().decode(Payload.self, from: data),
+              let primary = p.rate_limit?.primary_window,
+              let sessionPercent = primary.used_percent else { return nil }
+        let secondary = p.rate_limit?.secondary_window
+        return AgentQuota(
+            sessionPercent: sessionPercent,
+            weeklyPercent: secondary?.used_percent,
+            sessionResetsAt: primary.reset_at.map { Date(timeIntervalSince1970: $0) },
+            weeklyResetsAt: secondary?.reset_at.map { Date(timeIntervalSince1970: $0) },
+            planType: p.plan_type
+        )
     }
 }
 

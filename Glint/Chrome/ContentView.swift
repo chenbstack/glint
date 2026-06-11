@@ -4,6 +4,11 @@ import AppKit
 struct ContentView: View {
     @EnvironmentObject var store: WorkspaceStore
 
+    static func logRootRender(_ store: WorkspaceStore) {
+        guard ProcessInfo.processInfo.environment["GLINT_LOG_VISIBLE"] != nil else { return }
+        NSLog("[glint.visible] ContentView.body ws=\(store.selectedWorkspaceID?.uuidString.prefix(8) ?? "nil") root=\(store.currentRoot)")
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             if !store.sidebarCollapsed {
@@ -33,8 +38,9 @@ struct ContentView: View {
             }
 
             VStack(spacing: 0) {
+                let _ = Self.logRootRender(store)
                 ToolbarHeader()
-                PaneTreeView(node: store.currentRoot)
+                PaneTreeView(node: store.currentRoot, workspaceID: store.selectedWorkspaceID)
                     .background(Theme.bgPane)
             }
             .background(Theme.bgPane)
@@ -497,8 +503,7 @@ private struct WorkspaceSwitcherRow: View {
     private func secondaryText(summary: (status: PaneAgentStatus, since: Date)?) -> String {
         if let s = summary, s.status != .idle {
             switch s.status {
-            case .thinking:        return String(localized: "thinking…")
-            case .tool:            return String(localized: "running tool")
+            case .thinking, .tool: return String(localized: "running…")
             case .needsPermission: return String(localized: "needs approval")
             case .compacting:      return String(localized: "compacting…")
             case .justCompleted:   return String(localized: "✓ done")

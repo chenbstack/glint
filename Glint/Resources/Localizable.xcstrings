@@ -2005,24 +2005,13 @@
         }
       }
     },
-    "running tool": {
-      "extractionState": "stale",
+    "running…": {
+      "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "调用工具"
-          }
-        }
-      }
-    },
-    "thinking…": {
-      "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "思考中…"
+            "value": "运行中…"
           }
         }
       }

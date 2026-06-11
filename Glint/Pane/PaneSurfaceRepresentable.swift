@@ -11,14 +11,14 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     /// writable binding would just be a lie about the data flow.
     let focused: Bool
 
-    func makeNSView(context: Context) -> NSView {
+    func makeNSView(context: Context) -> NoDragContainerView {
         let container = NoDragContainerView()
         container.wantsLayer = true
         attach(surfaceView, to: container)
         return container
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
+    func updateNSView(_ nsView: NoDragContainerView, context: Context) {
         if surfaceView.superview !== nsView {
             attach(surfaceView, to: nsView)
         }
@@ -56,7 +56,14 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     /// pixel grid, and during fast scrollback (`cat` of a big file) each
     /// row falls on a slightly different sub-pixel offset — the eye reads
     /// the result as a 1px "fault line" tearing through the rows.
-    private final class NoDragContainerView: NSView {
+    final class NoDragContainerView: NSView {
+        /// The surface this container most recently claimed via `attach`.
+        /// Read by the post-commit recheck to tell whether this container is
+        /// still the surface's rightful host (a later attach to a different
+        /// container overwrites the claim there, not here, so identity of
+        /// the pair (container, surface) is what's being verified).
+        weak var expectedSurface: GhosttySurfaceView?
+
         override var mouseDownCanMoveWindow: Bool { false }
 
         override func setFrameOrigin(_ newOrigin: NSPoint) {
@@ -84,7 +91,24 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
         }
     }
 
-    private func attach(_ surface: GhosttySurfaceView, to container: NSView) {
+    private func attach(_ surface: GhosttySurfaceView, to container: NoDragContainerView) {
+        container.expectedSurface = surface
+        Self.pin(surface, in: container)
+        // When the split tree reshapes (workspace switch, pane close), SwiftUI
+        // evaluates the OUTGOING tree's representables once more before
+        // dismantling them, and that stale update can run *after* this attach —
+        // re-parenting the surface into a container that's torn down moments
+        // later, leaving the live pane blank. Containers that survive the
+        // commit re-assert their claim right after it; dismantled ones are out
+        // of the window by then and bail.
+        DispatchQueue.main.async {
+            guard container.window != nil,
+                  container.expectedSurface === surface else { return }
+            Self.pin(surface, in: container)
+        }
+    }
+
+    private static func pin(_ surface: GhosttySurfaceView, in container: NSView) {
         // Evict any stale surface left over from another workspace's pane that
         // happened to use this container. With the workspace `.id()` removed
         // above, SwiftUI re-uses the same hosting NSView across switches, so
@@ -92,16 +116,23 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
         for child in container.subviews where child !== surface {
             child.removeFromSuperview()
         }
-        if surface.superview !== container {
-            surface.removeFromSuperview()
-            surface.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(surface)
-            NSLayoutConstraint.activate([
-                surface.topAnchor.constraint(equalTo: container.topAnchor),
-                surface.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-                surface.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-                surface.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            ])
-        }
+        guard surface.superview !== container else { return }
+        surface.removeFromSuperview()
+        surface.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(surface)
+        NSLayoutConstraint.activate([
+            surface.topAnchor.constraint(equalTo: container.topAnchor),
+            surface.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            surface.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            surface.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+        ])
+        // Adding a subview to a container whose size is UNCHANGED does not
+        // trigger a layout pass, so the pin constraints just activated stay
+        // unresolved and the surface keeps its stale (often zero) frame —
+        // when SwiftUI hands us a recycled container already at its final
+        // size, nothing else resizes the surface to fill it. Resolve the
+        // constraints synchronously now so the surface always matches its
+        // container, size change or not.
+        container.layoutSubtreeIfNeeded()
     }
 }

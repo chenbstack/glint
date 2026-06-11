@@ -76,6 +76,18 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         if let s = surface { ghostty_surface_free(s) }
     }
 
+    /// One-shot: a kept-alive surface was re-attached to a window, so the next
+    /// `syncSurfaceSize` with a valid drawable size must force a frame. The
+    /// render thread won't redraw on its own without a size change or an
+    /// occlusion transition, neither of which a same-size workspace switch-back
+    /// produces. Cleared the moment that forced frame is drawn.
+    private var pendingVisibleRedraw = false
+
+    /// Opt-in tracing for the blank-pane-on-switch investigation. Launch the dev
+    /// build with `GLINT_LOG_VISIBLE=1` to see attach / forced-redraw events.
+    private let logVisible = ProcessInfo.processInfo.environment["GLINT_LOG_VISIBLE"] != nil
+    var debugKey: String { paneKey ?? "?" }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         // Observe the window moving between screens so ghostty's
@@ -119,20 +131,55 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         }
         pushOcclusionToGhostty()
 
-        guard window != nil, surface == nil else {
-            pushDisplayIDToGhostty()
+        guard window != nil else {
+            // Detached (e.g. switched to another workspace). Occlusion was
+            // pushed false above; nothing to draw.
             return
         }
-        createSurface()
-        // Push the initial display id right after surface creation. The
-        // `didChangeScreen` notification only fires on subsequent moves,
-        // so without this CVDisplayLink would start on
-        // `createWithActiveCGDisplays()`'s default display, which may not
-        // be the one our window is on (multi-monitor setups, secondary
-        // ProMotion display, etc.).
-        pushDisplayIDToGhostty()
-        // The surface didn't exist for the push above; mark it visible now.
-        pushOcclusionToGhostty()
+
+        if surface == nil {
+            createSurface()
+            // Push the initial display id right after surface creation. The
+            // `didChangeScreen` notification only fires on subsequent moves,
+            // so without this CVDisplayLink would start on
+            // `createWithActiveCGDisplays()`'s default display, which may not
+            // be the one our window is on (multi-monitor setups, secondary
+            // ProMotion display, etc.).
+            pushDisplayIDToGhostty()
+            // The surface didn't exist for the push above; mark it visible now.
+            pushOcclusionToGhostty()
+        } else {
+            // Reusing a surface kept alive while its workspace was off screen.
+            pushDisplayIDToGhostty()
+        }
+
+        // A surface kept alive in a non-selected workspace had its swap chain
+        // shrunk to 1×1 while detached, and the render thread only auto-redraws
+        // on a false→true occlusion *transition* (renderer/Thread.zig) or a size
+        // change. Re-attaching to an already-visible window fires no occlusion
+        // notification, and if the pane's size is unchanged nothing dirties the
+        // renderer — so a pane switched back into view would sit blank until it
+        // next emits output. Mark a one-shot redraw; it fires from
+        // `syncSurfaceSize` once we have a valid (non-zero) drawable size, since
+        // `drawFrame` bails on a 0×0 surface — which is what `bounds` is at
+        // attach time, before AppKit lays the view out.
+        pendingVisibleRedraw = true
+        if logVisible {
+            NSLog("[glint.visible] attach pane=\(paneKey) bounds=\(bounds.size) occluVisible=\(window?.occlusionState.contains(.visible) ?? false)")
+        }
+        syncSurfaceSize(pointsSize: bounds.size)   // usually pre-layout → no-op
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.window != nil else { return }
+            if self.logVisible {
+                NSLog("[glint.visible] async-tick pane=\(self.paneKey ?? "?") bounds=\(self.bounds.size) pending=\(self.pendingVisibleRedraw)")
+            }
+            // Re-confirm occlusion once `occlusionState` has settled (a stale
+            // read at attach time would otherwise leave us pushed-occluded with
+            // no notification coming), and fire the redraw now that the view has
+            // been laid out.
+            self.pushOcclusionToGhostty()
+            self.syncSurfaceSize(pointsSize: self.bounds.size)
+        }
     }
 
     @objc private func windowDidChangeScreen(_ note: Notification) {
@@ -561,6 +608,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// meant to fix, just on a different code path.
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(snappedSize(newSize))
+        if logVisible {
+            NSLog("[glint.visible] setFrameSize pane=\(paneKey ?? "?") -> \(newSize) pending=\(pendingVisibleRedraw)")
+        }
         syncSurfaceSize(pointsSize: bounds.size)
     }
 
@@ -611,6 +661,21 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         ghostty_surface_set_content_scale(s, scale, scale)
         ghostty_surface_set_size(s, UInt32(pixelWidth), UInt32(pixelHeight))
         CATransaction.commit()
+
+        // Fire the one-shot redraw queued when this kept-alive surface was
+        // re-attached (workspace switch-back). We deferred it to here because
+        // `drawFrame` bails on a 0×0 surface and `bounds` is 0 at attach time;
+        // now that we've pushed a valid size, force the frame so the pane paints
+        // immediately instead of waiting for its next output. `set_size` above is
+        // a no-op when the size is unchanged, so this is the only thing that
+        // dirties the renderer in the common same-size case.
+        if pendingVisibleRedraw {
+            pendingVisibleRedraw = false
+            ghostty_surface_draw(s)
+            if logVisible {
+                NSLog("[glint.visible] forced redraw pane=\(paneKey ?? "?") px=\(Int(pixelWidth))x\(Int(pixelHeight))")
+            }
+        }
     }
 
     // MARK: - focus

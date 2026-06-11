@@ -601,6 +601,10 @@ final class WorkspaceStore: ObservableObject {
     func surfaceView(workspaceID: UUID, paneID: PaneID, cwd: String?) -> GhosttySurfaceView {
         let key = WorkspacePaneKey(workspace: workspaceID, pane: paneID)
         if let v = surfaceViews[key] { return v }
+        if ProcessInfo.processInfo.environment["GLINT_LOG_VISIBLE"] != nil {
+            let known = workspaces.first { $0.id == workspaceID }?.panes.keys.contains(paneID) ?? false
+            NSLog("[glint.visible] MINT surface ws=\(workspaceID.uuidString.prefix(8)) pane=\(paneID.value) inModel=\(known)")
+        }
         let paneKey = "\(workspaceID.uuidString):\(paneID.value)"
         let v = GhosttySurfaceView(
             frame: .zero,
