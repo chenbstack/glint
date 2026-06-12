@@ -385,6 +385,17 @@
         }
       }
     },
+    "Close Tab": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭标签页"
+          }
+        }
+      }
+    },
     "Close the focused pane": {
       "extractionState": "stale",
       "localizations": {
@@ -403,6 +414,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "关闭这个面板?"
+          }
+        }
+      }
+    },
+    "Close this tab?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭这个标签页?"
           }
         }
       }
@@ -801,6 +823,17 @@
         }
       }
     },
+    "Glint can register a small hook with Claude Code (~/.claude/settings.json) and Codex (~/.codex/hooks.json) that reports when an agent is thinking, finished, or waiting for approval. It only sends events to Glint on this Mac. You can uninstall it anytime in Settings → Agents.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 可以向 Claude Code(~/.claude/settings.json)和 Codex(~/.codex/hooks.json)注册一个小 hook,上报 agent 正在思考、已完成或等待批准的状态。事件只会发送给这台 Mac 上的 Glint,随时可在 设置 → Agents 中卸载。"
+          }
+        }
+      }
+    },
     "Glint is dark-mode only for now.": {
       "extractionState": "stale",
       "localizations": {
@@ -922,6 +955,28 @@
         }
       }
     },
+    "How Claude panes are drawn in the sidebar and tabs.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude 在侧栏和标签页中使用的图标样式。"
+          }
+        }
+      }
+    },
+    "Icon style": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图标样式"
+          }
+        }
+      }
+    },
     "In Command Palette": {
       "extractionState": "stale",
       "localizations": {
@@ -940,6 +995,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "安装"
+          }
+        }
+      }
+    },
+    "Install Hooks": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装 Hook"
           }
         }
       }
@@ -1065,6 +1131,17 @@
       }
     },
     "No results": {},
+    "Not Now": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂不"
+          }
+        }
+      }
+    },
     "Not installed": {
       "extractionState": "stale",
       "localizations": {
@@ -1444,6 +1521,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "显示侧栏"
+          }
+        }
+      }
+    },
+    "Show agent status in the sidebar?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在侧栏显示 agent 状态?"
           }
         }
       }

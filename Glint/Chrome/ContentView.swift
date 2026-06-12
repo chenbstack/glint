@@ -515,6 +515,7 @@ private struct StatusBeaconDot: NSViewRepresentable {
 /// adds zero per-frame cost), falling back to an SF Symbol / glyph for plain
 /// shells and other tools.
 private struct TabIcon: View {
+    @EnvironmentObject var store: WorkspaceStore
     let kind: WorkspaceIconKind
     let size: CGFloat
 
@@ -529,7 +530,7 @@ private struct TabIcon: View {
         Group {
             switch kind {
             case .claude:
-                Image("Claude")
+                Image(store.claudeIconStyle == .spark ? "ClaudeSpark" : "Claude")
                     .resizable().interpolation(.high)
                     .aspectRatio(contentMode: .fit)
                     .frame(width: brandSize, height: brandSize)
@@ -1200,6 +1201,7 @@ private struct WorkspaceSwitcherRow: View {
 /// asset, SF Symbol, or text glyph) at an arbitrary size. Used by the
 /// switcher's pill (16pt) and popover rows (26pt).
 private struct WorkspaceMicroIcon: View {
+    @EnvironmentObject var store: WorkspaceStore
     let ws: Workspace
     let kind: WorkspaceIconKind
     let size: CGFloat
@@ -1211,7 +1213,7 @@ private struct WorkspaceMicroIcon: View {
         }()
         Group {
             if isClaude {
-                Image("Claude")
+                Image(store.claudeIconStyle == .spark ? "ClaudeSpark" : "Claude")
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fill)

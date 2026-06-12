@@ -642,6 +642,14 @@ private struct AgentsPane: View {
                 Toggle("", isOn: $usage.claudeEnabled)
                     .toggleStyle(.switch).labelsHidden()
             }
+            SettingsDivider()
+            SettingsRow("Icon style",
+                        subtitle: "How Claude panes are drawn in the sidebar and tabs.") {
+                HStack(spacing: 8) {
+                    ClaudeIconStyleSwatch(style: .mascot)
+                    ClaudeIconStyleSwatch(style: .spark)
+                }
+            }
         }
 
         SettingsCard("Codex",
@@ -698,6 +706,52 @@ private struct AgentsPane: View {
                     .toggleStyle(.switch).labelsHidden()
             }
         }
+    }
+}
+
+/// One selectable preview tile in the Claude "Icon style" row: a still of
+/// the icon family, ringed with the accent color when chosen. No caption —
+/// the art is the label. Stills only; settings shouldn't loop animations
+/// just for a picker.
+private struct ClaudeIconStyleSwatch: View {
+    @EnvironmentObject var store: WorkspaceStore
+    let style: ClaudeIconStyle
+
+    private var isSelected: Bool { store.claudeIconStyle == style }
+
+    var body: some View {
+        Button {
+            store.claudeIconStyle = style
+        } label: {
+            Group {
+                switch style {
+                case .mascot:
+                    // First frame of the idle gif — the exact art the
+                    // sidebar shows, frozen.
+                    AnimatedGIFView(assetName: "ClaudeIdle", animates: false)
+                        .frame(width: 38, height: 38)
+                case .spark:
+                    Image("ClaudeSpark")
+                        .resizable().interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 28, height: 28)
+                }
+            }
+            .frame(width: 38, height: 38)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(isSelected ? store.accent.opacity(0.12) : Color.white.opacity(0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(isSelected ? store.accent.opacity(0.85) : Color.white.opacity(0.08),
+                                  lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }
 

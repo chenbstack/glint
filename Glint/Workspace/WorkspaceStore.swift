@@ -392,6 +392,19 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
+    /// Which Claude icon family the UI draws: the animated robot mascot, or
+    /// the spark mark (StatusIconsPreview.jsx port — see
+    /// scripts/generate_claude_spark_icons.py). Completion has no spark
+    /// animation by design: the traffic-light status dot carries that state.
+    @Published var claudeIconStyle: ClaudeIconStyle = {
+        let raw = UserDefaults.standard.string(forKey: "glint.claudeIconStyle") ?? ""
+        return ClaudeIconStyle(rawValue: raw) ?? .mascot
+    }() {
+        didSet {
+            UserDefaults.standard.set(claudeIconStyle.rawValue, forKey: "glint.claudeIconStyle")
+        }
+    }
+
     /// Whether Glint's Claude Code hook script is currently registered in
     /// `~/.claude/settings.json`. Mirrors `AgentHookInstaller.isInstalled()`
     /// so the Settings UI can react without polling.
@@ -500,10 +513,10 @@ final class WorkspaceStore: ObservableObject {
         // Defer past launch so the alert doesn't pop before the main window.
         Task { @MainActor in
             let alert = NSAlert()
-            alert.messageText = "Show agent status in the sidebar?"
-            alert.informativeText = "Glint can register a small hook with Claude Code (~/.claude/settings.json) and Codex (~/.codex/hooks.json) that reports when an agent is thinking, finished, or waiting for approval. It only sends events to Glint on this Mac. You can uninstall it anytime in Settings → Agents."
-            alert.addButton(withTitle: "Install Hooks")
-            alert.addButton(withTitle: "Not Now")
+            alert.messageText = String(localized: "Show agent status in the sidebar?")
+            alert.informativeText = String(localized: "Glint can register a small hook with Claude Code (~/.claude/settings.json) and Codex (~/.codex/hooks.json) that reports when an agent is thinking, finished, or waiting for approval. It only sends events to Glint on this Mac. You can uninstall it anytime in Settings → Agents.")
+            alert.addButton(withTitle: String(localized: "Install Hooks"))
+            alert.addButton(withTitle: String(localized: "Not Now"))
             let install = alert.runModal() == .alertFirstButtonReturn
             if !claudeHandled {
                 if install { AgentHookInstaller.installIfNeeded(socketPath: socketPath) }
@@ -1422,6 +1435,13 @@ enum WorkspaceIconKind {
         default:       return nil
         }
     }
+}
+
+/// Claude icon family for the whole UI (sidebar mascot, tab chips,
+/// workspace switcher). Raw values persist in UserDefaults.
+enum ClaudeIconStyle: String, CaseIterable {
+    case mascot
+    case spark
 }
 
 extension WorkspaceStore {

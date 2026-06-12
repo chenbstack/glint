@@ -831,19 +831,25 @@ private struct WorkspaceCard: View {
 ///   • Tap squish — scale dip + spring rebound when the icon is clicked.
 private struct ClaudeMascotIcon: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject var store: WorkspaceStore
     let status: PaneAgentStatus?
     @State private var celebrateScale: CGFloat = 1.0
     @State private var tapScale: CGFloat = 1.0
+
+    /// The spark canvas (96px) has less padding than the mascot's 128px one
+    /// (the spark fills ~80% vs the robot's ~55%), so each family gets its
+    /// own oversize factor to land at the same visual icon size.
+    private var isSpark: Bool { store.claudeIconStyle == .spark }
 
     var body: some View {
         // Reduce Motion: freeze the GIF on its first frame — the mascot
         // stays as the workspace icon, just without the looping animation.
         AnimatedGIFView(assetName: gifAssetName(for: status), animates: !reduceMotion)
-            // The 128×128 gif canvas pads the robot with transparent
-            // margin (room for the bounce/confetti frames), so render
-            // bigger than the 28pt layout slot to keep the robot itself
-            // at icon size; the background is transparent so no clip.
-            .frame(width: 40, height: 40)
+            // The gif canvas pads the figure with transparent margin (room
+            // for bounce/glow frames), so render bigger than the 28pt
+            // layout slot to keep the figure itself at icon size; the
+            // background is transparent so no clip.
+            .frame(width: isSpark ? 34 : 40, height: isSpark ? 34 : 40)
             .frame(width: 28, height: 28)
             .scaleEffect(celebrateScale * tapScale, anchor: .bottom)
             .onChange(of: status) { oldStatus, newStatus in
@@ -866,17 +872,19 @@ private struct ClaudeMascotIcon: View {
     /// Idle covers the "nothing's happening" cases (including the post-
     /// turn justCompleted window — the card already flashes green and
     /// the celebrate scale pops, the gif staying idle keeps the moment
-    /// readable).
+    /// readable). Both icon families share the same state mapping; the
+    /// spark family simply prefixes its datasets with "ClaudeSpark".
     private func gifAssetName(for s: PaneAgentStatus?) -> String {
+        let prefix = isSpark ? "ClaudeSpark" : "Claude"
         switch s {
         case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed):
-            return "ClaudeIdle"
+            return prefix + "Idle"
         case .some(.thinking):
-            return "ClaudeThinking"
+            return prefix + "Thinking"
         case .some(.tool):
-            return "ClaudeToolCall"
+            return prefix + "ToolCall"
         case .some(.compacting):
-            return "ClaudeCompressing"
+            return prefix + "Compressing"
         }
     }
 }
@@ -938,7 +946,9 @@ private struct CodexMascotIcon: View {
 /// bitmaps are 128×128 so this is a few hundred KB) and played back by a
 /// repeating `CAKeyframeAnimation` on the layer's `contents`, which runs
 /// entirely in the render server — zero per-frame work in this process.
-private struct AnimatedGIFView: NSViewRepresentable {
+/// Internal (not private): SettingsView's icon-style picker reuses it for
+/// its mascot preview swatch.
+struct AnimatedGIFView: NSViewRepresentable {
     let assetName: String
     /// false (Reduce Motion) shows the GIF's first frame statically.
     var animates: Bool = true
