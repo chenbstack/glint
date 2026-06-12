@@ -140,7 +140,6 @@ jobs:
         env:
           LOCAL_CODE_SIGN_CERT_P12_BASE64: ${{ secrets.LOCAL_CODE_SIGN_CERT_P12_BASE64 }}
           LOCAL_CODE_SIGN_CERT_PASSWORD: ${{ secrets.LOCAL_CODE_SIGN_CERT_PASSWORD }}
-          LOCAL_CODE_SIGN_CERT_CER_BASE64: ${{ secrets.LOCAL_CODE_SIGN_CERT_CER_BASE64 }}
           LOCAL_CODE_SIGN_IDENTITY: ${{ secrets.LOCAL_CODE_SIGN_IDENTITY }}
         run: bash scripts/sign-local.sh dist/Glint.app
 
