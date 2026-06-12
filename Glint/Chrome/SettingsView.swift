@@ -139,7 +139,9 @@ struct GlintSettingsView: View {
     private var versionLabel: String {
         let info = Bundle.main.infoDictionary
         let v = info?["CFBundleShortVersionString"] as? String ?? "0.0"
-        return "v\(v)"
+        // Local builds carry the non-numeric placeholder "dev" (CI stamps the
+        // real version at release) — a "v" prefix only makes sense on numbers.
+        return v.first?.isNumber == true ? "v\(v)" : v
     }
 }
 
@@ -1162,7 +1164,8 @@ private struct AboutPane: View {
         let info = Bundle.main.infoDictionary
         let v = info?["CFBundleShortVersionString"] as? String ?? "0.0"
         let b = info?["CFBundleVersion"] as? String ?? "0"
-        return "v\(v) (\(b))"
+        let display = v.first?.isNumber == true ? "v\(v)" : v
+        return "\(display) (\(b))"
     }
     private var bundleID: String {
         Bundle.main.bundleIdentifier ?? "app.glint.Glint"

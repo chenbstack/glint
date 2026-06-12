@@ -20,7 +20,8 @@ final class UpdaterController: NSObject, ObservableObject {
     /// Bound to the "Check for updates automatically" toggle in Settings.
     @Published var automaticallyChecksForUpdates: Bool = false {
         didSet {
-            guard controller.updater.automaticallyChecksForUpdates != automaticallyChecksForUpdates else { return }
+            guard let controller,
+                  controller.updater.automaticallyChecksForUpdates != automaticallyChecksForUpdates else { return }
             controller.updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates
         }
     }
@@ -43,6 +44,13 @@ final class UpdaterController: NSObject, ObservableObject {
     override init() {
         receiveBetaUpdates = UserDefaults.standard.bool(forKey: Self.receiveBetaUpdatesKey)
         super.init()
+        #if DEBUG
+        // Dev builds carry the placeholder 0.1.0 version (CI stamps the real
+        // one at release time), so the appcast always looks newer and Sparkle
+        // would offer to replace the dev binary with the production release.
+        // Never start the updater in Debug.
+        canCheckForUpdates = false
+        #else
         controller = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: self,
@@ -53,10 +61,11 @@ final class UpdaterController: NSObject, ObservableObject {
         controller.updater.publisher(for: \.canCheckForUpdates)
             .receive(on: RunLoop.main)
             .assign(to: &$canCheckForUpdates)
+        #endif
     }
 
     func checkForUpdates() {
-        controller.checkForUpdates(nil)
+        controller?.checkForUpdates(nil)
     }
 }
 

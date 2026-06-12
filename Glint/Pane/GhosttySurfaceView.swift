@@ -1418,10 +1418,8 @@ enum ScrollbackArchive {
     private static let queue = DispatchQueue(label: "app.glint.scrollback.io", qos: .utility)
 
     private static var dir: URL? {
-        guard let appSupport = try? FileManager.default.url(
-            for: .applicationSupportDirectory, in: .userDomainMask,
-            appropriateFor: nil, create: true) else { return nil }
-        let d = appSupport.appendingPathComponent("Glint/scrollback", isDirectory: true)
+        guard let base = SupportDir.url else { return nil }
+        let d = base.appendingPathComponent("scrollback", isDirectory: true)
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         return d
     }

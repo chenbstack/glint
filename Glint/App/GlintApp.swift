@@ -8,6 +8,20 @@ struct GlintApp: App {
     @StateObject private var usage = UsageStore()
 
     init() {
+        #if DEBUG
+        // Dev builds run under their own defaults domain (app.glint.Glint.dev).
+        // The first dev launch copies the production app's glint.* preferences
+        // so it starts where production left off; after that the two domains
+        // diverge independently. Must run before the language read below.
+        if !UserDefaults.standard.bool(forKey: "glint.devDefaultsSeeded"),
+           let prod = UserDefaults.standard.persistentDomain(forName: "app.glint.Glint") {
+            for (key, value) in prod where key.hasPrefix("glint.") {
+                UserDefaults.standard.set(value, forKey: key)
+            }
+            UserDefaults.standard.set(true, forKey: "glint.devDefaultsSeeded")
+        }
+        #endif
+
         // Apply the stored language choice BEFORE any view materializes so
         // Bundle.main picks the right .lproj at its first lookup. "system"
         // clears the override so macOS falls back to the user's OS-level

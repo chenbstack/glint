@@ -1,18 +1,52 @@
 import Foundation
 
-enum Persistence {
-    private static let fileName = "state.json"
+/// Per-build-flavor Application Support folder. Debug builds live in
+/// "Glint-Dev" (and, via the .dev bundle id, their own defaults domain) so a
+/// dev run can never corrupt the installed production app's state. The first
+/// dev launch seeds itself with a one-time copy of the production folder;
+/// after that the two diverge independently.
+enum SupportDir {
+    #if DEBUG
+    static let name = "Glint-Dev"
+    #else
+    static let name = "Glint"
+    #endif
 
-    private static var fileURL: URL? {
+    static var url: URL? {
         guard let appSupport = try? FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
         ) else { return nil }
-        let dir = appSupport.appendingPathComponent("Glint", isDirectory: true)
+        #if DEBUG
+        _ = seedOnce
+        #endif
+        let dir = appSupport.appendingPathComponent(name, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent(fileName, isDirectory: false)
+        return dir
+    }
+
+    #if DEBUG
+    private static let seedOnce: Void = {
+        let fm = FileManager.default
+        guard let appSupport = try? fm.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true) else { return }
+        let dev = appSupport.appendingPathComponent(name, isDirectory: true)
+        let prod = appSupport.appendingPathComponent("Glint", isDirectory: true)
+        if !fm.fileExists(atPath: dev.path), fm.fileExists(atPath: prod.path) {
+            try? fm.copyItem(at: prod, to: dev)
+        }
+    }()
+    #endif
+}
+
+enum Persistence {
+    private static let fileName = "state.json"
+
+    private static var fileURL: URL? {
+        SupportDir.url?.appendingPathComponent(fileName, isDirectory: false)
     }
 
     /// Returns nil both for "no saved state" (fresh install) and "state was

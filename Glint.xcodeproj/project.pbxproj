@@ -441,7 +441,7 @@
 					UserNotifications,
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = app.glint.Glint;
+				PRODUCT_BUNDLE_IDENTIFIER = app.glint.Glint.dev;
 				PRODUCT_NAME = Glint;
 				SDKROOT = macosx;
 			};
