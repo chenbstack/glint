@@ -357,8 +357,9 @@ private struct WorkspaceCard: View {
     /// cards feel "liftable" without being a heavy hover state. Driven
     /// by `.onHover`; doesn't touch ghostty.
     @State private var isHovered: Bool = false
-    /// One-shot opacity for the green glow that flashes when an agent's
-    /// `.justCompleted` arrives. 1 → 0 over ~0.7s, then idle. Re-armed
+    /// One-shot intensity for the green celebration when an agent's
+    /// `.justCompleted` arrives: blooms 0 → 1 in ~0.12s, then exhales back
+    /// to 0 over ~0.95s (the halo drifts outward as it fades). Re-armed
     /// only on a fresh transition into `.justCompleted`, so a re-render
     /// while the status is sticky doesn't re-fire.
     @State private var justCompletedFlash: Double = 0
@@ -420,12 +421,16 @@ private struct WorkspaceCard: View {
             isHovered = hovering && !isEditing
         }
         .onChange(of: status) { oldStatus, newStatus in
-            // One-shot green flash on transition into .justCompleted.
+            // One-shot green celebration on transition into .justCompleted.
             // Guard against re-rendering while the status is sticky —
-            // we only want the flash on the actual edge.
+            // we only want the flash on the actual edge. Two chained
+            // animations on the same value: a fast bloom in, then a slow
+            // exhale out — a hard 0→1 jump read as flicker, not as a glow.
             if newStatus == .justCompleted && oldStatus != .justCompleted {
-                justCompletedFlash = 1
-                withAnimation(.easeOut(duration: 0.7)) {
+                withAnimation(.easeIn(duration: 0.12)) {
+                    justCompletedFlash = 1
+                }
+                withAnimation(.easeOut(duration: 0.95).delay(0.12)) {
                     justCompletedFlash = 0
                 }
             }
@@ -651,19 +656,29 @@ private struct WorkspaceCard: View {
             .animation(.easeOut(duration: 0.16), value: isHovered)
     }
 
-    /// One-shot green halo overlay that fades from full to clear over
-    /// ~0.7s when `justCompletedFlash` is non-zero. Decoupled from the
-    /// regular static border so the celebration doesn't fight with the
-    /// border color crossfade.
+    /// One-shot green celebration driven by `justCompletedFlash`: a faint
+    /// wash over the card fill, a crisp 1pt ring, and a soft halo that
+    /// drifts outward as everything fades — light "exhaling" off the card
+    /// rather than a flat blink. Decoupled from the regular static border
+    /// so the celebration doesn't fight with the border color crossfade.
+    /// Reduce Motion drops the drift and keeps the pure fade.
     private var completionFlashOverlay: some View {
-        RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .strokeBorder(
-                Color(red: 0.40, green: 0.90, blue: 0.55),
-                lineWidth: 2
-            )
-            .blur(radius: 4)
-            .opacity(justCompletedFlash)
-            .allowsHitTesting(false)
+        let green = Color(red: 0.40, green: 0.90, blue: 0.55)
+        // flash 1 → 0 maps to scale 1.0 → 1.02: imperceptible during the
+        // fast bloom, a visible outward drift across the slow exhale.
+        let drift = reduceMotion ? 1.0 : 1.0 + (1.0 - justCompletedFlash) * 0.02
+        return ZStack {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(green.opacity(0.08))
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(green.opacity(0.9), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(green, lineWidth: 2)
+                .blur(radius: 5)
+                .scaleEffect(drift)
+        }
+        .opacity(justCompletedFlash)
+        .allowsHitTesting(false)
     }
 
     /// While the agent is `.needsPermission`, render a soft amber border
