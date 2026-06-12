@@ -6,18 +6,25 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.15-beta.7</title>
-      <sparkle:version>202606111100</sparkle:version>
-      <sparkle:shortVersionString>0.1.15-beta.7</sparkle:shortVersionString>
+      <title>Glint 0.1.15-beta.8</title>
+      <sparkle:version>202606120112</sparkle:version>
+      <sparkle:shortVersionString>0.1.15-beta.8</sparkle:shortVersionString>
       <sparkle:channel>beta</sparkle:channel>
-      <pubDate>Thu, 11 Jun 2026 11:01:40 +0000</pubDate>
+      <pubDate>Fri, 12 Jun 2026 01:13:54 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.15-beta.7</h3><ul>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.15-beta.8</h3><ul>
+    <li><strong>fix: Claude quota bar freezing after repeated token rotations</strong><br><span style="color:#666">修复 Claude 周额度长期运行后冻结不更新的问题——token 轮换回源从每次启动一次改为 15 分钟节流。</span></li>
+    <li><strong>feat: per-cue notification sounds + custom glass dropdowns in Settings</strong><br><span style="color:#666">三个提示音支持自定义系统音效(行内播放按钮可试听);设置里的原生下拉(语言/字体/光标样式/滚动行数)全部换成与标签页菜单同款的玻璃风格自定义下拉。</span></li>
+    <li><strong>chore: default off for scrollback restore and usage bars</strong><br><span style="color:#666">「恢复终端历史」与 Claude/Codex「在侧栏显示额度」三项改为默认关闭,改为用户主动开启。</span></li>
+    <li><strong>feat: Claude spark icon style option + alert localization fixes</strong><br><span style="color:#666">新增 Claude 图标样式选项(吉祥物/火花),火花动画随状态切换且不变色;补齐关闭标签页确认与 hook 安装弹窗的中文本地化。</span></li>
+    <li><strong>feat: tab bar overflow menu, traffic-light status dots, per-tab done badges</strong><br><span style="color:#666">标签栏支持 +N 溢出收纳与红绿灯状态呼吸灯，完成/出错徽章细化到标签页粒度</span></li>
+    <li>release: appcast for v0.1.15-beta.7</li>
+  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.15-beta.7</h3><ul>
     <li><strong>fix: copy appcast.xml before checkout to avoid tracked-file conflict</strong><br><span style="color:#666">tag commit 继承上个 release commit 时 appcast.xml 已被追踪，checkout main 会报冲突；修复：切换前先备份到临时目录，切换后还原</span></li>
     <li>chore: ignore GhosttyKit.xcframework.upstream and _design directories</li>
     <li><strong>feat: add tab support with keyboard shortcuts and header UI</strong><br><span style="color:#666">为工作区添加选项卡管理功能，支持键盘快捷键、标头UI和状态指示器</span></li>
     <li>release: appcast for v0.1.15-beta.5</li>
-  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.15-beta.5</h3><ul>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.15-beta.5</h3><ul>
     <li><strong>fix: blank-pane-on-switch, Codex live usage, and running-state cleanup</strong><br><span style="color:#666">修复 workspace 切换面板空白（workspaceID 按值传递 + post-commit surface re-assert + 强制重绘）；Codex 用量改用实时 ChatGPT 端点读取；thinking/tool 合并为统一 running… 状态</span></li>
     <li>release: appcast for v0.1.15-beta.4</li>
   </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.15-beta.4</h3><ul>
@@ -49,10 +56,57 @@
     <li><strong>app: check for updates hourly instead of daily</strong><br><span style="color:#666">自动更新检查间隔从每天一次缩短到每小时一次</span></li>
     <li><strong>app: localize destructive-confirm alerts, fill missing zh-Hans strings</strong><br><span style="color:#666">退出/关闭面板/删除工作区等确认弹窗汉化,并补齐右键菜单等缺失的中文翻译</span></li>
     <li>release: appcast for v0.1.11</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.11</h3><ul>
-    <li><strong>sidebar: run comet, pulse and breathing borders on the render server</strong><br><span style="color:#666">comet 边框/状态点/权限呼吸边框改为 Core Animation 循环,agent 工作中 CPU 从 ~15% 降到 ~1%</span></li>
-    <li>release: appcast for v0.1.10</li>
   </ul></div>]]></description>
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.15-beta.8/Glint-0.1.15-beta.8.dmg" length="15217567" type="application/octet-stream" sparkle:edSignature="r0TfgVyUgTNpuAg3xzgJQBCGoS9/2hPvqg4QGR6dmFmhPbIoNBlIQmjkmjyxBSsPou+QKCeFzkynOTKUo0o2Cw==" />
+    </item>
+    <item>
+      <title>Glint 0.1.15-beta.7</title>
+      <sparkle:version>202606111100</sparkle:version>
+      <sparkle:shortVersionString>0.1.15-beta.7</sparkle:shortVersionString>
+      <sparkle:channel>beta</sparkle:channel>
+      <pubDate>Thu, 11 Jun 2026 11:01:40 +0000</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description>&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.15-beta.7&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix: copy appcast.xml before checkout to avoid tracked-file conflict&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;tag commit 继承上个 release commit 时 appcast.xml 已被追踪，checkout main 会报冲突；修复：切换前先备份到临时目录，切换后还原&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;chore: ignore GhosttyKit.xcframework.upstream and _design directories&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: add tab support with keyboard shortcuts and header UI&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;为工作区添加选项卡管理功能，支持键盘快捷键、标头UI和状态指示器&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.5&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;!--GLINT_HISTORY_BELOW--&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3 style="color:#666;"&gt;历史版本 · Previous releases&lt;/h3&gt;&lt;/div&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.15-beta.5&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix: blank-pane-on-switch, Codex live usage, and running-state cleanup&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 workspace 切换面板空白（workspaceID 按值传递 + post-commit surface re-assert + 强制重绘）；Codex 用量改用实时 ChatGPT 端点读取；thinking/tool 合并为统一 running… 状态&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.4&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.15-beta.4&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat: purge saved scrollback when terminal-history restore is turned off&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;关闭&amp;quot;恢复终端历史&amp;quot;开关时,清空已保存的滚动历史快照,不再残留持久化数据&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.3&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.15-beta.3&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat: color terminal history restore, agent error state, and turn-timer fixes&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;终端历史按窗格带颜色恢复、agent 报错显示红色 error 状态(不再卡在 thinking)、侧边栏额度条、执行计时改为整轮耗时(批准后重新计时)、仅选中卡片显示边框&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.2&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.15-beta.2&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;fix: stabilize beta channel and agent status UI&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.1&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.15-beta.1&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;ghosttykit: publish xcframework-b39a70c-v1&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.14&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;ghosttykit: publish artifact releases as prereleases&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 GhosttyKit 构建产物抢占 GitHub Latest 位置的问题&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;l10n: translate the beta updates toggle&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补上「接收 Beta 更新」开关的中文文案&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ghosttykit: publish xcframework-e9120d4-v1&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;登记新的 GhosttyKit 预构建产物（含后台工作区内存优化）&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: Sparkle beta channel for prerelease tags&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增 Beta 更新通道——设置里开启「接收 Beta 更新」即可提前收到预发布版本；正式版用户不受影响，brew 始终安装稳定版&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ghostty: switch submodule to chenbstack fork with occlusion memory fix&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复隐藏工作区的显存占用——被遮挡的 pane 释放 3 张全尺寸渲染缓冲，3 个后台工作区约省 110MB 内存；子模块改指自有 fork，让登记的 SHA 与产物真实来源一致&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.13&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.13&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;sidebar: traffic-light status pill, edge beacon and unified card chrome&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;卡片状态改为红绿灯胶囊+左缘呼吸光条,统一边框与图标配色,新建按钮更醒目&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;icons: animated Codex mascot in three agent states&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Codex 窗格图标升级为三态动画吉祥物(工作/思考/空闲)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;pane: resolve npm-shim CLIs through node argv for the sidebar icon&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;侧栏图标支持 npm 安装的 codex/claude——穿透 node shim 识别真实 agent&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ci: auto-bump homebrew tap cask on release&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;发版时自动更新 Homebrew tap 的 cask 版本,brew 安装不再是老版本&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: bilingual notes for v0.1.12&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.12&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.12&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;app: check for updates hourly instead of daily&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;自动更新检查间隔从每天一次缩短到每小时一次&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;app: localize destructive-confirm alerts, fill missing zh-Hans strings&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;退出/关闭面板/删除工作区等确认弹窗汉化,并补齐右键菜单等缺失的中文翻译&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.11&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.11&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;sidebar: run comet, pulse and breathing borders on the render server&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;comet 边框/状态点/权限呼吸边框改为 Core Animation 循环,agent 工作中 CPU 从 ~15% 降到 ~1%&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.10&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;</description>
       <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.15-beta.7/Glint-0.1.15-beta.7.dmg" length="12408925" type="application/octet-stream" sparkle:edSignature="ZJLEric5ff54Rdv1cPubgUJc2SgC5yGHMBPfO/lnUt7a3FpKXdGYUHnuQvjqGwVFaTkGwASMfcOXA5njxzc3Bg==" />
     </item>
     <item>
