@@ -625,7 +625,9 @@ final class WorkspaceStore: ObservableObject {
         // recent dirs persisted. The closure captures self weakly so the
         // repeating timer doesn't retain the store forever.
         cwdTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            // scheduledTimer fires on the main run loop, so this is already the
+            // main actor — assumeIsolated avoids allocating a Task every second.
+            MainActor.assumeIsolated {
                 guard let self else { return }
                 self.captureCwdsFromLiveSurfaces()
                 // Capture the live agent identity so the icon persists across a
@@ -655,18 +657,23 @@ final class WorkspaceStore: ObservableObject {
         // store currently lives as long as the app, but if it's ever torn
         // down (multi-window, tests) deinit removes them cleanly.
 
-        // Final flush + save on app terminate.
+        // Final flush + save on app terminate. Must run synchronously: a Task
+        // scheduled from willTerminate may never get a tick before the process
+        // exits, and the snapshot writes are async on a utility queue — drain
+        // blocks until they actually hit disk.
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
-                self?.captureCwdsFromLiveSurfaces()
-                self?.syncIconHints()
-                self?.flushScrollback()
-                self?.persist()
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.captureCwdsFromLiveSurfaces()
+                self.syncIconHints()
+                self.flushScrollback()
+                self.persist()
             }
+            ScrollbackArchive.drain()
         })
 
         // Event-driven cwd updates: ghostty fires this when a shell reports

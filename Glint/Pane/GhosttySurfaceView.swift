@@ -305,28 +305,25 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     /// Snapshot the pane's current scrollback to disk as colored text (ANSI SGR).
     /// Driven off the hot path (store flush timer + app terminate).
+    ///
+    /// Main-thread cost is just the grid export: `ghostty_surface_render_grid_json`
+    /// (cmux fork) takes the renderer-state lock and serializes the FINAL grid
+    /// (viewport + N scrollback rows) with per-cell fg/bg/attrs — clean even for
+    /// TUIs (it reads grid state, it is NOT a replay of the raw render stream,
+    /// which is what corrupted the earlier byte-tee approach). Decoding that
+    /// JSON, rebuilding ANSI text, and the disk write all happen on the archive
+    /// queue, which also drops the frame early when the grid hasn't changed.
     func flushScrollbackToDisk() {
-        guard let id = scrollbackID, let text = readColoredSnapshot(), !text.isEmpty else { return }
-        ScrollbackArchive.write(id: id, data: Data(text.utf8))
+        guard let id = scrollbackID, let s = surface else { return }
+        let json = ghostty_surface_render_grid_json(s, "", 0, 0, UInt(maxScrollbackLines))
+        defer { ghostty_string_free(json) }
+        guard let ptr = json.ptr, json.len > 0 else { return }
+        let data = Data(bytes: ptr, count: Int(json.len))
+        ScrollbackArchive.writeRendered(id: id, gridJSON: data, maxLines: maxScrollbackLines)
     }
 
     /// Last `maxScrollbackLines` rows of scrollback + screen, with color.
     private let maxScrollbackLines = 3000
-
-    /// Read the pane's scrollback + screen as ANSI-colored text. Uses the cmux
-    /// fork's `ghostty_surface_render_grid_json`, which exports the FINAL grid
-    /// (viewport + N scrollback rows) with per-cell fg/bg/attrs — clean even for
-    /// TUIs (it reads grid state, it is NOT a replay of the raw render stream,
-    /// which is what corrupted the earlier byte-tee approach). We rebuild a flat
-    /// colored text dump from the spans so restore stays a simple echo.
-    private func readColoredSnapshot() -> String? {
-        guard let s = surface else { return nil }
-        let json = ghostty_surface_render_grid_json(s, "", 0, 0, UInt(maxScrollbackLines))
-        defer { ghostty_string_free(json) }
-        guard let ptr = json.ptr, json.len > 0 else { return nil }
-        let data = Data(bytes: ptr, count: Int(json.len))
-        return Self.reconstructANSI(fromRenderGrid: data, maxLines: maxScrollbackLines)
-    }
 
     // MARK: render-grid JSON → ANSI text
 
@@ -366,7 +363,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// stable; default-colored spans omit fg/bg so the restored text still
     /// adopts the current theme's default colors instead of being painted with
     /// the capture-time palette.
-    private static func reconstructANSI(fromRenderGrid data: Data, maxLines: Int) -> String? {
+    fileprivate static func reconstructANSI(fromRenderGrid data: Data, maxLines: Int) -> String? {
         guard let grid = try? JSONDecoder().decode(RenderGrid.self, from: data),
               let defaultStyle = grid.styles.first else { return nil }
         var styleByID: [Int: RenderGrid.Style] = [:]
@@ -1427,21 +1424,58 @@ enum ScrollbackArchive {
         guard let u = url(for: id) else { return nil }
         return try? Data(contentsOf: u)
     }
+    /// Hash of the raw render-grid JSON from each pane's previous flush.
+    /// Guarded by `queue`. NOTE: full-content Hasher, not `Data.hashValue`
+    /// (which only hashes a prefix — grid frames share a constant header, so
+    /// prefix hashing would report every frame as "unchanged").
+    private static var lastGridHash: [String: Int] = [:]
 
-    static func write(id: String, data: Data) {
+    private static func fullHash(_ data: Data) -> Int {
+        var hasher = Hasher()
+        data.withUnsafeBytes { hasher.combine(bytes: $0) }
+        return hasher.finalize()
+    }
+
+    /// Decode a render-grid JSON frame and persist it as colored ANSI text,
+    /// entirely off the main thread. When the grid is unchanged since the last
+    /// flush (idle pane — the common case for a periodic timer) the frame is
+    /// dropped after one cheap hash, skipping the JSON decode, the 3000-line
+    /// ANSI rebuild, and the disk write.
+    static func writeRendered(id: String, gridJSON: Data, maxLines: Int) {
         guard let u = url(for: id) else { return }
-        queue.async { try? data.write(to: u, options: [.atomic]) }
+        queue.async {
+            let h = fullHash(gridJSON)
+            if lastGridHash[id] == h { return }
+            lastGridHash[id] = h
+            guard let text = GhosttySurfaceView.reconstructANSI(
+                fromRenderGrid: gridJSON, maxLines: maxLines),
+                !text.isEmpty else { return }
+            try? Data(text.utf8).write(to: u, options: [.atomic])
+        }
+    }
+
+    /// Block until every queued snapshot write has hit disk. Called on app
+    /// terminate — the writes are async on a utility queue, so without this
+    /// the process can exit with the final flush still in flight.
+    static func drain() {
+        queue.sync {}
     }
 
     static func delete(id: String) {
         guard let u = url(for: id) else { return }
-        queue.async { try? FileManager.default.removeItem(at: u) }
+        queue.async {
+            // Forget the last-flush hash too: with it stale, an unchanged pane
+            // would skip its next write and the deleted file would never come back.
+            lastGridHash[id] = nil
+            try? FileManager.default.removeItem(at: u)
+        }
     }
 
     /// Wipe every snapshot — called when the user turns the feature off, so no
     /// previously-captured history lingers on disk.
     static func purgeAll() {
         queue.async {
+            lastGridHash.removeAll()
             guard let dir,
                   let files = try? FileManager.default.contentsOfDirectory(
                     at: dir, includingPropertiesForKeys: nil) else { return }

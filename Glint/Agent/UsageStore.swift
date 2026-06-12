@@ -217,10 +217,26 @@ enum CodexUsageReader {
         return dated.sorted { $0.1 > $1.1 }.prefix(limit).map(\.0)
     }
 
+    /// Rollout files grow with the session (tens of MB for a long one) and
+    /// rate_limits lines are appended per turn, so the newest one always lives
+    /// near the end — read only this much of the tail instead of the whole file.
+    private static let tailBytes: UInt64 = 256 * 1024
+
     /// Scan a rollout file from the end for the last line carrying rate limits.
     private static func lastRateLimits(in file: URL) -> AgentQuota? {
-        guard let data = try? Data(contentsOf: file),
-              let text = String(data: data, encoding: .utf8) else { return nil }
+        guard let fh = try? FileHandle(forReadingFrom: file) else { return nil }
+        defer { try? fh.close() }
+        guard let size = try? fh.seekToEnd() else { return nil }
+        let offset = size > tailBytes ? size - tailBytes : 0
+        try? fh.seek(toOffset: offset)
+        guard var data = try? fh.readToEnd() else { return nil }
+        if offset > 0 {
+            // Drop the (likely mid-line, possibly mid-UTF-8-sequence) partial
+            // first line so the String decode below can't fail on it.
+            guard let nl = data.firstIndex(of: 0x0A) else { return nil }
+            data = data[data.index(after: nl)...]
+        }
+        guard let text = String(data: data, encoding: .utf8) else { return nil }
         let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
         for line in lines.reversed() {
             guard line.contains("\"rate_limits\"") else { continue }
