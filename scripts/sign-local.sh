@@ -21,14 +21,12 @@ KEYCHAIN="$RUNNER_TEMP/glint-local-sign.keychain-db"
 KEYCHAIN_PASSWORD="$(uuidgen)"
 
 umask 077
-mkdir -p "$RUNNER_TEMP"
 CERT_PATH="$RUNNER_TEMP/local-code-sign.p12"
-CERT_PEM="$RUNNER_TEMP/local-code-sign.cer"
 printf '%s' "$LOCAL_CODE_SIGN_CERT_P12_BASE64" | base64 --decode > "$CERT_PATH"
 
 cleanup() {
   security delete-keychain "$KEYCHAIN" >/dev/null 2>&1 || true
-  rm -f "$CERT_PATH" "$CERT_PEM"
+  rm -f "$CERT_PATH"
 }
 trap cleanup EXIT
 
@@ -37,15 +35,12 @@ security set-keychain-settings -lut 21600 "$KEYCHAIN"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
 security import "$CERT_PATH" -k "$KEYCHAIN" -P "$LOCAL_CODE_SIGN_CERT_PASSWORD" \
   -T /usr/bin/codesign -T /usr/bin/security
-openssl pkcs12 -in "$CERT_PATH" -passin "pass:$LOCAL_CODE_SIGN_CERT_PASSWORD" \
-  -clcerts -nokeys -out "$CERT_PEM"
-security add-trusted-cert -r trustRoot -p codeSign -k "$KEYCHAIN" "$CERT_PEM"
 security list-keychains -d user -s "$KEYCHAIN" "$(security list-keychains -d user | tr -d '\"' | xargs)"
 security set-key-partition-list -S apple-tool:,apple:,codesign: \
   -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
 
 IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | \
-  sed -n "s/^.*\"\($LOCAL_CODE_SIGN_IDENTITY\)\".*$/\1/p" | head -n1)"
+  grep -F "\"$LOCAL_CODE_SIGN_IDENTITY\"" | head -n1 | sed -E 's/^.*"([^"]+)".*$/\1/')"
 if [ -z "$IDENTITY" ]; then
   echo "ERROR: no code signing identity named '$LOCAL_CODE_SIGN_IDENTITY' in imported cert." >&2
   security find-identity -v -p codesigning "$KEYCHAIN" >&2
