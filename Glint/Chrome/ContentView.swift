@@ -367,7 +367,7 @@ private struct TabChip: View {
         let status = store.tabAgentStatus(tab, in: ws)
         Button { store.selectTab(tab.id) } label: {
             HStack(spacing: 7) {
-                TabIcon(kind: kind, size: 15, status: status)
+                TabIcon(kind: kind, size: 18, status: status)
                     // Unselected tabs recede to bare dimmed text+icon in the
                     // glass cluster, so the accent pill is the only chrome.
                     .opacity(isActive || !inGlassCluster ? 1 : 0.7)

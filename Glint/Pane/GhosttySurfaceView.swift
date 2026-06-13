@@ -54,6 +54,14 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// One-shot guard: if the window settles NARROWER than the captured content
     /// (wrapping then unavoidable), echo anyway so history is never lost.
     private var restoreFallbackArmed = false
+    /// Column count seen at the previous restore probe. We echo only once the
+    /// width holds STEADY across two `syncSurfaceSize` passes — the surface
+    /// ramps up during launch (e.g. 88 → 180 → 250), and a restored input box
+    /// repaints its background to the right edge with `\e[K`, which fills to the
+    /// width AT ECHO TIME. Echoing at the first qualifying frame would stop that
+    /// fill at the launch-time width; waiting for the width to settle fills to
+    /// the final window width. -1 = no probe yet.
+    private var lastRestoreProbeCols = -1
 
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
@@ -416,7 +424,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         let text = String(decoding: data, as: UTF8.self)
         var maxW = 0
         for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = rawLine.replacingOccurrences(of: "\u{1b}\\[[0-9;]*m", with: "",
+            // Strip any CSI sequence (SGR `m`, Erase-in-Line `K`, …) so a
+            // restored colored fill emitted as `\e[K` doesn't inflate the width
+            // and over-raise the echo-width gate.
+            let line = rawLine.replacingOccurrences(of: "\u{1b}\\[[0-9;]*[A-Za-z]", with: "",
                                                     options: .regularExpression)
             var w = 0
             for scalar in line.unicodeScalars { w += isWideScalar(scalar) ? 2 : 1 }
@@ -484,30 +495,56 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             var lines: [String] = []
             lines.reserveCapacity(maxRow + 1)
             for r in 0...maxRow {
-                // Assemble the row as (sgr, text) segments so trailing pure
-                // width-padding can be dropped without disturbing trailing
-                // spaces that carry a real background (e.g. an agent's input
-                // box fill), which must keep their color. Only DEFAULT-
-                // background whitespace is trimmable — it's invisible padding,
-                // and dropping it stops a line padded out to the capture-time
-                // width from restoring wider than, and wrapping inside, a
-                // narrower terminal. Border glyphs and rules end in a non-space
-                // cell, so they're never trimmed.
-                var segs: [(sgr: String, text: String, trimmable: Bool)] = []
+                // Assemble the row as (sgr, text) segments so ALL trailing
+                // whitespace can be dropped. A row padded out to the capture-
+                // time width — a TUI's full-width background fill (agent input
+                // boxes), gap padding — otherwise restores as a full-width line
+                // that wraps an extra row in the terminal. Restored history is
+                // static, so dropping the right-side fill (even colored) is the
+                // right trade: no wrap, and the live input box is redrawn fresh
+                // by the new session anyway. Border glyphs and rules end in a
+                // non-space cell, so they keep their full width untouched.
+                let rowSpans = (byRow[r] ?? []).sorted(by: { $0.column < $1.column })
+                var segs: [(sgr: String, text: String)] = []
                 var col = 0
-                for sp in (byRow[r] ?? []).sorted(by: { $0.column < $1.column }) {
+                for sp in rowSpans {
                     if sp.column > col {
-                        // Gap fill is always default-background spaces.
-                        segs.append(("\u{1b}[0m", String(repeating: " ", count: sp.column - col), true))
+                        segs.append(("\u{1b}[0m", String(repeating: " ", count: sp.column - col)))
                     }
-                    let bg = styleByID[sp.style_id]?.background ?? defaultStyle.background
-                    let trimmable = bg == defaultStyle.background && sp.text.allSatisfy { $0 == " " }
-                    segs.append((sgr(for: sp.style_id), sp.text, trimmable))
+                    segs.append((sgr(for: sp.style_id), sp.text))
                     col = sp.column + sp.cell_width
                 }
-                while let last = segs.last, last.trimmable { segs.removeLast() }
+                // A TUI input box renders its whole row as ONE span — text
+                // "› 你好" then padding spaces, all on the same non-default bg —
+                // so the row is full-width and wraps when restored. Two moves
+                // keep the look without wrapping:
+                //  1. Trim trailing whitespace at the CHARACTER level (across
+                //     segments) so the stored row is only as wide as its glyphs.
+                //  2. If that trimmed tail was a COLORED background fill, repaint
+                //     it with Erase-in-Line: emit the box bg + `\e[K`. EL fills
+                //     from the cursor to the live terminal's right edge with the
+                //     current bg and never advances the cursor, so the box色条
+                //     comes back at whatever width the terminal currently is —
+                //     width-independent, never wraps. A bordered box ends in a
+                //     glyph (not a space), so it's left literal and full-width.
+                var fillSGR: String? = nil
+                if let last = rowSpans.last,
+                   let bg = styleByID[last.style_id]?.background,
+                   bg != defaultStyle.background, last.text.last == " " {
+                    fillSGR = sgr(for: last.style_id)
+                }
+                while let last = segs.last {
+                    let trimmed = String(last.text.reversed().drop(while: { $0 == " " }).reversed())
+                    if trimmed.isEmpty {
+                        segs.removeLast()
+                    } else {
+                        if trimmed != last.text { segs[segs.count - 1].text = trimmed }
+                        break
+                    }
+                }
                 var line = ""
                 for seg in segs { line += seg.sgr + seg.text }
+                if let fill = fillSGR { line += fill + "\u{1b}[K" }
                 line += "\u{1b}[0m"
                 lines.append(line)
             }
@@ -786,24 +823,33 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         ghostty_surface_set_size(s, UInt32(pixelWidth), UInt32(pixelHeight))
         CATransaction.commit()
 
-        // Echo restored history only once the surface is wide enough for the
-        // captured content. The window lays out narrower first during launch
-        // (e.g. 88 cols before settling at 128), and echoing full-width rows
-        // into a too-narrow grid wraps them permanently. Wait for the width to
-        // reach the content's; if the window settles smaller (wrap unavoidable),
-        // a one-shot fallback echoes anyway so history is never lost.
+        // Echo restored history only once the surface width has SETTLED. The
+        // window ramps up during launch (e.g. 88 → 180 → 250 cols), and a
+        // restored input box repaints its background to the right edge with
+        // `\e[K`, which fills to whatever width the terminal is AT ECHO TIME —
+        // so echoing at the first frame that merely reaches the content width
+        // would stop the fill at the launch-time width, not the final one. Wait
+        // until the width holds steady across two passes AND is at least the
+        // captured content width (so a full-width bordered box doesn't wrap),
+        // then echo. A one-shot fallback echoes at whatever width the surface
+        // has reached after a short delay, so history is never lost if the
+        // window settles narrow or no further sync pass fires.
         if let data = pendingRestoreData {
             let cols = Int(ghostty_surface_size(s).columns)
-            if cols > 0 && (requiredRestoreCols == 0 || cols >= requiredRestoreCols) {
+            let wideEnough = requiredRestoreCols == 0 || cols >= requiredRestoreCols
+            if cols > 0 && wideEnough && cols == lastRestoreProbeCols {
                 pendingRestoreData = nil
                 restoreScrollback(into: s, data: data)
-            } else if cols > 0 && !restoreFallbackArmed {
-                restoreFallbackArmed = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-                    guard let self, let s = self.surface, let data = self.pendingRestoreData
-                    else { return }
-                    self.pendingRestoreData = nil
-                    self.restoreScrollback(into: s, data: data)
+            } else if cols > 0 {
+                lastRestoreProbeCols = cols
+                if !restoreFallbackArmed {
+                    restoreFallbackArmed = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                        guard let self, let s = self.surface, let data = self.pendingRestoreData
+                        else { return }
+                        self.pendingRestoreData = nil
+                        self.restoreScrollback(into: s, data: data)
+                    }
                 }
             }
         }
