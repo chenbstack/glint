@@ -1,5 +1,7 @@
 import SwiftUI
 import Combine
+import CryptoKit
+import IOKit
 
 /// One agent's rate-limit snapshot. Percentages are 0–100 (fraction of the
 /// window already consumed); `nil` fields mean "not reported by this source".
@@ -362,15 +364,22 @@ enum ClaudeUsageReader {
     /// authorization prompt (its ACL is bound to Claude Code's signature, not
     /// ours), so we touch it as little as possible: once on first launch to seed
     /// our own copy, then again ONLY when the seeded copy is rejected (token
-    /// rotated). See `glintService`.
+    /// rotated). See `tokenCacheURL`.
     private static let keychainService = "Claude Code-credentials"
-    /// Glint-owned generic-password item we copy the token into, so steady-state
-    /// launches read OUR item — whose ACL we own — instead of Claude Code's.
-    /// In a signed release this is a one-time "Always Allow" then silent; in dev
-    /// the ad-hoc signature churns per rebuild so it still re-prompts, but the
-    /// design is correct and the release path is the one that matters.
-    private static let glintService = "app.glint.claude-usage"
-    private static let glintAccount = "oauth-token"
+    /// Legacy Glint-owned keychain item the token copy used to live in. Its ACL
+    /// was bound to our code signature, so EVERY version bump (cdhash change)
+    /// invalidated the "Always Allow" grant and re-prompted. We now cache the
+    /// token in a file instead (`tokenCacheURL`) — no ACL, no prompt across
+    /// updates — and delete this item on sight.
+    private static let legacyGlintService = "app.glint.claude-usage"
+    /// File we copy the token into so steady-state launches read it WITHOUT any
+    /// keychain prompt. AES-GCM encrypted (see `tokenKey`) and 0600 in our
+    /// Application Support folder. The token is freely re-derivable from Claude
+    /// Code's keychain item and rotates every few hours; we never read it
+    /// elsewhere.
+    private static var tokenCacheURL: URL? {
+        SupportDir.url?.appendingPathComponent("claude-usage-token", isDirectory: false)
+    }
     /// OAuth usage endpoint. Unverified against a live token in this build —
     /// see the type doc. Wrong path simply yields `nil`.
     private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
@@ -468,9 +477,9 @@ enum ClaudeUsageReader {
         }
     }
 
-    /// Load the token for this launch: prefer our own item (ACL we own, so no
-    /// prompt in a signed release); fall back to Claude Code's source item and
-    /// seed ours from it for next time.
+    /// Load the token for this launch: prefer our own file cache (no keychain,
+    /// so no prompt — even right after a version update); fall back to Claude
+    /// Code's source keychain item and seed our file from it for next time.
     private static func loadToken() -> String? {
         if let own = readGlintToken() { return own }
         let claude = readClaudeToken()
@@ -490,32 +499,70 @@ enum ClaudeUsageReader {
         return String(data: data, encoding: .utf8)
     }
 
-    /// Read our own copied token. Stored as the bare token string.
+    /// Read + decrypt our own copied token from the file cache. A decrypt
+    /// failure (corrupt file, or one written on a different machine) yields nil,
+    /// so we transparently re-seed from Claude's item.
     private static func readGlintToken() -> String? {
-        guard let data = readKeychainData(service: glintService, account: glintAccount) else { return nil }
-        return String(data: data, encoding: .utf8)
+        guard let url = tokenCacheURL,
+              let data = try? Data(contentsOf: url),
+              let token = decryptToken(data), !token.isEmpty else { return nil }
+        return token
     }
 
-    /// Persist the token into Glint's own keychain item (update-or-add). Uses
-    /// `AfterFirstUnlock` so a background poll right after login can still read
-    /// it. Best-effort: a failure just means we re-read Claude's item next time.
+    /// Encrypt + persist the token into our file cache (0600, owner-only).
+    /// Best-effort: a failure just means we re-read Claude's item next time.
+    /// Also evicts the legacy keychain copy so the secret stops living there.
     private static func saveGlintToken(_ token: String) {
-        guard let data = token.data(using: .utf8) else { return }
-        let match: [String: Any] = [
+        defer { deleteLegacyKeychainToken() }
+        guard let url = tokenCacheURL, let data = encryptToken(token) else { return }
+        try? data.write(to: url, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+
+    /// AES-GCM with a key derived from this machine's hardware UUID. This is
+    /// obfuscation-grade, NOT a defence against a local attacker running as the
+    /// user (they can re-derive the key) — it keeps the token off-disk in
+    /// plaintext, un-greppable, and useless if the file is copied to another
+    /// machine. True at-rest protection is FileVault. We can't use a keychain-
+    /// stored key without reintroducing the per-version-update prompt this whole
+    /// change exists to remove (the ACL binds to our ad-hoc code signature).
+    private static func tokenKey() -> SymmetricKey {
+        var seed = Data("app.glint.claude-usage.v1".utf8)
+        if let uuid = hardwareUUID() { seed.append(Data(uuid.utf8)) }
+        return SymmetricKey(data: SHA256.hash(data: seed))
+    }
+
+    private static func encryptToken(_ token: String) -> Data? {
+        guard let sealed = try? AES.GCM.seal(Data(token.utf8), using: tokenKey()) else { return nil }
+        return sealed.combined   // nonce ‖ ciphertext ‖ tag
+    }
+
+    private static func decryptToken(_ data: Data) -> String? {
+        guard let box = try? AES.GCM.SealedBox(combined: data),
+              let plain = try? AES.GCM.open(box, using: tokenKey()) else { return nil }
+        return String(data: plain, encoding: .utf8)
+    }
+
+    /// Stable per-machine identifier (IOPlatformUUID). Read-only IOKit lookup;
+    /// no entitlement required. Falls back to nil → key uses the salt alone.
+    private static func hardwareUUID() -> String? {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault,
+                                                  IOServiceMatching("IOPlatformExpertDevice"))
+        guard service != 0 else { return nil }
+        defer { IOObjectRelease(service) }
+        guard let prop = IORegistryEntryCreateCFProperty(
+            service, "IOPlatformUUID" as CFString, kCFAllocatorDefault, 0) else { return nil }
+        return prop.takeRetainedValue() as? String
+    }
+
+    /// One-shot cleanup of the pre-file keychain item. SecItemDelete doesn't
+    /// return secret data, so it doesn't pop the read-authorization prompt;
+    /// once gone it returns `errSecItemNotFound` and is a no-op.
+    private static func deleteLegacyKeychainToken() {
+        SecItemDelete([
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: glintService,
-            kSecAttrAccount as String: glintAccount,
-        ]
-        let update: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
-        ]
-        if SecItemUpdate(match as CFDictionary, update as CFDictionary) == errSecItemNotFound {
-            var add = match
-            add[kSecValueData as String] = data
-            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-            SecItemAdd(add as CFDictionary, nil)
-        }
+            kSecAttrService as String: legacyGlintService,
+        ] as CFDictionary)
     }
 
     /// Shared generic-password read. `account == nil` matches by service only.
