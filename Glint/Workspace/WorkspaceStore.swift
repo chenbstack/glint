@@ -84,6 +84,11 @@ struct WorkspaceTab: Identifiable, Codable {
     var name: String?
     var root: SplitNode
     var focusedPane: PaneID
+    /// Last-known agent identity ("claude"/"codex") for this tab, so its chip
+    /// icon survives a restart before any pane re-reports. Mirrors
+    /// `Workspace.iconHint` but scoped to this tab's panes. Synthesized
+    /// Codable decodes a missing key (older saves) as nil. See `tabIconKind`.
+    var iconHint: String? = nil
 }
 
 struct Workspace: Identifiable, Codable {
@@ -1568,10 +1573,18 @@ extension WorkspaceStore {
         return best
     }
 
-    /// Icon for a single tab chip. Live only (tabs don't persist an icon hint
-    /// the way workspaces do).
+    /// Icon for a single tab chip. Prefers what's running live; after a
+    /// restart (no pane has reported yet → live falls back to `.shell`) it
+    /// restores the tab's persisted agent identity, exactly like
+    /// `iconKind(for:)` does for workspaces. A live agent/process always wins.
     func tabIconKind(_ tab: WorkspaceTab, in workspace: Workspace) -> WorkspaceIconKind {
-        liveIconKind(paneIDs: tab.root.leaves, workspaceID: workspace.id)
+        let live = liveIconKind(paneIDs: tab.root.leaves, workspaceID: workspace.id)
+        if case .shell = live,
+           let hint = tab.iconHint,
+           let restored = WorkspaceIconKind.fromPersistToken(hint) {
+            return restored
+        }
+        return live
     }
 
     /// Icon to display for a workspace. Prefers what's running live; after a
@@ -1588,17 +1601,30 @@ extension WorkspaceStore {
         return live
     }
 
-    /// Persist each workspace's live agent identity (claude/codex) into its
-    /// `iconHint` so the icon survives a restart. Writes only on change to
-    /// avoid autosave churn; never clears a hint (a workspace that drops back
-    /// to a bare shell keeps its last agent icon). Status is never touched.
+    /// Persist each workspace's — and each of its tabs' — live agent identity
+    /// (claude/codex) into the matching `iconHint` so icons survive a restart.
+    /// Writes only on change to avoid autosave churn; never clears a hint (a
+    /// workspace/tab that drops back to a bare shell keeps its last agent icon).
+    /// Status is never touched.
     func syncIconHints() {
         var changed = false
         for i in workspaces.indices {
-            guard let token = liveIconKind(for: workspaces[i]).persistToken else { continue }
-            if workspaces[i].iconHint != token {
+            if let token = liveIconKind(for: workspaces[i]).persistToken,
+               workspaces[i].iconHint != token {
                 workspaces[i].iconHint = token
                 changed = true
+            }
+            // Same policy per tab, scoped to that tab's panes, so a folded or
+            // background tab restores its own agent icon independently.
+            for j in workspaces[i].tabs.indices {
+                let leaves = workspaces[i].tabs[j].root.leaves
+                guard let token = liveIconKind(paneIDs: leaves,
+                                               workspaceID: workspaces[i].id).persistToken
+                else { continue }
+                if workspaces[i].tabs[j].iconHint != token {
+                    workspaces[i].tabs[j].iconHint = token
+                    changed = true
+                }
             }
         }
         // Flush immediately rather than waiting on the 0.5s autosave debounce:

@@ -930,6 +930,35 @@ private struct WorkspaceCard: View {
 /// Official Claude mark, bundled as an asset (`Claude.imageset`). Clipped
 /// to the same squircle as the other workspace icons so it sits flush in
 /// the sidebar row.
+/// Status → Assets.xcassets Data Set name for the brand mascots. Shared by
+/// the sidebar cards (ClaudeMascotIcon/CodexMascotIcon) and the header tab
+/// chips (TabIcon) so both pick the same per-status animation from one place.
+enum MascotAsset {
+    /// Idle covers the "nothing's happening" cases (including the post-turn
+    /// justCompleted window — the card already flashes and the celebrate
+    /// scale pops, the gif staying idle keeps the moment readable). The
+    /// spark family simply prefixes its datasets with "ClaudeSpark".
+    static func claude(for s: PaneAgentStatus?, isSpark: Bool) -> String {
+        let prefix = isSpark ? "ClaudeSpark" : "Claude"
+        switch s {
+        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed):
+            return prefix + "Idle"
+        case .some(.thinking):   return prefix + "Thinking"
+        case .some(.tool):       return prefix + "ToolCall"
+        case .some(.compacting): return prefix + "Compressing"
+        }
+    }
+
+    static func codex(for s: PaneAgentStatus?) -> String {
+        switch s {
+        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed):
+            return "CodexIdle"
+        case .some(.thinking), .some(.compacting): return "CodexThinking"
+        case .some(.tool):       return "CodexWorking"
+        }
+    }
+}
+
 /// Animated Claude mascot driven by per-status GIFs (idle / thinking /
 /// tool-call / working). The GIF carries the bulk of the motion; we
 /// keep two extra interaction beats on top:
@@ -951,7 +980,8 @@ private struct ClaudeMascotIcon: View {
     var body: some View {
         // Reduce Motion: freeze the GIF on its first frame — the mascot
         // stays as the workspace icon, just without the looping animation.
-        AnimatedGIFView(assetName: gifAssetName(for: status), animates: !reduceMotion)
+        AnimatedGIFView(assetName: MascotAsset.claude(for: status, isSpark: isSpark),
+                        animates: !reduceMotion)
             // The gif canvas pads the figure with transparent margin (room
             // for bounce/glow frames), so render bigger than the 28pt
             // layout slot to keep the figure itself at icon size; the
@@ -975,25 +1005,6 @@ private struct ClaudeMascotIcon: View {
             }
     }
 
-    /// Map the agent's status to the right Data Set in Assets.xcassets.
-    /// Idle covers the "nothing's happening" cases (including the post-
-    /// turn justCompleted window — the card already flashes green and
-    /// the celebrate scale pops, the gif staying idle keeps the moment
-    /// readable). Both icon families share the same state mapping; the
-    /// spark family simply prefixes its datasets with "ClaudeSpark".
-    private func gifAssetName(for s: PaneAgentStatus?) -> String {
-        let prefix = isSpark ? "ClaudeSpark" : "Claude"
-        switch s {
-        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed):
-            return prefix + "Idle"
-        case .some(.thinking):
-            return prefix + "Thinking"
-        case .some(.tool):
-            return prefix + "ToolCall"
-        case .some(.compacting):
-            return prefix + "Compressing"
-        }
-    }
 }
 
 /// Codex's gradient-cloud mark (generate_codex_action_gifs.py), animated
@@ -1008,7 +1019,7 @@ private struct CodexMascotIcon: View {
     @State private var tapScale: CGFloat = 1.0
 
     var body: some View {
-        AnimatedGIFView(assetName: gifAssetName(for: status), animates: !reduceMotion)
+        AnimatedGIFView(assetName: MascotAsset.codex(for: status), animates: !reduceMotion)
             // The blob fills ~80% of the 128px canvas (the margin is
             // sway headroom), so 30pt renders the mark itself at ~24pt —
             // same visual size as the static CodexMark it replaced.
@@ -1029,17 +1040,6 @@ private struct CodexMascotIcon: View {
                     tapScale = 1.0
                 }
             }
-    }
-
-    private func gifAssetName(for s: PaneAgentStatus?) -> String {
-        switch s {
-        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed):
-            return "CodexIdle"
-        case .some(.thinking), .some(.compacting):
-            return "CodexThinking"
-        case .some(.tool):
-            return "CodexWorking"
-        }
     }
 }
 

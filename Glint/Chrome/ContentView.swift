@@ -367,7 +367,7 @@ private struct TabChip: View {
         let status = store.tabAgentStatus(tab, in: ws)
         Button { store.selectTab(tab.id) } label: {
             HStack(spacing: 7) {
-                TabIcon(kind: kind, size: 15)
+                TabIcon(kind: kind, size: 15, status: status)
                     // Unselected tabs recede to bare dimmed text+icon in the
                     // glass cluster, so the accent pill is the only chrome.
                     .opacity(isActive || !inGlassCluster ? 1 : 0.7)
@@ -600,36 +600,47 @@ private struct StatusBeaconDot: NSViewRepresentable {
     }
 }
 
-/// The little icon at the leading edge of a tab chip. Uses the same static
-/// brand marks the sidebar shows for its workspace cards (the `Claude` /
-/// `CodexMark` assets — the still versions of the animated mascots, so a tab
-/// adds zero per-frame cost), falling back to an SF Symbol / glyph for plain
-/// shells and other tools.
+/// The little icon at the leading edge of a tab chip. Shares the sidebar's
+/// animated brand mascots (`AnimatedGIFView` + `MascotAsset`) so a busy tab
+/// loops the same thinking/tool-call motion its workspace card does. When the
+/// agent is idle the GIF is frozen on its first frame (`animates: false`),
+/// which is visually identical to the old static mark and costs nothing per
+/// frame — only running tabs animate. Falls back to an SF Symbol / glyph for
+/// plain shells and other tools.
 private struct TabIcon: View {
     @EnvironmentObject var store: WorkspaceStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let kind: WorkspaceIconKind
     let size: CGFloat
+    var status: PaneAgentStatus? = nil
 
-    /// The mascot assets carry transparent padding, so drawn at `size` they
-    /// read noticeably smaller than an SF Symbol at the same frame. Render
-    /// them oversized inside the same `size` layout footprint (they bleed
-    /// into the surrounding gaps, which are generous enough to absorb it)
+    /// The mascot GIF canvases pad the figure with transparent margin (room
+    /// for the motion), so drawn at `size` they read noticeably smaller than
+    /// an SF Symbol at the same frame. Render them oversized inside the same
+    /// `size` layout footprint — mirroring the sidebar's per-family ratios —
     /// so brand and glyph icons look optically equal.
-    private var brandSize: CGFloat { size * 1.35 }
+    private var isSpark: Bool { store.claudeIconStyle == .spark }
+    /// Only animate while the agent is actually busy; an idle tab freezes on
+    /// the first frame so it stays as cheap as the old static icon.
+    private var isBusy: Bool {
+        switch status {
+        case .some(.thinking), .some(.tool), .some(.compacting): return true
+        default: return false
+        }
+    }
 
     var body: some View {
         Group {
             switch kind {
             case .claude:
-                Image(store.claudeIconStyle == .spark ? "ClaudeSpark" : "Claude")
-                    .resizable().interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: brandSize, height: brandSize)
+                AnimatedGIFView(assetName: MascotAsset.claude(for: status, isSpark: isSpark),
+                                animates: !reduceMotion && isBusy)
+                    .frame(width: size * (isSpark ? 1.21 : 1.43),
+                           height: size * (isSpark ? 1.21 : 1.43))
             case .codex:
-                Image("CodexMark")
-                    .resizable().interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: brandSize, height: brandSize)
+                AnimatedGIFView(assetName: MascotAsset.codex(for: status),
+                                animates: !reduceMotion && isBusy)
+                    .frame(width: size * 1.07, height: size * 1.07)
             default:
                 if let sf = kind.sfSymbol {
                     Image(systemName: sf)
@@ -815,7 +826,7 @@ private struct TabOverflowRow: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(Color.white.opacity(0.06))
-                    TabIcon(kind: store.tabIconKind(tab, in: ws), size: 15)
+                    TabIcon(kind: store.tabIconKind(tab, in: ws), size: 15, status: status)
                 }
                 .frame(width: 24, height: 24)
                 VStack(alignment: .leading, spacing: 1) {
