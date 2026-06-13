@@ -571,7 +571,11 @@ enum ClaudeUsageReader {
 
         func pct(_ w: [String: Any]?) -> Double? {
             for k in ["used_percent", "utilization", "usedPercent", "percent"] {
-                if let v = w?[k] as? Double { return v <= 1 ? v * 100 : v }
+                // The endpoint sends integer percents (0–100), so a wire value of
+                // `1` means 1%, NOT a 1.0 fraction — scale only values strictly
+                // below 1 (a hypothetical 0.0–1.0 fractional variant). Using `<= 1`
+                // here turned a real 1% weekly reading into 100%.
+                if let v = w?[k] as? Double { return v < 1 ? v * 100 : v }
             }
             return nil
         }
