@@ -34,6 +34,26 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     private var scrollbackID: String? {
         paneKey.map { ScrollbackArchive.fileID(forPaneKey: $0) }
     }
+    /// The exact history text echoed into this surface at restore (the prior
+    /// session's saved scrollback). Kept verbatim so future snapshots can
+    /// re-attach it as a STABLE prefix and capture only this session's NEW
+    /// output, instead of re-rendering the restored content from the grid each
+    /// flush — which otherwise piles it up (duplicate banners, stale-width
+    /// rows) every restart. nil until a restore happens.
+    private var restoredHistory: String?
+    /// Saved scrollback waiting to be echoed. Held until the surface is wide
+    /// enough for the captured content (the window briefly lays out narrower
+    /// during launch, so the FIRST non-zero size is too small). Consumed once
+    /// in `syncSurfaceSize`.
+    private var pendingRestoreData: Data?
+    /// Column count the pending restore content was captured at (its widest
+    /// line). We wait for the surface to reach this before echoing so full-
+    /// width rows land without wrapping. 0 = unknown (old snapshot) → echo at
+    /// first valid size.
+    private var requiredRestoreCols = 0
+    /// One-shot guard: if the window settles NARROWER than the captured content
+    /// (wrapping then unavoidable), echo anyway so history is never lost.
+    private var restoreFallbackArmed = false
 
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
@@ -284,13 +304,16 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         self.surface = s
         removeSurfaceCreationError()
 
-        // Terminal history restore: echo last session's saved plain-text
-        // scrollback into the fresh surface (clean even for TUIs — it's the
-        // final character grid, not a replay of the render stream). Gated by a
-        // setting. Snapshots are taken later via `read_text`, off the hot path.
-        if let restoreData {
-            restoreScrollback(into: s, data: restoreData)
-        }
+        // Terminal history restore: echo last session's saved colored
+        // scrollback into the surface (clean even for TUIs — it's the final
+        // character grid, not a replay of the render stream). Gated by a
+        // setting. DEFERRED to the first valid `syncSurfaceSize`: a brand-new
+        // surface sits at ghostty's default column count, narrower than the
+        // pane, so echoing full-width history here would wrap every line and a
+        // later resize doesn't reliably reflow it back. We stash the bytes and
+        // echo once the surface has its real pane width (see syncSurfaceSize).
+        pendingRestoreData = restoreData
+        requiredRestoreCols = restoreData.map { Self.maxDisplayWidth(of: $0) } ?? 0
 
         // Route the initial size through the same CATransaction path the
         // resize hooks use, so frame 0 already has drawableSize aligned
@@ -307,12 +330,17 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     private func restoreScrollback(into s: ghostty_surface_t, data: Data) {
         var text = String(decoding: data, as: UTF8.self)
         guard !text.isEmpty else { return }
+        // Remember the prior history verbatim so flushes re-attach it as a
+        // stable prefix rather than re-deriving it (at a possibly different
+        // width) from the grid every cycle. Trailing newlines stripped so the
+        // junction with this session's new output stays clean.
+        restoredHistory = String(text.reversed().drop(while: { $0 == "\n" || $0 == "\r" }).reversed())
         // Saved with \n line breaks; the terminal needs CRLF or each line would
         // start under the previous line's end (staircase).
         text = text.replacingOccurrences(of: "\r\n", with: "\n")
                    .replacingOccurrences(of: "\n", with: "\r\n")
         let payload = text + "\u{1b}[0m\r\n\u{1b}[2m"
-            + String(localized: "── session restored ──") + "\u{1b}[0m\r\n"
+            + Self.restoreMarkerText + "\u{1b}[0m\r\n"
         // process_output renders bytes as child output (history), NOT as input —
         // it must never go through text_input or the shell would execute it.
         payload.withCString { ghostty_surface_process_output(s, $0, UInt(strlen($0))) }
@@ -334,7 +362,16 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         defer { ghostty_string_free(json) }
         guard let ptr = json.ptr, json.len > 0 else { return }
         let data = Data(bytes: ptr, count: Int(json.len))
-        ScrollbackArchive.writeRendered(id: id, gridJSON: data, maxLines: maxScrollbackLines)
+        ScrollbackArchive.writeRendered(id: id, gridJSON: data, maxLines: maxScrollbackLines,
+                                        priorHistory: restoredHistory,
+                                        restoreMarker: Self.restoreMarkerText)
+    }
+
+    /// The dim epilogue echoed after restored history. Shared by `restoreScrollback`
+    /// (writes it) and `flushScrollbackToDisk` (locates it in the grid to split
+    /// off this session's new output). Localized — must match on both sides.
+    fileprivate static var restoreMarkerText: String {
+        String(localized: "── session restored ──")
     }
 
     /// Last `maxScrollbackLines` rows of scrollback + screen, with color.
@@ -370,6 +407,36 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     private static func rgb(_ hex: String) -> (Int, Int, Int)? {
         guard hex.count == 7, hex.hasPrefix("#"), let v = Int(hex.dropFirst(), radix: 16) else { return nil }
         return ((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
+    }
+
+    /// Widest line (in terminal cells) of a saved ANSI scrollback blob. Used to
+    /// decide how wide the surface must be before restored history can be echoed
+    /// without wrapping. SGR escapes are stripped; CJK/emoji count as 2 cells.
+    static func maxDisplayWidth(of data: Data) -> Int {
+        let text = String(decoding: data, as: UTF8.self)
+        var maxW = 0
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = rawLine.replacingOccurrences(of: "\u{1b}\\[[0-9;]*m", with: "",
+                                                    options: .regularExpression)
+            var w = 0
+            for scalar in line.unicodeScalars { w += isWideScalar(scalar) ? 2 : 1 }
+            if w > maxW { maxW = w }
+        }
+        return maxW
+    }
+
+    /// Rough east-asian-wide / emoji test — enough to size a restore, not a full
+    /// Unicode width table. Box-drawing (U+2500–257F) is intentionally narrow.
+    private static func isWideScalar(_ s: Unicode.Scalar) -> Bool {
+        switch s.value {
+        case 0x1100...0x115F, 0x2E80...0x303E, 0x3041...0x33FF, 0x3400...0x4DBF,
+             0x4E00...0x9FFF, 0xA000...0xA4CF, 0xAC00...0xD7A3, 0xF900...0xFAFF,
+             0xFE30...0xFE4F, 0xFF00...0xFF60, 0xFFE0...0xFFE6,
+             0x1F300...0x1FAFF, 0x20000...0x3FFFD:
+            return true
+        default:
+            return false
+        }
     }
 
     private static func isBlankLine(_ s: String) -> Bool {
@@ -417,15 +484,30 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             var lines: [String] = []
             lines.reserveCapacity(maxRow + 1)
             for r in 0...maxRow {
-                var line = ""
+                // Assemble the row as (sgr, text) segments so trailing pure
+                // width-padding can be dropped without disturbing trailing
+                // spaces that carry a real background (e.g. an agent's input
+                // box fill), which must keep their color. Only DEFAULT-
+                // background whitespace is trimmable — it's invisible padding,
+                // and dropping it stops a line padded out to the capture-time
+                // width from restoring wider than, and wrapping inside, a
+                // narrower terminal. Border glyphs and rules end in a non-space
+                // cell, so they're never trimmed.
+                var segs: [(sgr: String, text: String, trimmable: Bool)] = []
                 var col = 0
                 for sp in (byRow[r] ?? []).sorted(by: { $0.column < $1.column }) {
                     if sp.column > col {
-                        line += "\u{1b}[0m" + String(repeating: " ", count: sp.column - col)
+                        // Gap fill is always default-background spaces.
+                        segs.append(("\u{1b}[0m", String(repeating: " ", count: sp.column - col), true))
                     }
-                    line += sgr(for: sp.style_id) + sp.text
+                    let bg = styleByID[sp.style_id]?.background ?? defaultStyle.background
+                    let trimmable = bg == defaultStyle.background && sp.text.allSatisfy { $0 == " " }
+                    segs.append((sgr(for: sp.style_id), sp.text, trimmable))
                     col = sp.column + sp.cell_width
                 }
+                while let last = segs.last, last.trimmable { segs.removeLast() }
+                var line = ""
+                for seg in segs { line += seg.sgr + seg.text }
                 line += "\u{1b}[0m"
                 lines.append(line)
             }
@@ -703,6 +785,28 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         ghostty_surface_set_content_scale(s, scale, scale)
         ghostty_surface_set_size(s, UInt32(pixelWidth), UInt32(pixelHeight))
         CATransaction.commit()
+
+        // Echo restored history only once the surface is wide enough for the
+        // captured content. The window lays out narrower first during launch
+        // (e.g. 88 cols before settling at 128), and echoing full-width rows
+        // into a too-narrow grid wraps them permanently. Wait for the width to
+        // reach the content's; if the window settles smaller (wrap unavoidable),
+        // a one-shot fallback echoes anyway so history is never lost.
+        if let data = pendingRestoreData {
+            let cols = Int(ghostty_surface_size(s).columns)
+            if cols > 0 && (requiredRestoreCols == 0 || cols >= requiredRestoreCols) {
+                pendingRestoreData = nil
+                restoreScrollback(into: s, data: data)
+            } else if cols > 0 && !restoreFallbackArmed {
+                restoreFallbackArmed = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                    guard let self, let s = self.surface, let data = self.pendingRestoreData
+                    else { return }
+                    self.pendingRestoreData = nil
+                    self.restoreScrollback(into: s, data: data)
+                }
+            }
+        }
 
         // Fire the one-shot redraw queued when this kept-alive surface was
         // re-attached (workspace switch-back). We deferred it to here because
@@ -1490,16 +1594,47 @@ enum ScrollbackArchive {
     /// flush (idle pane — the common case for a periodic timer) the frame is
     /// dropped after one cheap hash, skipping the JSON decode, the 3000-line
     /// ANSI rebuild, and the disk write.
-    static func writeRendered(id: String, gridJSON: Data, maxLines: Int) {
+    static func writeRendered(id: String, gridJSON: Data, maxLines: Int,
+                              priorHistory: String? = nil, restoreMarker: String = "") {
         guard let u = url(for: id) else { return }
         queue.async {
             let h = fullHash(gridJSON)
             if lastGridHash[id] == h { return }
             lastGridHash[id] = h
-            guard let text = GhosttySurfaceView.reconstructANSI(
+            guard let full = GhosttySurfaceView.reconstructANSI(
                 fromRenderGrid: gridJSON, maxLines: maxLines),
-                !text.isEmpty else { return }
-            try? Data(text.utf8).write(to: u, options: [.atomic])
+                !full.isEmpty else { return }
+
+            // When this pane restored a prior session, the grid still holds that
+            // restored history (we echoed it) plus our "── session restored ──"
+            // marker plus this session's fresh output. Re-saving the whole grid
+            // would re-render the restored part every flush — piling up dup
+            // banners and freezing stale-width rows. Instead keep `priorHistory`
+            // as a stable prefix and append only what came AFTER the last marker.
+            var text = full
+            if let prior = priorHistory, !prior.isEmpty, !restoreMarker.isEmpty {
+                let strip = { (s: String) -> String in
+                    s.replacingOccurrences(of: "\u{1b}\\[[0-9;]*m", with: "",
+                                           options: .regularExpression)
+                }
+                let lines = full.components(separatedBy: "\n")
+                if let markerIdx = lines.lastIndex(where: { strip($0).contains(restoreMarker) }) {
+                    let newLines = lines[(markerIdx + 1)...]
+                    let hasNew = newLines.contains {
+                        !strip($0).trimmingCharacters(in: .whitespaces).isEmpty
+                    }
+                    text = hasNew ? prior + "\n" + newLines.joined(separator: "\n") : prior
+                }
+                // Marker not found (scrolled past the snapshot window): fall back
+                // to the full grid rather than dropping history.
+            }
+
+            // Re-cap after the merge — prior + new can exceed the line budget.
+            var out = text.components(separatedBy: "\n")
+            if out.count > maxLines { out = Array(out.suffix(maxLines)) }
+            let final = out.joined(separator: "\n")
+            guard !final.isEmpty else { return }
+            try? Data(final.utf8).write(to: u, options: [.atomic])
         }
     }
 
