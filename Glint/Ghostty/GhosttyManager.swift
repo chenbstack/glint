@@ -197,6 +197,64 @@ final class GhosttyManager {
         }
     }
 
+    /// Sync Glint's zsh-init dir at ~/.config/glint/zsh-init and return its
+    /// path, for use as `ZDOTDIR` when spawning a surface's shell. Two files
+    /// land there:
+    ///   * `.zshrc` — sources the user's real .zshrc first (zero-break), then
+    ///     layers per-pane `HISTFILE` and ghost-text completion on top.
+    ///   * `zsh-autosuggestions.zsh` — vendored upstream v0.7.1, MIT.
+    ///
+    /// Returns nil when the feature is disabled or the bundle resources can't
+    /// be located, in which case the caller skips ZDOTDIR injection entirely
+    /// and the shell behaves like before.
+    ///
+    /// ghostty's own zsh integration (which itself swaps `ZDOTDIR` to its
+    /// resources dir and saves the user's original to `GHOSTTY_ZSH_ZDOTDIR`)
+    /// cooperates here: it treats our path as the "user's" ZDOTDIR, restores
+    /// it before invoking the rcs, then `.zshrc` from THIS dir gets sourced.
+    /// When the padded launcher is used instead, ghostty's shell-integration
+    /// is bypassed (the launcher binary isn't a known shell) and our ZDOTDIR
+    /// propagates directly to the `exec`'d zsh.
+    static func glintShellInitDirPath() -> String? {
+        guard (UserDefaults.standard.object(forKey: "glint.perPaneHistory") as? Bool) ?? true else {
+            return nil
+        }
+        // xcodegen flattens loose files from `resources: - Glint/Resources`
+        // into the bundle's top-level Contents/Resources/, so we look up by
+        // unique name rather than subdirectory.
+        guard let bundleZshrc = Bundle.main.url(
+            forResource: "glint", withExtension: "zshrc"),
+              let bundleAutosuggest = Bundle.main.url(
+            forResource: "zsh-autosuggestions", withExtension: "zsh") else {
+            NSLog("Glint: ShellIntegration resources not found in bundle")
+            return nil
+        }
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/glint/zsh-init", isDirectory: true)
+        let zshrcOut = dir.appendingPathComponent(".zshrc")
+        let autosuggestOut = dir.appendingPathComponent("zsh-autosuggestions.zsh")
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            // Re-copy only when content differs — Sparkle-style updates land
+            // the new bundle, our next surface picks up the refreshed rc, but
+            // already-running shells keep what they sourced at startup.
+            try syncBundleFile(from: bundleZshrc, to: zshrcOut)
+            try syncBundleFile(from: bundleAutosuggest, to: autosuggestOut)
+            return dir.path
+        } catch {
+            NSLog("Glint: failed to write zsh-init dir: \(error)")
+            return nil
+        }
+    }
+
+    private static func syncBundleFile(from src: URL, to dst: URL) throws {
+        let srcData = try Data(contentsOf: src)
+        if let existing = try? Data(contentsOf: dst), existing == srcData {
+            return
+        }
+        try srcData.write(to: dst, options: .atomic)
+    }
+
     /// Rebuild the config from current user defaults and push it into the
     /// running ghostty_app. Existing surfaces pick up the new font / cursor /
     /// scrollback settings via ghostty's internal ConfigChange propagation —

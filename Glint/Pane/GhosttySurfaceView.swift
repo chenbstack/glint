@@ -282,6 +282,17 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         var envPairs: [(UnsafeMutablePointer<CChar>, UnsafeMutablePointer<CChar>)] = []
         if let pk = paneKey { envPairs.append((strdup("GLINT_PANE_ID"), strdup(pk))) }
         if let sock = agentSocketPath { envPairs.append((strdup("GLINT_AGENT_SOCK"), strdup(sock))) }
+        // Per-pane HISTFILE + history-driven ghost-text completion (zsh).
+        // We swap ZDOTDIR to Glint's resources dir; the .zshrc there sources
+        // the user's real zshrc first (location stashed in GLINT_USER_ZDOTDIR)
+        // and then layers our overrides. ghostty's own zsh integration plays
+        // along — see glintShellInitDirPath()'s docstring for the dance.
+        if let zshDir = GhosttyManager.glintShellInitDirPath() {
+            let userZdotdir = ProcessInfo.processInfo.environment["ZDOTDIR"]
+                ?? FileManager.default.homeDirectoryForCurrentUser.path
+            envPairs.append((strdup("GLINT_USER_ZDOTDIR"), strdup(userZdotdir)))
+            envPairs.append((strdup("ZDOTDIR"), strdup(zshDir)))
+        }
         defer { envPairs.forEach { free($0.0); free($0.1) } }
 
         // Launch command is decided per-surface: a pane restoring a

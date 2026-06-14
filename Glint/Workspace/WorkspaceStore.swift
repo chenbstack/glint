@@ -397,6 +397,17 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
+    /// Per-pane shell history + history-driven ghost-text completion.
+    /// When on, each pane gets its own `HISTFILE` keyed on its stable UUID
+    /// (so ↑ in a pane only walks that pane's commands, even across
+    /// restarts) and a zsh-autosuggestions ghost line that → / End accept.
+    /// Existing panes keep their current shell session; only newly spawned
+    /// panes pick up the change. Off restores the system default (all
+    /// panes share `~/.zsh_history`, no ghost text).
+    @Published var perPaneHistory: Bool = (UserDefaults.standard.object(forKey: "glint.perPaneHistory") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(perPaneHistory, forKey: "glint.perPaneHistory") }
+    }
+
     /// Which Claude icon family the UI draws: the animated robot mascot, or
     /// the spark mark (StatusIconsPreview.jsx port — see
     /// scripts/generate_claude_spark_icons.py). Completion has no spark
