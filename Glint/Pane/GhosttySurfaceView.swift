@@ -23,6 +23,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// Identifier (`"<wsuuid>:<paneSeq>"`) passed into the pty as
     /// `$GLINT_PANE_ID` so CLI-agent hooks can address us back.
     private let paneKey: String?
+    /// True when this pane reaches the top edge of the window — only then
+    /// does the padded launcher (clear + blank rows) make sense, since the
+    /// floating glass header only ever obscures top-edge panes. Bottom panes
+    /// from Shift+Cmd+D (vertical splits) get a plain shell so their content
+    /// starts at the divider, not 3 blank rows below it.
+    private let topAligned: Bool
     private let agentSocketPath: String?
     /// Latest cwd pushed by ghostty via OSC 7 / PWD action. Preferred over
     /// proc_pidinfo polling because it's event-driven.
@@ -84,10 +90,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     init(frame: NSRect,
          initialCwd: String? = nil,
          paneKey: String? = nil,
-         agentSocketPath: String? = nil) {
+         agentSocketPath: String? = nil,
+         topAligned: Bool = true) {
         self.initialCwd = initialCwd
         self.paneKey = paneKey
         self.agentSocketPath = agentSocketPath
+        self.topAligned = topAligned
         super.init(frame: frame)
         wantsLayer = true
         // Placeholder until ghostty installs its IOSurfaceLayer — matches the
@@ -288,7 +296,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             return data
         }()
         var cmdBuf: UnsafeMutablePointer<CChar>? = nil
-        if restoreData == nil, let launcher = GhosttyManager.paddedShellLauncherPath() {
+        if restoreData == nil, topAligned, let launcher = GhosttyManager.paddedShellLauncherPath() {
             cmdBuf = strdup(launcher)
             cfg.command = UnsafePointer(cmdBuf)
         }

@@ -755,14 +755,44 @@ final class WorkspaceStore: ObservableObject {
             NSLog("[glint.visible] MINT surface ws=\(workspaceID.uuidString.prefix(8)) pane=\(paneID.value) inModel=\(known)")
         }
         let paneKey = "\(workspaceID.uuidString):\(paneID.value)"
+        // Only top-edge panes need the padded launcher (clear + blank rows
+        // to escape the floating header). A pane sitting below a vertical
+        // split divider already starts mid-window, so padding leaves empty
+        // rows above the prompt.
+        let topAligned: Bool = {
+            guard let ws = workspaces.first(where: { $0.id == workspaceID }) else { return true }
+            for tab in ws.tabs {
+                if let v = Self.leafTopAlignment(tab.root, target: paneID) { return v }
+            }
+            return true
+        }()
         let v = GhosttySurfaceView(
             frame: .zero,
             initialCwd: cwd,
             paneKey: paneKey,
-            agentSocketPath: AgentBridge.shared.socketPath
+            agentSocketPath: AgentBridge.shared.socketPath,
+            topAligned: topAligned
         )
         surfaceViews[key] = v
         return v
+    }
+
+    /// Walks the split tree to decide whether `target` sits flush with the
+    /// top edge of the window. Returns nil if the leaf isn't in this tree.
+    /// Horizontal splits don't change top-alignment (both sides reach the
+    /// top); a vertical split's `b` child (the lower half) does not.
+    private static func leafTopAlignment(_ node: SplitNode, target: PaneID) -> Bool? {
+        switch node {
+        case .leaf(let id):
+            return id == target ? true : nil
+        case .split(.horizontal, _, let a, let b):
+            if let v = leafTopAlignment(a, target: target) { return v }
+            return leafTopAlignment(b, target: target)
+        case .split(.vertical, _, let a, let b):
+            if let v = leafTopAlignment(a, target: target) { return v }
+            if leafTopAlignment(b, target: target) != nil { return false }
+            return nil
+        }
     }
 
     /// Snapshot every live surface's cwd back into the workspace model and
