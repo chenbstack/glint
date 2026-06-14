@@ -6,16 +6,19 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.18-beta.5</title>
-      <sparkle:version>202606141517</sparkle:version>
-      <sparkle:shortVersionString>0.1.18-beta.5</sparkle:shortVersionString>
+      <title>Glint 0.1.18-beta.6</title>
+      <sparkle:version>202606141525</sparkle:version>
+      <sparkle:shortVersionString>0.1.18-beta.6</sparkle:shortVersionString>
       <sparkle:channel>beta</sparkle:channel>
-      <pubDate>Sun, 14 Jun 2026 15:18:24 +0000</pubDate>
+      <pubDate>Sun, 14 Jun 2026 15:27:01 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.5</h3><ul>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.6</h3><ul>
+    <li><strong>revert: drop ZDOTDIR-swap per-pane history (back to industry default)</strong><br><span style="color:#666">撤掉 ZDOTDIR 注入方案——zsh 的 rc 加载语义跟 $ZDOTDIR 绑定,我们镜像不完(beta.4/5 PATH 丢失就是这个根因),且 Prezto/oh-my-zsh 等读 ZDOTDIR 也会撞;业界(Kitty/Wezterm/Alacritty/Ghostty)都不做这事是有道理的;需要这能力的用户推荐装 atuin。</span></li>
+    <li>release: appcast for v0.1.18-beta.5</li>
+  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.5</h3><ul>
     <li><strong>fix(shell): also delegate .zshenv and .zprofile to user&#x27;s real dir</strong><br><span style="color:#666">修复 beta.4 漏写 .zshenv/.zprofile 委托,导致 brew/orbstack/cargo 在恢复的终端里 PATH 丢失(pnpm not found 就是这个根因);现在补两个 stub,新开 pane 立即恢复正常。</span></li>
     <li>release: appcast for v0.1.18-beta.4</li>
-  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.4</h3><ul>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.4</h3><ul>
     <li><strong>feat(shell): per-pane zsh history + history-driven ghost-text completion</strong><br><span style="color:#666">每个终端的命令历史独立(↑ 只看本 pane,关闭时合并回全局),并新增历史驱动的暗灰自动补全(右方向键/End 接受完整,Ctrl-→ 接受一个词);设置→终端→Shell 可关。</span></li>
     <li>release: appcast for v0.1.18-beta.3</li>
   </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.3</h3><ul>
@@ -66,10 +69,74 @@
   </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.17-beta.7</h3><ul>
     <li><strong>fix: stop re-prompting for keychain on every Claude-usage update</strong><br><span style="color:#666">修复侧栏 Claude 额度每次版本更新都要重新钥匙串认证的问题——token 改存到 Application Support 下的 AES-GCM 加密文件,不再放钥匙串</span></li>
     <li>release: appcast for v0.1.17-beta.6</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.17-beta.6</h3><ul>
-    <li><strong>fix: reliable sidebar card drag-to-reorder</strong><br><span style="color:#666">修复侧栏卡片拖动重排不可靠的问题——改用手动手势按指针位置精确命中,不再出现拖一张动两张、放不到目标位置</span></li>
-    <li>release: appcast for v0.1.17-beta.5</li>
   </ul></div>]]></description>
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.18-beta.6/Glint-0.1.18-beta.6.dmg" length="15262329" type="application/octet-stream" sparkle:edSignature="nZy/7+y+X4lVekTGdgyopwETagqa8K/TcMr91JaEW91CMPQYi7BbGdjsdGrDVcJ0d0X2WuyzQm2165Ka8+hMCw==" />
+    </item>
+    <item>
+      <title>Glint 0.1.18-beta.5</title>
+      <sparkle:version>202606141517</sparkle:version>
+      <sparkle:shortVersionString>0.1.18-beta.5</sparkle:shortVersionString>
+      <sparkle:channel>beta</sparkle:channel>
+      <pubDate>Sun, 14 Jun 2026 15:18:24 +0000</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description>&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.5&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix(shell): also delegate .zshenv and .zprofile to user&amp;#x27;s real dir&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 beta.4 漏写 .zshenv/.zprofile 委托,导致 brew/orbstack/cargo 在恢复的终端里 PATH 丢失(pnpm not found 就是这个根因);现在补两个 stub,新开 pane 立即恢复正常。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.4&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;!--GLINT_HISTORY_BELOW--&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3 style="color:#666;"&gt;历史版本 · Previous releases&lt;/h3&gt;&lt;/div&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.4&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(shell): per-pane zsh history + history-driven ghost-text completion&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;每个终端的命令历史独立(↑ 只看本 pane,关闭时合并回全局),并新增历史驱动的暗灰自动补全(右方向键/End 接受完整,Ctrl-→ 接受一个词);设置→终端→Shell 可关。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.3&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.3&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(chrome): floating glass islands on macOS &amp;lt; 26, tighter tab chips&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;macOS 26 以下也能用浮岛风的玻璃 header；标签页横向更紧凑。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.2&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.2&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat: default Claude icon switches to the Spark mark&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Claude 默认图标从橙色吉祥物改为 ✦ 火花标——已在 Settings 里选过的人保留原选择,新用户/未选过的人现在默认看到 spark&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(pane): start bottom split prompt at the divider, not 3 rows below&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 Shift+Cmd+D 纵向分屏出来的下半 pane 顶部空 3 行的问题——下半 pane 不接触浮动 header,不再注入垫行启动脚本;横向分屏(左右)两边仍按需垫行&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;docs: refresh README screenshots&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;更新 README 截图——主图换成最新的 Liquid Glass 界面,新增一张侧栏多状态总览图(thinking/tool/等待批准/已完成/失败 一次看清)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.1&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.1&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat: stop tab chips from remembering agents; new default icon&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;标签页图标不再记忆已退场的 agent——只反映当前真实在跑的;默认终端图标统一改为 ⌘ command(sidebar、工作区切换器、标签页都一致)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: appcast for v0.1.17&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补回 v0.1.17 流水线未能提交的 appcast item,恢复稳定版自动更新分发&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(ci): force-checkout main when committing appcast&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复发版流水线最后一步——切回 main 提交 appcast 时用 -f 丢弃工作区脏文件,不再因 appcast.xml 冲突中止&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.9&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.17&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix: restore agent input-box backgrounds without wrapping; bigger tab icons&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复终端历史恢复时 agent 输入框满宽底色条卷行的问题——按字符裁掉行尾空格、用 \e[K 把底色重新铺到当前窗口右边缘、等宽度稳定后再回显;标签页图标 15→18 加大。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.8&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: restore terminal scrollback without re-wrapping or piling up&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复终端历史恢复：等 surface 达到内容宽度再回放（不再因启动时窗口暂窄而把整行内容回卷）；恢复的历史作为稳定前缀只追加新内容（不再每次重启重复堆叠欢迎框/旧宽度行）；按行裁掉默认背景的尾随 padding，保留输入框等带背景的填充。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: animate tab chip icons while an agent is running&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;标签页图标在 agent 运行时跟侧边栏一样播放动画（复用同一套 GIF 优化，空闲时冻结首帧零开销）；并为每个标签页持久化 iconHint，重启后能各自恢复 agent 图标。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.7&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: stop re-prompting for keychain on every Claude-usage update&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复侧栏 Claude 额度每次版本更新都要重新钥匙串认证的问题——token 改存到 Application Support 下的 AES-GCM 加密文件,不再放钥匙串&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.6&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: reliable sidebar card drag-to-reorder&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复侧栏卡片拖动重排不可靠的问题——改用手动手势按指针位置精确命中,不再出现拖一张动两张、放不到目标位置&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.5&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: Claude weekly quota showing 100% instead of 1%&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复侧栏 Claude 周额度把 1% 误显示为 100% 的问题&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: rejoin soft-wrapped lines on scrollback restore&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复会话恢复时长行被拆成两行的问题(软换行行现在会重新合并)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;Revert &amp;quot;release: add stable local code signing&amp;quot;&lt;/li&gt;
+    &lt;li&gt;Revert &amp;quot;fix: trust local signing cert in release workflow&amp;quot;&lt;/li&gt;
+    &lt;li&gt;Revert &amp;quot;fix: pass local signing cert separately&amp;quot;&lt;/li&gt;
+    &lt;li&gt;Revert &amp;quot;fix: simplify local certificate signing&amp;quot;&lt;/li&gt;
+    &lt;li&gt;Revert &amp;quot;release: appcast for v0.1.17-beta.5&amp;quot;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.5&lt;/li&gt;
+    &lt;li&gt;fix: simplify local certificate signing&lt;/li&gt;
+    &lt;li&gt;fix: pass local signing cert separately&lt;/li&gt;
+    &lt;li&gt;fix: trust local signing cert in release workflow&lt;/li&gt;
+    &lt;li&gt;release: add stable local code signing&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.1&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: clear agent approval state on submitted decisions&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;批准 Codex/Claude 权限请求后立即清除标签页和侧栏的等待批准状态，并补上 Codex StopFailure hook。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.16&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.17-beta.9&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix: restore agent input-box backgrounds without wrapping; bigger tab icons&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复终端历史恢复时 agent 输入框满宽底色条卷行的问题——按字符裁掉行尾空格、用 \e[K 把底色重新铺到当前窗口右边缘、等宽度稳定后再回显;标签页图标 15→18 加大。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.8&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.17-beta.8&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix: restore terminal scrollback without re-wrapping or piling up&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复终端历史恢复：等 surface 达到内容宽度再回放（不再因启动时窗口暂窄而把整行内容回卷）；恢复的历史作为稳定前缀只追加新内容（不再每次重启重复堆叠欢迎框/旧宽度行）；按行裁掉默认背景的尾随 padding，保留输入框等带背景的填充。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: animate tab chip icons while an agent is running&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;标签页图标在 agent 运行时跟侧边栏一样播放动画（复用同一套 GIF 优化，空闲时冻结首帧零开销）；并为每个标签页持久化 iconHint，重启后能各自恢复 agent 图标。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.7&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.17-beta.7&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix: stop re-prompting for keychain on every Claude-usage update&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复侧栏 Claude 额度每次版本更新都要重新钥匙串认证的问题——token 改存到 Application Support 下的 AES-GCM 加密文件,不再放钥匙串&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.6&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.17-beta.6&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix: reliable sidebar card drag-to-reorder&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复侧栏卡片拖动重排不可靠的问题——改用手动手势按指针位置精确命中,不再出现拖一张动两张、放不到目标位置&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.5&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;</description>
       <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.18-beta.5/Glint-0.1.18-beta.5.dmg" length="15288521" type="application/octet-stream" sparkle:edSignature="rqcmIsh6vyZ1GTEw4CVs3YtPLxoh7p3o0ZTFLxUzOzrTP6EIqn934Lrz5PVNymA5Rm9cYPPZFz32yFZgtBu7Dg==" />
     </item>
     <item>
