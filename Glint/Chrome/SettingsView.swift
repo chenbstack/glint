@@ -582,15 +582,6 @@ private struct TerminalPane: View {
                               listWidth: 150)
             }
         }
-
-        SettingsCard("Shell",
-                     footer: "Adds two zsh layers when spawning a pane: a per-pane HISTFILE so ↑ only walks this pane's commands (closes are appended back into ~/.zsh_history), and a dim ghost line that suggests the next command from history. Press → or End to accept, Ctrl-→ for one word. Bash panes are unaffected. Already-open panes keep their current shell session.") {
-            SettingsRow("Per-pane history + suggestions",
-                        subtitle: "Independent shell history per terminal, with ghost-text autocomplete from history.") {
-                Toggle("", isOn: $store.perPaneHistory)
-                    .toggleStyle(.switch).labelsHidden()
-            }
-        }
     }
 }
 

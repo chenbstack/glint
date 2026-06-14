@@ -10,7 +10,6 @@
 		1115F230E14FBE3C1FC754A2 /* GhosttySurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E298AD81B1615CBBFD69F48A /* GhosttySurfaceView.swift */; };
 		175E069EE844FB32C6EE51BB /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EDE0D7C434B8E9C76C4A297 /* Persistence.swift */; };
 		21C03B3AE912F4D30FA6F92C /* PaneAgentState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41DDB9C7B5A277B7924270A3 /* PaneAgentState.swift */; };
-		2DD19A3FDAE094EF32B0B9F0 /* zsh-autosuggestions.zsh in Resources */ = {isa = PBXBuildFile; fileRef = D03AFC613028C5BB0D99238D /* zsh-autosuggestions.zsh */; };
 		2E52C3AC5AD998CD3604D6BE /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */; };
 		3932A4CFEFF6FB81AE283645 /* AgentHookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */; };
 		3CB9F41E3B1CB4A8790D9159 /* GhosttyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC6FFB5185C403F6F44A1687 /* GhosttyManager.swift */; };
@@ -31,7 +30,6 @@
 		D3D6CF13B67D30E9DA557F83 /* UsageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A1F24DAA7220AD4EE961E2 /* UsageStore.swift */; };
 		E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05F2CA2243872C8111048EF2 /* AgentBridge.swift */; };
 		EF3ACBA990526130228FAD0B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */; };
-		F5DDD10CB20F5F47CA1263FB /* glint.zshrc in Resources */ = {isa = PBXBuildFile; fileRef = 6716BD506E37480410D8F6DB /* glint.zshrc */; };
 		FCB67525DF16A4DCF9B2AF7A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 376568363043C189904E4E0A /* Localizable.xcstrings */; };
 /* End PBXBuildFile section */
 
@@ -51,7 +49,6 @@
 		4408F9761E584DE2AB6630E2 /* UpdaterController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterController.swift; sourceTree = "<group>"; };
 		4BE4DBC7E2579823474466E9 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		5A8933F67B4B6EEA3FD4E603 /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStore.swift; sourceTree = "<group>"; };
-		6716BD506E37480410D8F6DB /* glint.zshrc */ = {isa = PBXFileReference; path = glint.zshrc; sourceTree = "<group>"; };
 		6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		7CB74659D174004C620D538A /* GlintApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintApp.swift; sourceTree = "<group>"; };
 		81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GhosttyKit.xcframework; path = Vendor/GhosttyKit.xcframework; sourceTree = "<group>"; };
@@ -59,7 +56,6 @@
 		9E67CF5D8552AE1F51386161 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A8C269A6E9AE87961C3356DC /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectBackground.swift; sourceTree = "<group>"; };
-		D03AFC613028C5BB0D99238D /* zsh-autosuggestions.zsh */ = {isa = PBXFileReference; path = "zsh-autosuggestions.zsh"; sourceTree = "<group>"; };
 		E298AD81B1615CBBFD69F48A /* GhosttySurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttySurfaceView.swift; sourceTree = "<group>"; };
 		F5A69ACF962AEDE189F98649 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F8A1F24DAA7220AD4EE961E2 /* UsageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStore.swift; sourceTree = "<group>"; };
@@ -86,7 +82,6 @@
 				25DADCEBA9C483C729B69388 /* Glint.entitlements */,
 				F5A69ACF962AEDE189F98649 /* Info.plist */,
 				376568363043C189904E4E0A /* Localizable.xcstrings */,
-				A4271BA2785D3733E2F3908E /* ShellIntegration */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -141,15 +136,6 @@
 				5A8933F67B4B6EEA3FD4E603 /* WorkspaceStore.swift */,
 			);
 			path = Workspace;
-			sourceTree = "<group>";
-		};
-		A4271BA2785D3733E2F3908E /* ShellIntegration */ = {
-			isa = PBXGroup;
-			children = (
-				6716BD506E37480410D8F6DB /* glint.zshrc */,
-				D03AFC613028C5BB0D99238D /* zsh-autosuggestions.zsh */,
-			);
-			path = ShellIntegration;
 			sourceTree = "<group>";
 		};
 		BB4ECEBC994408CE9F33EC5A /* Glint */ = {
@@ -269,8 +255,6 @@
 			files = (
 				942ED7C1C1A2E823BA52F67A /* Assets.xcassets in Resources */,
 				FCB67525DF16A4DCF9B2AF7A /* Localizable.xcstrings in Resources */,
-				F5DDD10CB20F5F47CA1263FB /* glint.zshrc in Resources */,
-				2DD19A3FDAE094EF32B0B9F0 /* zsh-autosuggestions.zsh in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
