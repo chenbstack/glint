@@ -2141,6 +2141,28 @@
         }
       }
     },
+    "Warn before pasting multi-line text" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴多行文本前先提示"
+          }
+        }
+      }
+    },
+    "Ask first when the clipboard contains newlines or control characters — a multi-line paste into a shell prompt runs each line immediately." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当剪贴板包含换行或控制字符时先询问——多行内容粘贴到 shell 提示符会立刻逐行执行。"
+          }
+        }
+      }
+    },
     "Window" : {
       "extractionState" : "stale",
       "localizations" : {

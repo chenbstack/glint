@@ -582,6 +582,14 @@ private struct TerminalPane: View {
                               listWidth: 150)
             }
         }
+
+        SettingsCard("Paste") {
+            SettingsRow("Warn before pasting multi-line text",
+                        subtitle: "Ask first when the clipboard contains newlines or control characters — a multi-line paste into a shell prompt runs each line immediately.") {
+                Toggle("", isOn: $store.warnBeforeUnsafePaste)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+        }
     }
 }
 

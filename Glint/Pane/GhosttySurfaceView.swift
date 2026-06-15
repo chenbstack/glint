@@ -1348,6 +1348,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// paste into a shell prompt executes each line as a command.
     private func confirmUnsafeTextInjection(_ text: String) -> Bool {
         guard injectedTextLooksUnsafe(text) else { return true }
+        if UserDefaults.standard.bool(forKey: Self.skipUnsafePasteConfirmKey) { return true }
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = String(localized: "Paste potentially unsafe text?")
@@ -1356,8 +1357,18 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         )
         alert.addButton(withTitle: String(localized: "Paste"))
         alert.addButton(withTitle: String(localized: "Cancel"))
-        return alert.runModal() == .alertFirstButtonReturn
+        alert.showsSuppressionButton = true
+        alert.suppressionButton?.title = String(localized: "Don't ask again")
+        let confirmed = alert.runModal() == .alertFirstButtonReturn
+        // Only honor suppression when the user actually chose Paste — opting
+        // out via Cancel + checkbox shouldn't silently green-light future pastes.
+        if confirmed, alert.suppressionButton?.state == .on {
+            UserDefaults.standard.set(true, forKey: Self.skipUnsafePasteConfirmKey)
+        }
+        return confirmed
     }
+
+    private static let skipUnsafePasteConfirmKey = "glint.skipUnsafePasteConfirmation"
 
     /// True when the pasteboard holds image bytes worth re-routing through
     /// the running CLI's own ⌃V handler. Finder file-URL copies fall back

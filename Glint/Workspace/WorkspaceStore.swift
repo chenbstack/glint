@@ -516,6 +516,15 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(sortCompletedFirst, forKey: "glint.sortCompletedFirst") }
     }
 
+    /// Show the "Paste potentially unsafe text?" confirm dialog when the
+    /// clipboard contains newlines or control characters. The underlying
+    /// default (`glint.skipUnsafePasteConfirmation`) is inverted so the
+    /// "Don't ask again" checkbox in the alert flips this off, and the
+    /// settings toggle reads "Warn before pasting multi-line text".
+    @Published var warnBeforeUnsafePaste: Bool = !UserDefaults.standard.bool(forKey: "glint.skipUnsafePasteConfirmation") {
+        didSet { UserDefaults.standard.set(!warnBeforeUnsafePaste, forKey: "glint.skipUnsafePasteConfirmation") }
+    }
+
     /// Offer to install both agents' hooks on the very first launch so
     /// status tracking works out of the box — but ask first (these write
     /// into another tool's config files), and ask exactly once. "Not Now"
