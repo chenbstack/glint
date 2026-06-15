@@ -153,14 +153,18 @@ final class GhosttyManager {
     /// blur shows actual scrolling content underneath instead of dead
     /// padding — Photos.app style.
     ///
-    /// Returns nil when the floating chrome isn't active (macOS < 26 or
-    /// the user disabled glass): the grid hugs `window-padding-y.top`
-    /// like a regular terminal in that mode.
+    /// Returns nil when the floating chrome isn't active (glass off): the
+    /// grid hugs `window-padding-y.top` like a regular terminal in that
+    /// mode. Pre-26 still gets the inset because the floating layout runs
+    /// on every macOS — `ContentView.floatingHeader` is driven purely by
+    /// `glassEffect`, not the macOS version, and the in-house
+    /// `GlassCapsuleFallback` carries the chrome below 26. Gating this
+    /// helper on `#available(macOS 26.0, *)` previously dropped the inset
+    /// on macOS 15.x and let the first terminal row sit under the islands.
     ///
     /// Applied PER-SURFACE in `GhosttySurfaceView.createSurface`; split
     /// children don't get the inset because they sit below the header.
     static func floatingHeaderInsetPt() -> UInt32? {
-        guard #available(macOS 26.0, *) else { return nil }
         guard (UserDefaults.standard.object(forKey: "glint.glassEffect") as? Bool) ?? true else {
             return nil
         }
