@@ -30,6 +30,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// starts at the divider, not 3 blank rows below it.
     private let topAligned: Bool
     private let agentSocketPath: String?
+    /// Optional text fed into the PTY as if typed by the user at the start of
+    /// the session — ghostty handles the timing (waits until the shell is
+    /// ready). Used to auto-resume `claude --continue` / `codex resume --last`
+    /// when the corresponding setting is on. nil = no initial input.
+    private let initialInput: String?
     /// Latest cwd pushed by ghostty via OSC 7 / PWD action. Preferred over
     /// proc_pidinfo polling because it's event-driven.
     var cachedCwd: String?
@@ -91,11 +96,13 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
          initialCwd: String? = nil,
          paneKey: String? = nil,
          agentSocketPath: String? = nil,
-         topAligned: Bool = true) {
+         topAligned: Bool = true,
+         initialInput: String? = nil) {
         self.initialCwd = initialCwd
         self.paneKey = paneKey
         self.agentSocketPath = agentSocketPath
         self.topAligned = topAligned
+        self.initialInput = initialInput
         super.init(frame: frame)
         wantsLayer = true
         // Placeholder until ghostty installs its IOSurfaceLayer — matches the
@@ -276,6 +283,16 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             cfg.working_directory = UnsafePointer(cwdBuf)
         }
         defer { if cwdBuf != nil { free(cwdBuf) } }
+
+        // Same strdup discipline for `initial_input` — ghostty feeds these
+        // bytes into the PTY after the shell is ready, so callers don't have
+        // to time the injection themselves.
+        var inputBuf: UnsafeMutablePointer<CChar>? = nil
+        if let input = initialInput, !input.isEmpty {
+            inputBuf = strdup(input)
+            cfg.initial_input = UnsafePointer(inputBuf)
+        }
+        defer { if inputBuf != nil { free(inputBuf) } }
 
         // Env vars for CLI-agent hooks (Claude Code etc.) — same strdup
         // discipline; ghostty copies the array during surface_new.

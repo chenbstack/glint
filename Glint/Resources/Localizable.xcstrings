@@ -1523,6 +1523,39 @@
         }
       }
     },
+    "Resume session on launch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动时恢复会话"
+          }
+        }
+      }
+    },
+    "When Glint reopens, run `claude --continue` in any pane that was running Claude at last quit." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 重新打开时，对上次退出前在跑 Claude 的窗格自动执行 `claude --continue`。"
+          }
+        }
+      }
+    },
+    "When Glint reopens, run `codex resume --last` in any pane that was running Codex at last quit." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 重新打开时，对上次退出前在跑 Codex 的窗格自动执行 `codex resume --last`。"
+          }
+        }
+      }
+    },
     "Retry" : {
       "extractionState" : "stale",
       "localizations" : {

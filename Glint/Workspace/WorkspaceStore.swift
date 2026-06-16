@@ -72,6 +72,31 @@ struct Pane: Identifiable, Codable {
     /// Last-known working directory; used to re-spawn the shell in the same
     /// place after a restart. Updated periodically while running.
     var workingDirectory: String?
+    /// Foreground CLI-agent ("claude"/"codex") that was running on this pane
+    /// at the last poll, or nil if the pane was sitting on a bare shell.
+    /// Drives the optional "resume agent session on restart" behavior — see
+    /// `restoreClaudeSession` / `restoreCodexSession`. Reflects the CURRENT
+    /// state, not sticky: an agent that quit back to the shell clears it.
+    var lastAgent: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, workingDirectory, lastAgent
+    }
+
+    init(id: PaneID, title: String, workingDirectory: String? = nil, lastAgent: String? = nil) {
+        self.id = id
+        self.title = title
+        self.workingDirectory = workingDirectory
+        self.lastAgent = lastAgent
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(PaneID.self, forKey: .id)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.workingDirectory = try c.decodeIfPresent(String.self, forKey: .workingDirectory)
+        self.lastAgent = try c.decodeIfPresent(String.self, forKey: .lastAgent)
+    }
 }
 
 /// One tab inside a workspace. Owns its own split tree and focused pane; the
@@ -451,6 +476,21 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreLastWorkspace, forKey: "glint.restoreLastWorkspace") }
     }
 
+    /// On restart, auto-resume the last Claude session on any pane that was
+    /// running `claude` at quit time, by feeding `claude --continue` as the
+    /// pane's initial input. Opt-in (defaults to off) because it spawns a
+    /// network-hitting CLI without user confirmation. The pane's `lastAgent`
+    /// field is set by the foreground-process poller, so this only fires for
+    /// panes where claude was actually live at the last poll.
+    @Published var restoreClaudeSession: Bool = (UserDefaults.standard.object(forKey: "glint.restoreClaudeSession") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(restoreClaudeSession, forKey: "glint.restoreClaudeSession") }
+    }
+
+    /// Same as `restoreClaudeSession` but for Codex — feeds `codex resume --last`.
+    @Published var restoreCodexSession: Bool = (UserDefaults.standard.object(forKey: "glint.restoreCodexSession") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(restoreCodexSession, forKey: "glint.restoreCodexSession") }
+    }
+
     /// Restore each pane's previous scrollback (colors intact) on launch via a
     /// render-grid snapshot taken off the hot path; off = nothing written or
     /// read. Defaults to off — opt-in, since it persists terminal contents to
@@ -775,12 +815,27 @@ final class WorkspaceStore: ObservableObject {
             }
             return true
         }()
+        // Auto-resume the agent that was live on this pane at last quit, if
+        // its per-agent toggle is on. Fed into ghostty as `initial_input` so
+        // it runs after the shell prints its prompt — no timing dance on our
+        // side. Resolved once at mint time; later toggle changes don't reach
+        // a surface that already booted.
+        let restoreCommand: String? = {
+            guard let pane = workspaces.first(where: { $0.id == workspaceID })?.panes[paneID]
+            else { return nil }
+            switch pane.lastAgent {
+            case "claude" where restoreClaudeSession: return "claude --continue\n"
+            case "codex"  where restoreCodexSession:  return "codex resume --last\n"
+            default: return nil
+            }
+        }()
         let v = GhosttySurfaceView(
             frame: .zero,
             initialCwd: cwd,
             paneKey: paneKey,
             agentSocketPath: AgentBridge.shared.socketPath,
-            topAligned: topAligned
+            topAligned: topAligned,
+            initialInput: restoreCommand
         )
         surfaceViews[key] = v
         return v
@@ -833,6 +888,20 @@ final class WorkspaceStore: ObservableObject {
                 }
                 if let name = view.foregroundProcessName() {
                     newProcesses[key] = name
+                    // Track CURRENT claude/codex foreground so the next launch
+                    // can optionally `--continue` / `resume --last` (gated by
+                    // the per-agent setting). Not sticky: a pane that quit
+                    // back to the shell clears its hint, so we don't auto-
+                    // resume on a pane the user explicitly exited from.
+                    let lower = name.lowercased()
+                    let agent: String? = {
+                        if lower.contains("claude") { return "claude" }
+                        if lower.contains("codex")  { return "codex" }
+                        return nil
+                    }()
+                    if workspaces[i].panes[paneID]?.lastAgent != agent {
+                        workspaces[i].panes[paneID]?.lastAgent = agent
+                    }
                 }
             }
         }

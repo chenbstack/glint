@@ -642,6 +642,12 @@ private struct AgentsPane: View {
                     .toggleStyle(.switch).labelsHidden()
             }
             SettingsDivider()
+            SettingsRow("Resume session on launch",
+                        subtitle: "When Glint reopens, run `claude --continue` in any pane that was running Claude at last quit.") {
+                Toggle("", isOn: $store.restoreClaudeSession)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
             SettingsRow("Icon style",
                         subtitle: "How Claude panes are drawn in the sidebar and tabs.") {
                 HStack(spacing: 8) {
@@ -681,6 +687,12 @@ private struct AgentsPane: View {
             SettingsRow("Show usage in sidebar",
                         subtitle: "Display Codex's 5-hour and weekly limits in the sidebar.") {
                 Toggle("", isOn: $usage.codexEnabled)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Resume session on launch",
+                        subtitle: "When Glint reopens, run `codex resume --last` in any pane that was running Codex at last quit.") {
+                Toggle("", isOn: $store.restoreCodexSession)
                     .toggleStyle(.switch).labelsHidden()
             }
         }
