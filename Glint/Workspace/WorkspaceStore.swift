@@ -130,6 +130,11 @@ struct Workspace: Identifiable, Codable {
     /// is persisted — the live agent *status* (thinking/needsPermission/…) is
     /// runtime-only and intentionally not saved. See `iconKind(for:)`.
     var iconHint: String?
+    /// Parked away from the main sidebar list. The model (panes, splits,
+    /// cwd, lastAgent) survives intact; only the live surfaces are dropped,
+    /// so unarchive resumes from the saved state via the same code path as
+    /// an app restart. ⌘1…⌘9 skip archived workspaces.
+    var archived: Bool
     /// Open tabs, in display order. Never empty — a workspace always has at
     /// least one tab.
     var tabs: [WorkspaceTab]
@@ -148,7 +153,7 @@ struct Workspace: Identifiable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, userNamed, accentHex, symbol, iconHint
+        case id, name, userNamed, accentHex, symbol, iconHint, archived
         case tabs, selectedTabID, nextTabSeq, panes, nextPaneSeq
         // Legacy single-tree keys, still read so pre-tabs saves migrate.
         case root, focusedPane
@@ -156,13 +161,15 @@ struct Workspace: Identifiable, Codable {
 
     init(id: UUID, name: String, userNamed: Bool, accentHex: String, symbol: String,
          tabs: [WorkspaceTab], selectedTabID: TabID, nextTabSeq: UInt32,
-         panes: [PaneID: Pane], nextPaneSeq: UInt32, iconHint: String? = nil) {
+         panes: [PaneID: Pane], nextPaneSeq: UInt32, iconHint: String? = nil,
+         archived: Bool = false) {
         self.id = id
         self.name = name
         self.userNamed = userNamed
         self.accentHex = accentHex
         self.symbol = symbol
         self.iconHint = iconHint
+        self.archived = archived
         self.tabs = tabs
         self.selectedTabID = selectedTabID
         self.nextTabSeq = nextTabSeq
@@ -182,6 +189,8 @@ struct Workspace: Identifiable, Codable {
         // Older saves predate the persisted icon hint — fine, it stays nil and
         // the icon is derived live until an agent reports.
         self.iconHint = try c.decodeIfPresent(String.self, forKey: .iconHint)
+        // Older saves predate the archive feature — default to active.
+        self.archived = (try? c.decode(Bool.self, forKey: .archived)) ?? false
         self.panes = try c.decode([PaneID: Pane].self, forKey: .panes)
         self.nextPaneSeq = try c.decode(UInt32.self, forKey: .nextPaneSeq)
 
@@ -218,6 +227,7 @@ struct Workspace: Identifiable, Codable {
         try c.encode(accentHex, forKey: .accentHex)
         try c.encode(symbol, forKey: .symbol)
         try c.encodeIfPresent(iconHint, forKey: .iconHint)
+        if archived { try c.encode(true, forKey: .archived) }   // omit the common case
         try c.encode(tabs, forKey: .tabs)
         try c.encode(selectedTabID, forKey: .selectedTabID)
         try c.encode(nextTabSeq, forKey: .nextTabSeq)
@@ -491,6 +501,13 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreCodexSession, forKey: "glint.restoreCodexSession") }
     }
 
+    /// Whether the sidebar's "Archived" section is currently expanded.
+    /// Persists across launches so a user who keeps it open doesn't have to
+    /// re-open it every cold start.
+    @Published var archiveExpanded: Bool = (UserDefaults.standard.object(forKey: "glint.archiveExpanded") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(archiveExpanded, forKey: "glint.archiveExpanded") }
+    }
+
     /// Restore each pane's previous scrollback (colors intact) on launch via a
     /// render-grid snapshot taken off the hot path; off = nothing written or
     /// read. Defaults to off — opt-in, since it persists terminal contents to
@@ -664,9 +681,19 @@ final class WorkspaceStore: ObservableObject {
         let loaded = Persistence.load() ?? PersistedState.fresh
         self.workspaces = loaded.workspaces
         let shouldRestore = (UserDefaults.standard.object(forKey: "glint.restoreLastWorkspace") as? Bool) ?? true
-        self.selectedWorkspaceID = shouldRestore
-            ? (loaded.selectedWorkspaceID ?? loaded.workspaces.first?.id)
-            : loaded.workspaces.first?.id
+        let firstActiveID = loaded.workspaces.first(where: { !$0.archived })?.id
+            ?? loaded.workspaces.first?.id
+        let restored = shouldRestore ? (loaded.selectedWorkspaceID ?? firstActiveID) : firstActiveID
+        // If the persisted selection points at an archived workspace (e.g. the
+        // user archived it in a prior session), drop back to the first active
+        // one so the sidebar opens on something visible.
+        if let id = restored,
+           let ws = loaded.workspaces.first(where: { $0.id == id }),
+           ws.archived {
+            self.selectedWorkspaceID = firstActiveID
+        } else {
+            self.selectedWorkspaceID = restored
+        }
         self.sidebarCollapsed = loaded.sidebarCollapsed
         Self.current = self
 
@@ -1127,6 +1154,17 @@ final class WorkspaceStore: ObservableObject {
         workspaces.first { $0.id == selectedWorkspaceID }
     }
 
+    /// Sidebar's main list: every workspace that isn't parked in the archive.
+    /// ⌘1…⌘9 and the cycle shortcuts index into this, not `workspaces`,
+    /// so the keyboard navigation matches what the user actually sees.
+    var activeWorkspaces: [Workspace] {
+        workspaces.filter { !$0.archived }
+    }
+
+    var archivedWorkspaces: [Workspace] {
+        workspaces.filter { $0.archived }
+    }
+
     private var currentIndex: Int? {
         guard let id = selectedWorkspaceID else { return nil }
         return workspaces.firstIndex { $0.id == id }
@@ -1287,10 +1325,13 @@ final class WorkspaceStore: ObservableObject {
     }
 
     /// Select the nth workspace in sidebar order (0-based). Used by the
-    /// ⌘1…⌘9 menu shortcuts; out-of-range indices are ignored.
+    /// ⌘1…⌘9 menu shortcuts; out-of-range indices are ignored. Indexes
+    /// into `activeWorkspaces` so archived workspaces don't shift the
+    /// numbering the user sees.
     func selectWorkspace(at index: Int) {
-        guard workspaces.indices.contains(index) else { return }
-        selectWorkspace(workspaces[index].id)
+        let active = activeWorkspaces
+        guard active.indices.contains(index) else { return }
+        selectWorkspace(active[index].id)
     }
 
     /// Set the ratio of the split addressed by `path` in the current
@@ -1397,19 +1438,21 @@ final class WorkspaceStore: ObservableObject {
     /// Used by the ⌘⇧] menu command — paired with `selectPreviousWorkspace`
     /// so keyboard-only navigation has parity with clicking the sidebar.
     func selectNextWorkspace() {
+        let active = activeWorkspaces
         guard let id = selectedWorkspaceID,
-              let idx = workspaces.firstIndex(where: { $0.id == id }),
-              !workspaces.isEmpty else { return }
-        let next = (idx + 1) % workspaces.count
-        selectWorkspace(workspaces[next].id)
+              let idx = active.firstIndex(where: { $0.id == id }),
+              !active.isEmpty else { return }
+        let next = (idx + 1) % active.count
+        selectWorkspace(active[next].id)
     }
 
     func selectPreviousWorkspace() {
+        let active = activeWorkspaces
         guard let id = selectedWorkspaceID,
-              let idx = workspaces.firstIndex(where: { $0.id == id }),
-              !workspaces.isEmpty else { return }
-        let prev = (idx - 1 + workspaces.count) % workspaces.count
-        selectWorkspace(workspaces[prev].id)
+              let idx = active.firstIndex(where: { $0.id == id }),
+              !active.isEmpty else { return }
+        let prev = (idx - 1 + active.count) % active.count
+        selectWorkspace(active[prev].id)
     }
 
     func deleteWorkspace(_ id: UUID) {
@@ -1451,6 +1494,49 @@ final class WorkspaceStore: ObservableObject {
             let nextIdx = min(idx, workspaces.count - 1)
             selectedWorkspaceID = workspaces[nextIdx].id
         }
+    }
+
+    /// Park a workspace away from the main sidebar list. The model (panes,
+    /// splits, cwd, lastAgent, scrollback) survives intact — only the live
+    /// surfaces are dropped, so unarchive resumes from the saved state via
+    /// the same code path as an app restart. Refuses to archive the last
+    /// active workspace (the user must always have something visible).
+    /// If the archived workspace was selected, advances to the next active
+    /// one in sidebar order.
+    func archiveWorkspace(_ id: UUID) {
+        guard let idx = workspaces.firstIndex(where: { $0.id == id }),
+              !workspaces[idx].archived else { return }
+
+        // The user must always have at least one active workspace to look at.
+        guard activeWorkspaces.count > 1 else {
+            NSSound.beep()
+            return
+        }
+
+        // Drop live surfaces + side-state so the parked workspace doesn't
+        // hold onto GPU/IOSurface memory. The Pane / SplitNode / scrollback
+        // archive stay on disk so unarchive can rehydrate them.
+        surfaceViews = surfaceViews.filter { $0.key.workspace != id }
+        paneAgentState = paneAgentState.filter { $0.key.workspace != id }
+        paneProcesses = paneProcesses.filter { $0.key.workspace != id }
+
+        let wasSelected = selectedWorkspaceID == id
+        workspaces[idx].archived = true
+
+        if wasSelected, let next = activeWorkspaces.first {
+            selectedWorkspaceID = next.id
+        }
+    }
+
+    /// Lift a workspace back to the main sidebar list and select it. Surfaces
+    /// will lazily re-mint as the user navigates into panes (same path as a
+    /// cold launch). Also forces the archive section to expand so the user
+    /// sees what they just unarchived land back in the main list.
+    func unarchiveWorkspace(_ id: UUID) {
+        guard let idx = workspaces.firstIndex(where: { $0.id == id }),
+              workspaces[idx].archived else { return }
+        workspaces[idx].archived = false
+        selectedWorkspaceID = id
     }
 
     func renameWorkspace(_ id: UUID, to name: String) {

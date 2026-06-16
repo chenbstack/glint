@@ -52,9 +52,10 @@ struct SidebarView: View {
 
                 ScrollView {
                     VStack(spacing: 0) {
-                        sectionHeader("Workspaces", count: filteredWorkspaces.count)
+                        workspacesSectionHeader(activeCount: filteredActiveWorkspaces.count,
+                                                archivedCount: filteredArchivedWorkspaces.count)
                         VStack(spacing: 6) {
-                            ForEach(filteredWorkspaces) { ws in
+                            ForEach(filteredActiveWorkspaces) { ws in
                                 WorkspaceCard(ws: ws,
                                               isDragging: draggingWorkspaceID == ws.id,
                                               shortcutBadge: cmdKey.commandHeld ? shortcutNumber(for: ws) : nil,
@@ -69,13 +70,23 @@ struct SidebarView: View {
                                     )
                                     .zIndex(draggingWorkspaceID == ws.id ? 1 : 0)
                             }
+                            // Archived list: same card style (variant B), no
+                            // separator — just continues the scroll flow, so
+                            // unarchiving feels like lifting an item back into
+                            // the same list it already belongs to.
+                            if store.archiveExpanded {
+                                ForEach(filteredArchivedWorkspaces) { ws in
+                                    WorkspaceCard(ws: ws, archived: true)
+                                }
+                            }
                         }
                         .coordinateSpace(name: kSidebarReorderSpace)
                         .onPreferenceChange(CardFrameKey.self) { cardFrames = $0 }
                         .padding(.horizontal, 10)
                         .padding(.top, 2)
                         .animation(.spring(response: 0.32, dampingFraction: 0.85),
-                                   value: filteredWorkspaces.map(\.id))
+                                   value: filteredActiveWorkspaces.map(\.id))
+                        .animation(.easeInOut(duration: 0.18), value: store.archiveExpanded)
                     }
                     .padding(.bottom, 12)
                 }
@@ -134,26 +145,39 @@ struct SidebarView: View {
     }
 
     /// The ⌘n shortcut that would select this workspace, or nil past ⌘9.
-    /// Indexed against `store.workspaces` (the order ⌘1…⌘9 actually use),
-    /// NOT the filtered/sorted display order.
+    /// Indexed against `store.activeWorkspaces` (the order ⌘1…⌘9 actually
+    /// use — archived workspaces are skipped), NOT the filtered/sorted
+    /// display order. Returns nil for archived workspaces so their cards
+    /// never show a ⌘ badge while held.
     private func shortcutNumber(for ws: Workspace) -> Int? {
-        guard let idx = store.workspaces.firstIndex(where: { $0.id == ws.id }),
+        guard let idx = store.activeWorkspaces.firstIndex(where: { $0.id == ws.id }),
               idx < 9 else { return nil }
         return idx + 1
     }
 
-    private var filteredWorkspaces: [Workspace] {
+    private var filteredActiveWorkspaces: [Workspace] {
+        filteredWorkspaces(from: store.activeWorkspaces, applySort: true)
+    }
+
+    private var filteredArchivedWorkspaces: [Workspace] {
+        // Archived list: same search filter applies (so a query hides both
+        // active and archived non-matches), but the "completed first" sort
+        // doesn't — parked workspaces aren't running anything.
+        filteredWorkspaces(from: store.archivedWorkspaces, applySort: false)
+    }
+
+    private func filteredWorkspaces(from source: [Workspace], applySort: Bool) -> [Workspace] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let base: [Workspace]
         if query.isEmpty {
-            base = store.workspaces
+            base = source
         } else {
-            base = store.workspaces.filter { ws in
+            base = source.filter { ws in
                 ws.displayName.lowercased().contains(query)
                     || ws.name.lowercased().contains(query)
             }
         }
-        guard store.sortCompletedFirst else { return base }
+        guard applySort, store.sortCompletedFirst else { return base }
         // Stable partition: `.justCompleted` first, preserving the user's
         // drag-assigned order within each group. Using enumerated() +
         // offset as the tiebreaker keeps the sort deterministic regardless
@@ -259,6 +283,65 @@ struct SidebarView: View {
         .padding(.horizontal, 14)
         .padding(.top, 14)
         .padding(.bottom, 4)
+    }
+
+    /// Workspaces header with an inline "已归档" text toggle on the right
+    /// when there's at least one archived workspace (variant B from the
+    /// archive prototypes). Active count sits in the usual mono slot, the
+    /// toggle replaces what would normally be that count when archived
+    /// exists — keeps the row a single line of chrome instead of stacking
+    /// a second "ARCHIVED" header below.
+    @ViewBuilder
+    private func workspacesSectionHeader(activeCount: Int, archivedCount: Int) -> some View {
+        HStack(spacing: 8) {
+            Text(LocalizedStringKey("Workspaces"))
+                .textCase(.uppercase)
+                .font(.glintSection)
+                .kerning(0.8)
+                .foregroundStyle(Theme.text4)
+            Spacer()
+            Text("\(activeCount)")
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(Theme.text4)
+            if archivedCount > 0 {
+                archiveToggleButton(count: archivedCount)
+            }
+        }
+        // Symmetric breathing room: search has 4pt below, so 6pt above the
+        // label = 10pt search→label gap. 8pt below + the cards container's
+        // 2pt top pad = 10pt label→cards gap, centering the label between
+        // the two. Both archived states resolve to the same natural text
+        // height so toggling Archived doesn't reflow anything.
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
+    }
+
+    private func archiveToggleButton(count: Int) -> some View {
+        Button {
+            store.archiveExpanded.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                Text("Archived")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(store.archiveExpanded ? Theme.text2 : Theme.text4)
+                Text("\(count)")
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(store.archiveExpanded ? Theme.text2 : Theme.text4)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(store.archiveExpanded ? Theme.text2 : Theme.text4)
+                    .rotationEffect(.degrees(store.archiveExpanded ? 0 : -90))
+            }
+            // Horizontal-only padding for click slack — vertical padding
+            // would stretch the header row taller than the no-archive case
+            // and reflow the list below it.
+            .padding(.horizontal, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Archived workspaces"))
+        .accessibilityValue(Text("\(count)"))
     }
 
 }
@@ -463,6 +546,12 @@ private struct WorkspaceCard: View {
     /// glow, pulsing dots/borders, mascot animation) render as static states.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let ws: Workspace
+    /// When true the card renders the archived variant: same chrome, "已归档"
+    /// badge in the secondary row instead of tab/pane counts, no ⌘ shortcut
+    /// badge, no reorder gesture, and the context menu offers Unarchive
+    /// instead of Archive. Defaults to false so the active-list call sites
+    /// don't need to change.
+    var archived: Bool = false
     /// True while this card is the one being dragged (drives the lift).
     var isDragging: Bool = false
     /// When non-nil, the card shows its ⌘n switch shortcut in the top-right
@@ -521,7 +610,11 @@ private struct WorkspaceCard: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                secondaryRow(summary: summary, active: active)
+                if archived {
+                    archivedMetadataRow(active: active)
+                } else {
+                    secondaryRow(summary: summary, active: active)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -573,11 +666,21 @@ private struct WorkspaceCard: View {
             if !isEditing { store.selectWorkspace(ws.id) }
         }
         .contextMenu {
-            Button("Rename") { startEditing() }
-            Button("New Workspace") { store.addWorkspace() }
-            Divider()
-            Button("Delete Workspace", role: .destructive) {
-                store.deleteWorkspace(ws.id)
+            if archived {
+                Button("Unarchive") { store.unarchiveWorkspace(ws.id) }
+                Button("Rename") { startEditing() }
+                Divider()
+                Button("Delete Workspace", role: .destructive) {
+                    store.deleteWorkspace(ws.id)
+                }
+            } else {
+                Button("Rename") { startEditing() }
+                Button("New Workspace") { store.addWorkspace() }
+                Divider()
+                Button("Archive") { store.archiveWorkspace(ws.id) }
+                Button("Delete Workspace", role: .destructive) {
+                    store.deleteWorkspace(ws.id)
+                }
             }
         }
         // VoiceOver: the card is one tappable button. Name = workspace
@@ -601,7 +704,11 @@ private struct WorkspaceCard: View {
         .gesture(
             DragGesture(minimumDistance: 6, coordinateSpace: .named(kSidebarReorderSpace))
                 .onChanged { value in onReorderChange(value.location.y) }
-                .onEnded { _ in onReorderEnd() }
+                .onEnded { _ in onReorderEnd() },
+            // Archived cards don't participate in the sidebar reorder (they
+            // sit in a separate group below). Disable the gesture rather
+            // than removing it so the call-site stays a single chain.
+            including: archived ? .subviews : .all
         )
     }
 
@@ -694,6 +801,27 @@ private struct WorkspaceCard: View {
         .id(key)
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.18), value: key)
+    }
+
+    /// Archived variant of the secondary row: a single muted "已归档" badge,
+    /// no tab/pane counts (they'd be noise — the user already knows the
+    /// workspace is parked) and no live status (no panes are running while
+    /// the surfaces are dropped).
+    private func archivedMetadataRow(active: Bool) -> some View {
+        HStack(spacing: 5) {
+            Text("Archived")
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(Theme.text4)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule(style: .continuous)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+                )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func workspaceMetadataRow(active: Bool) -> some View {
