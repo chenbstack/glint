@@ -113,6 +113,32 @@ for chunk in raw.split(SEP):
     zh = m.group(1).strip() if m else None
     entries.append((en, zh))
 
+# ─── Bucket-sort: features/changes first, fixes after, infra last ──
+# git log returns newest-first; Python's sort is stable so within each
+# bucket the chronological order is preserved. The bucket is derived
+# from the conventional-commit prefix (feat: / fix: / polish: / etc) —
+# anything we don't recognize stays in a trailing "other" bucket so it
+# doesn't slip silently above the fixes.
+TYPE_RE = re.compile(r"^\s*([a-zA-Z]+)(?:\([^)]*\))?\s*[:：]")
+BUCKETS = {
+    # 0 — new features users want to see first
+    "feat": 0, "feature": 0,
+    # 1 — visible behaviour/UX changes that aren't new features per se
+    "polish": 1, "improve": 1, "refactor": 1, "perf": 1, "style": 1,
+    "change": 1, "ux": 1,
+    # 2 — bug fixes
+    "fix": 2, "bugfix": 2, "hotfix": 2,
+    # 3 — repo/infra hygiene; not interesting to end users, sinks to bottom
+    "ci": 3, "chore": 3, "docs": 3, "build": 3, "test": 3, "deps": 3,
+    "release": 3,
+}
+def bucket(entry):
+    en = entry[0]
+    m = TYPE_RE.match(en)
+    typ = (m.group(1).lower() if m else "")
+    return BUCKETS.get(typ, 4)
+entries.sort(key=bucket)
+
 # ─── Render notes HTML (bilingual headings + list of EN / 中文 per item) ──
 def render_li(en, zh):
     en_esc = html.escape(en)
