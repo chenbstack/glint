@@ -1418,6 +1418,16 @@ final class WorkspaceStore: ObservableObject {
         acknowledgeCompletionIfNeeded(for: workspaces[i].id)
     }
 
+    /// Set a custom display name for a tab in the current workspace. Empty
+    /// (after trim) clears the override so `tabDisplayName` falls back to
+    /// the auto cwd-derived label. Mirrors `renameWorkspace`'s semantics.
+    func renameTab(_ tabID: TabID, to name: String) {
+        guard let i = currentIndex,
+              let t = workspaces[i].tabs.firstIndex(where: { $0.id == tabID }) else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        workspaces[i].tabs[t].name = trimmed.isEmpty ? nil : trimmed
+    }
+
     /// Reorder a tab within the current workspace. `targetIndex` is the
     /// index of the chip the user dropped onto (in the workspace's `tabs`
     /// array). Mirrors `moveWorkspace`'s before/after resolution so the

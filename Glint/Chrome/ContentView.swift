@@ -436,6 +436,9 @@ private struct TabChip: View {
     var onReorderChange: (CGFloat) -> Void = { _ in }
     var onReorderEnd: () -> Void = {}
     @State private var hovering = false
+    @State private var isEditing = false
+    @State private var draftName = ""
+    @FocusState private var nameFieldFocused: Bool
 
     var body: some View {
         let kind = store.tabIconKind(tab, in: ws)
@@ -445,12 +448,33 @@ private struct TabChip: View {
                 // Unselected tabs recede to bare dimmed text+icon in the
                 // glass cluster, so the accent pill is the only chrome.
                 .opacity(isActive || !inGlassCluster ? 1 : 0.7)
-            Text(ws.tabDisplayName(tab))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(isActive ? Theme.text1 : Theme.text3)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: 150)
+            if isEditing {
+                TextField("", text: $draftName)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.text1)
+                    .frame(maxWidth: 150)
+                    .focused($nameFieldFocused)
+                    .onSubmit { commitRename() }
+                    .onExitCommand { cancelRename() }
+                    .onAppear {
+                        // Start the field with the user's current override
+                        // (empty if the tab is still auto-named) — so empty-
+                        // submit reverts to auto, matching renameTab.
+                        draftName = tab.name ?? ""
+                        DispatchQueue.main.async { nameFieldFocused = true }
+                    }
+                    .onChange(of: nameFieldFocused) { _, focused in
+                        if !focused && isEditing { commitRename() }
+                    }
+            } else {
+                Text(ws.tabDisplayName(tab))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(isActive ? Theme.text1 : Theme.text3)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 150)
+            }
             trailingSlot(status: status)
         }
         .padding(.leading, 4)
@@ -485,9 +509,16 @@ private struct TabChip: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(Text(verbatim: ws.tabDisplayName(tab)))
-        .onTapGesture { store.selectTab(tab.id) }
-        .onHover { hovering = $0 }
+        .onTapGesture {
+            // Single-tap selects the tab. During edit the tap is the user
+            // clicking into the field — don't steal the focus to selectTab.
+            if !isEditing { store.selectTab(tab.id) }
+        }
+        .onHover { hovering = $0 && !isEditing }
         .help(ws.tabDisplayName(tab))
+        .contextMenu {
+            Button("Rename") { startEditing() }
+        }
         // Lift the dragged chip above its neighbours — same shape as the
         // sidebar's WorkspaceCard, scaled down a touch since chips are
         // smaller and the header is shallow.
@@ -505,6 +536,20 @@ private struct TabChip: View {
                 .onChanged { value in onReorderChange(value.location.x) }
                 .onEnded { _ in onReorderEnd() }
         )
+    }
+
+    private func startEditing() {
+        draftName = tab.name ?? ""
+        isEditing = true
+    }
+
+    private func commitRename() {
+        store.renameTab(tab.id, to: draftName)
+        isEditing = false
+    }
+
+    private func cancelRename() {
+        isEditing = false
     }
 
     /// Same condition as TabBar.glassCluster — chips restyle as segments
