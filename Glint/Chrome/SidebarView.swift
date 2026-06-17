@@ -623,11 +623,7 @@ private struct WorkspaceCard: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                if archived {
-                    archivedMetadataRow(active: active)
-                } else {
-                    secondaryRow(summary: summary, active: active)
-                }
+                secondaryRow(summary: summary, active: active)
             }
             Spacer(minLength: 0)
         }
@@ -643,6 +639,10 @@ private struct WorkspaceCard: View {
         .overlay(alignment: .topTrailing) {
             if let n = shortcutBadge {
                 ShortcutBadge(number: n)
+                    .padding(4)
+                    .accessibilityHidden(true)
+            } else if archived {
+                archivedCornerMarker
                     .padding(4)
                     .accessibilityHidden(true)
             }
@@ -702,7 +702,9 @@ private struct WorkspaceCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(Text(verbatim: ws.displayName))
-        .accessibilityValue(Text(verbatim: accessibilityStatus(summary: summary)))
+        .accessibilityValue(Text(verbatim: archived
+                                 ? String(localized: "Archived")
+                                 : accessibilityStatus(summary: summary)))
         // Lift the dragged card above its neighbours.
         .scaleEffect(isDragging ? 1.03 : 1.0, anchor: .center)
         .shadow(color: Color.black.opacity(isDragging ? 0.35 : 0),
@@ -816,33 +818,31 @@ private struct WorkspaceCard: View {
         .animation(.easeInOut(duration: 0.18), value: key)
     }
 
-    /// Archived variant of the secondary row: a single muted "已归档" badge,
-    /// no tab/pane counts (they'd be noise — the user already knows the
-    /// workspace is parked) and no live status (no panes are running while
-    /// the surfaces are dropped).
-    private func archivedMetadataRow(active: Bool) -> some View {
-        HStack(spacing: 5) {
-            HStack(spacing: 3) {
-                Image(systemName: "archivebox.fill")
-                    .font(.system(size: 8, weight: .semibold))
-                Text("Archived")
-                    .font(.system(size: 9.5, weight: .semibold))
-            }
-            .foregroundStyle(Theme.text2)
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.14))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
-            )
+    /// Top-right corner marker for archived cards — icon only, sits in the
+    /// same slot as `ShortcutBadge` (archived workspaces are skipped by
+    /// ⌘1…⌘9 so the two never collide). Replaces the old "Archived" capsule
+    /// in the secondary row; the row itself is omitted for archived cards
+    /// so they read as visually parked.
+    private var archivedCornerMarker: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "archivebox.fill")
+                .font(.system(size: 8, weight: .semibold))
+            Text("Archived")
+                .font(.system(size: 9.5, weight: .semibold))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(Theme.text2)
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.12))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(Color.white.opacity(0.16), lineWidth: 0.5)
+        )
     }
 
     private func workspaceMetadataRow(active: Bool) -> some View {
