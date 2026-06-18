@@ -109,10 +109,9 @@ struct WorkspaceTab: Identifiable, Codable {
     var name: String?
     var root: SplitNode
     var focusedPane: PaneID
-    /// Last-known agent identity ("claude"/"codex") for this tab, so its chip
-    /// icon survives a restart before any pane re-reports. Mirrors
-    /// `Workspace.iconHint` but scoped to this tab's panes. Synthesized
-    /// Codable decodes a missing key (older saves) as nil. See `tabIconKind`.
+    /// Current agent identity ("claude"/"codex"/"opencode") for this tab,
+    /// mirrored from live process state and cleared when the tab returns to
+    /// shell. Synthesized Codable decodes a missing key (older saves) as nil.
     var iconHint: String? = nil
 }
 
@@ -125,10 +124,10 @@ struct Workspace: Identifiable, Codable {
     /// Hex string like "5E5CE6" for Codable simplicity.
     var accentHex: String
     var symbol: String
-    /// Last-known agent identity ("claude"/"codex") for this workspace, so its
-    /// icon survives a restart before any process re-reports. Only the *kind*
-    /// is persisted — the live agent *status* (thinking/needsPermission/…) is
-    /// runtime-only and intentionally not saved. See `iconKind(for:)`.
+    /// Current agent identity ("claude"/"codex"/"opencode") mirrored from
+    /// live process state and cleared when the workspace returns to shell.
+    /// The live agent *status* (thinking/needsPermission/…) is runtime-only
+    /// and intentionally not saved. See `iconKind(for:)`.
     var iconHint: String?
     /// Parked away from the main sidebar list. The model (panes, splits,
     /// cwd, lastAgent) survives intact; only the live surfaces are dropped,
@@ -829,8 +828,8 @@ final class WorkspaceStore: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.captureCwdsFromLiveSurfaces()
-                // Capture the live agent identity so the icon persists across a
-                // restart (writes only when it actually changes).
+                // Mirror the current agent identity, and clear it once the pane
+                // returns to shell, so sidebar icons don't stick after exit.
                 self.syncIconHints()
                 // Snapshot terminal scrollback to disk roughly every 5s (off
                 // the IO/main hot path; skips panes with no new output).
@@ -1041,21 +1040,17 @@ final class WorkspaceStore: ObservableObject {
                 }
                 if let name = view.foregroundProcessName() {
                     newProcesses[key] = name
-                    // Track CURRENT claude/codex foreground so the next launch
-                    // can optionally `--continue` / `resume --last` (gated by
-                    // the per-agent setting). Not sticky: a pane that quit
-                    // back to the shell clears its hint, so we don't auto-
-                    // resume on a pane the user explicitly exited from.
-                    let lower = name.lowercased()
-                    let agent: String? = {
-                        if lower.contains("claude") { return "claude" }
-                        if lower.contains("codex")  { return "codex" }
-                        if lower.contains("opencode") { return "opencode" }
-                        return nil
-                    }()
+                    // Track CURRENT claude/codex/opencode foreground so the
+                    // next launch can optionally `--continue` / `resume --last`
+                    // (gated by the per-agent setting). Not sticky: a pane
+                    // that quit back to the shell clears its hint, so we don't
+                    // auto-resume on a pane the user explicitly exited from.
+                    let agent = Self.agentToken(forProcessName: name)
                     if workspaces[i].panes[paneID]?.lastAgent != agent {
                         workspaces[i].panes[paneID]?.lastAgent = agent
                     }
+                } else if workspaces[i].panes[paneID]?.lastAgent != nil {
+                    workspaces[i].panes[paneID]?.lastAgent = nil
                 }
             }
         }
@@ -1065,22 +1060,32 @@ final class WorkspaceStore: ObservableObject {
             }
             paneProcesses = newProcesses
         }
+        let observedPaneKeys = Set(newProcesses.keys).union(paneAgentState.keys)
 
         // Reconcile stale hook state. Hooks are the only writer of
         // paneAgentState and no hook fires when an agent quits, so after
-        // e.g. claude → exit → codex the pane keeps kind == .claude and
-        // iconKind (which prefers hook state over pid polling) never
-        // flips. Claude masks this by emitting SessionStart on launch;
-        // codex sends nothing until its first turn ends. When the poller
-        // sees a pane actually running a *different* known agent, hand
-        // the state over to it.
-        for (key, name) in newProcesses {
+        // e.g. claude → exit → shell the pane can keep kind == .claude and
+        // iconKind (which prefers hook state over pid polling) stays stuck.
+        // The poller is authoritative for whether the pane has returned to a
+        // shell. Transfer state to a different live agent, but do not clear
+        // just because the foreground process is a tool/wrapper: Claude/Codex/
+        // OpenCode can temporarily foreground child processes while the
+        // session is still alive.
+        for key in observedPaneKeys {
             guard var state = paneAgentState[key] else { continue }
-            let runningKind: PaneAgentKind? =
-                name.contains("claude") ? .claude :
-                name.contains("codex") ? .codex :
-                name.contains("opencode") ? .opencode : nil
-            if let runningKind, runningKind != state.kind {
+            let processName = newProcesses[key]
+            let runningKind = processName.flatMap(Self.agentKind(forProcessName:))
+            if runningKind == nil, Self.isBenignShellProcessName(processName) {
+                paneAgentState.removeValue(forKey: key)
+                continue
+            }
+            guard let runningKind else { continue }
+            if runningKind != state.kind {
+                // Hook state is authoritative while a turn/approval/tool is
+                // active. Some agent CLIs foreground helper processes or model
+                // wrappers whose names can look like another agent; do not let
+                // the 1s process poller flip OpenCode to Claude mid-turn.
+                guard !Self.isBusyStatus(state.status) else { continue }
                 state.kind = runningKind
                 state.status = .idle
                 state.detail = nil
@@ -1101,14 +1106,13 @@ final class WorkspaceStore: ObservableObject {
               let hook = info["hook"] as? String,
               let key = Self.parsePaneKey(paneStr) else { return }
 
-        let agentStr = (info["agent"] as? String) ?? "claude"
-        let kind: PaneAgentKind = {
-            switch agentStr.lowercased() {
-            case "codex": return .codex
-            case "opencode": return .opencode
-            default: return .claude
-            }
-        }()
+        let explicitKind = (info["agent"] as? String).flatMap(Self.agentKind(forAgentToken:))
+        let foregroundKind = surfaceViews[key]?.foregroundProcessName()
+            .flatMap(Self.agentKind(forProcessName:))
+        let polledKind = paneProcesses[key].flatMap(Self.agentKind(forProcessName:))
+        guard let kind = explicitKind ?? paneAgentState[key]?.kind ?? foregroundKind ?? polledKind else {
+            return
+        }
 
         // Note: we deliberately do NOT force-write paneProcesses here. The
         // 1s poller owns that dictionary and replaces it wholesale, so any
@@ -1342,13 +1346,39 @@ final class WorkspaceStore: ObservableObject {
     /// close-confirmation check and the workspace icon picker.
     static let benignShells: Set<String> = ["zsh", "bash", "fish", "sh", "dash", "ksh", "login", "tmux"]
 
+    private static func agentToken(forProcessName name: String) -> String? {
+        switch agentKind(forProcessName: name) {
+        case .claude: return "claude"
+        case .codex: return "codex"
+        case .opencode: return "opencode"
+        case nil: return nil
+        }
+    }
+
+    private static func agentKind(forProcessName name: String) -> PaneAgentKind? {
+        agentKind(forAgentToken: name)
+    }
+
+    private static func agentKind(forAgentToken token: String) -> PaneAgentKind? {
+        let lower = token.lowercased()
+        if lower.contains("claude") { return .claude }
+        if lower.contains("codex") { return .codex }
+        if lower.contains("opencode") { return .opencode }
+        return nil
+    }
+
+    private static func isBenignShellProcessName(_ name: String?) -> Bool {
+        guard let name, !name.isEmpty else { return true }
+        return benignShells.contains(name.lowercased())
+    }
+
     /// True when killing this pane would interrupt real work: a CLI agent
     /// with a live session (even an idle one — closing kills the session),
     /// or any non-shell foreground process (vim, ssh, a build, …).
     func paneNeedsCloseConfirmation(_ key: WorkspacePaneKey) -> Bool {
         if paneAgentState[key] != nil,
            let name = paneProcesses[key]?.lowercased(),
-           name.contains("claude") || name.contains("codex") {
+           Self.agentKind(forProcessName: name) != nil {
             return true
         }
         if let s = paneAgentState[key]?.status,
@@ -2006,10 +2036,8 @@ extension WorkspaceStore {
         return best
     }
 
-    /// Icon for a single tab chip. Prefers what's running live; after a
-    /// restart (no pane has reported yet → live falls back to `.shell`) it
-    /// restores the tab's persisted agent identity, exactly like
-    /// `iconKind(for:)` does for workspaces. A live agent/process always wins.
+    /// Icon for a single tab chip. Only live process/hook state affects the
+    /// icon; when an agent exits back to shell, the chip returns to shell.
     func tabIconKind(_ tab: WorkspaceTab, in workspace: Workspace) -> WorkspaceIconKind {
         // Tab chips never restore an agent identity from `iconHint` — only
         // a live claude/codex process surfaces an agent icon. Sidebar cards
@@ -2018,40 +2046,29 @@ extension WorkspaceStore {
         liveIconKind(paneIDs: tab.root.leaves, workspaceID: workspace.id)
     }
 
-    /// Icon to display for a workspace. Prefers what's running live; after a
-    /// restart (no process has reported yet → live falls back to `.shell`) it
-    /// restores the persisted agent identity so the workspace keeps its icon.
-    /// A live agent/process always wins over the saved hint.
+    /// Icon to display for a workspace. Only live process/hook state affects
+    /// the icon; when an agent exits back to shell, the icon returns to shell.
     func iconKind(for workspace: Workspace) -> WorkspaceIconKind {
-        let live = liveIconKind(for: workspace)
-        if case .shell = live,
-           let hint = workspace.iconHint,
-           let restored = WorkspaceIconKind.fromPersistToken(hint) {
-            return restored
-        }
-        return live
+        liveIconKind(for: workspace)
     }
 
-    /// Persist each workspace's — and each of its tabs' — live agent identity
-    /// (claude/codex) into the matching `iconHint` so icons survive a restart.
-    /// Writes only on change to avoid autosave churn; never clears a hint (a
-    /// workspace/tab that drops back to a bare shell keeps its last agent icon).
-    /// Status is never touched.
+    /// Mirror each workspace's — and each of its tabs' — current live agent
+    /// identity into the saved model. Dropping back to shell clears the hint
+    /// so a previous Claude/Codex/OpenCode session does not stick forever.
+    /// Status is never persisted.
     func syncIconHints() {
         var changed = false
         for i in workspaces.indices {
-            if let token = liveIconKind(for: workspaces[i]).persistToken,
-               workspaces[i].iconHint != token {
+            let token = liveIconKind(for: workspaces[i]).persistToken
+            if workspaces[i].iconHint != token {
                 workspaces[i].iconHint = token
                 changed = true
             }
-            // Same policy per tab, scoped to that tab's panes, so a folded or
-            // background tab restores its own agent icon independently.
+            // Same policy per tab, scoped to that tab's panes.
             for j in workspaces[i].tabs.indices {
                 let leaves = workspaces[i].tabs[j].root.leaves
-                guard let token = liveIconKind(paneIDs: leaves,
-                                               workspaceID: workspaces[i].id).persistToken
-                else { continue }
+                let token = liveIconKind(paneIDs: leaves,
+                                         workspaceID: workspaces[i].id).persistToken
                 if workspaces[i].tabs[j].iconHint != token {
                     workspaces[i].tabs[j].iconHint = token
                     changed = true
@@ -2059,10 +2076,8 @@ extension WorkspaceStore {
             }
         }
         // Flush immediately rather than waiting on the 0.5s autosave debounce:
-        // an agent appearing is a rare event, and a hard kill (dev `pkill -9`,
-        // crash) inside the debounce window would otherwise lose the hint, so
-        // the icon wouldn't restore. Cheap because `changed` is almost always
-        // false (the token only flips when claude/codex first shows up).
+        // a stale agent hint makes the sidebar lie after an exit/restart.
+        // Cheap because `changed` is almost always false.
         if changed { persist() }
     }
 
@@ -2076,7 +2091,7 @@ extension WorkspaceStore {
     /// workspace (all panes) and a single tab (just that tab's leaves).
     private func liveIconKind(paneIDs: [PaneID], workspaceID: UUID) -> WorkspaceIconKind {
         // Agent push-state wins over pid polling — if any pane reported a
-        // claude/codex hook, surface that. With several agent panes (e.g.
+        // claude/codex/opencode hook, surface that. With several agent panes (e.g.
         // claude + codex side by side) the busy one wins; when all are equally
         // busy/idle, the most recently active wins. `paneIDs` may come from a
         // Dictionary's keys, so without this ordering the icon would be
