@@ -677,3 +677,237 @@ enum OpenCodeHookInstaller {
     }
     """
 }
+
+/// Opt-in shell keybindings that make modified-Enter chords behave like a
+/// plain Enter at the prompt.
+///
+/// Modern terminals (ghostty, kitty, foot, …) encode Shift+Enter / Ctrl+Enter
+/// as extended-key escapes (e.g. `\u{1b}[27;2;13~`) so apps can tell them
+/// apart from Enter. A bare shell that hasn't bound those sequences echoes the
+/// printable tail (`;2;13~`) into the command line. This installs a small,
+/// clearly-delimited, removable block into the user's shell rc that binds the
+/// common modified-Enter sequences to `accept-line` — matching Terminal.app's
+/// "Shift+Enter == Enter" behavior. The binding is keyed to escapes that only
+/// these terminals emit, so it's inert elsewhere (Terminal.app, iTerm).
+///
+/// Off by default and never touched by the first-launch hook prompt; the user
+/// turns it on/off in Settings → Terminal.
+enum ShellKeybindInstaller {
+    private static let beginMarker = "# >>> glint shell keybindings >>>"
+    private static let endMarker = "# <<< glint shell keybindings <<<"
+
+    private struct Target {
+        let rcPath: String          // rc file, relative to home (e.g. ".zshrc")
+        let payloadPath: String     // sourced script, relative to home
+        let payloadBody: String     // the script's contents
+        let wantedWhenMissing: Bool // create the rc if it doesn't exist yet?
+    }
+
+    // Sequences ghostty/kitty-family terminals emit for modified keys that a
+    // bare shell doesn't bind, so they leak (e.g. Shift+Enter → `;2;13~`,
+    // Shift+→ → `1;2C`) or no-op. We bind the common ones to sensible widgets.
+    // The bindings live in their own file under ~/.config/glint so the rc only
+    // gains a one-line `source`. Modifier digit: 2=Shift, 3=Alt, 5=Ctrl,
+    // 6=Ctrl+Shift. (Backspace is deliberately left alone — ghostty sends
+    // ^H / ^[^? which shells already handle, and rebinding ^H hijacks Ctrl+H.)
+    private static let zshPayload = """
+    # Glint shell keybindings — managed by Glint (Settings → Terminal).
+    # Makes modified keys behave sensibly at the prompt instead of leaving raw
+    # terminal escapes (e.g. Shift+Enter → ;2;13~, Shift+Right → 1;2C).
+    # Regenerated on install, removed on uninstall — don't edit by hand.
+    if [ -n "${ZSH_VERSION:-}" ]; then
+      # Modified Enter → act like Enter
+      bindkey '^[[27;2;13~' accept-line          # Shift+Enter
+      bindkey '^[[27;5;13~' accept-line          # Ctrl+Enter
+      bindkey '^[[27;6;13~' accept-line          # Ctrl+Shift+Enter
+      # Left/Right: Shift = by char, Ctrl/Alt = by word
+      bindkey '^[[1;2D' backward-char            # Shift+Left
+      bindkey '^[[1;2C' forward-char             # Shift+Right
+      bindkey '^[[1;5D' backward-word            # Ctrl+Left
+      bindkey '^[[1;5C' forward-word             # Ctrl+Right
+      bindkey '^[[1;3D' backward-word            # Alt+Left
+      bindkey '^[[1;3C' forward-word             # Alt+Right
+      # Up/Down (any modifier) → history, like the plain arrows
+      bindkey '^[[1;2A' up-line-or-history       # Shift+Up
+      bindkey '^[[1;2B' down-line-or-history     # Shift+Down
+      bindkey '^[[1;5A' up-line-or-history       # Ctrl+Up
+      bindkey '^[[1;5B' down-line-or-history     # Ctrl+Down
+      bindkey '^[[1;3A' up-line-or-history       # Alt+Up
+      bindkey '^[[1;3B' down-line-or-history     # Alt+Down
+      # Home/End (any modifier) → start/end of line
+      bindkey '^[[1;2H' beginning-of-line        # Shift+Home
+      bindkey '^[[1;2F' end-of-line              # Shift+End
+      bindkey '^[[1;5H' beginning-of-line        # Ctrl+Home
+      bindkey '^[[1;5F' end-of-line              # Ctrl+End
+      bindkey '^[[1;3H' beginning-of-line        # Alt+Home
+      bindkey '^[[1;3F' end-of-line              # Alt+End
+      # Delete: Shift = one char, Ctrl/Alt = word
+      bindkey '^[[3;2~' delete-char              # Shift+Delete
+      bindkey '^[[3;5~' kill-word                # Ctrl+Delete
+      bindkey '^[[3;3~' kill-word                # Alt+Delete
+    fi
+    """
+
+    private static let bashPayload = """
+    # Glint shell keybindings — managed by Glint (Settings → Terminal).
+    # Regenerated on install, removed on uninstall — don't edit by hand.
+    if [ -n "${BASH_VERSION:-}" ]; then
+      bind '"\\e[27;2;13~": accept-line' 2>/dev/null   # Shift+Enter
+      bind '"\\e[27;5;13~": accept-line' 2>/dev/null   # Ctrl+Enter
+      bind '"\\e[27;6;13~": accept-line' 2>/dev/null   # Ctrl+Shift+Enter
+      bind '"\\e[1;2D": backward-char' 2>/dev/null     # Shift+Left
+      bind '"\\e[1;2C": forward-char' 2>/dev/null      # Shift+Right
+      bind '"\\e[1;5D": backward-word' 2>/dev/null     # Ctrl+Left
+      bind '"\\e[1;5C": forward-word' 2>/dev/null      # Ctrl+Right
+      bind '"\\e[1;3D": backward-word' 2>/dev/null     # Alt+Left
+      bind '"\\e[1;3C": forward-word' 2>/dev/null      # Alt+Right
+      bind '"\\e[1;2A": previous-history' 2>/dev/null  # Shift+Up
+      bind '"\\e[1;2B": next-history' 2>/dev/null      # Shift+Down
+      bind '"\\e[1;5A": previous-history' 2>/dev/null  # Ctrl+Up
+      bind '"\\e[1;5B": next-history' 2>/dev/null      # Ctrl+Down
+      bind '"\\e[1;3A": previous-history' 2>/dev/null  # Alt+Up
+      bind '"\\e[1;3B": next-history' 2>/dev/null      # Alt+Down
+      bind '"\\e[1;2H": beginning-of-line' 2>/dev/null # Shift+Home
+      bind '"\\e[1;2F": end-of-line' 2>/dev/null       # Shift+End
+      bind '"\\e[1;5H": beginning-of-line' 2>/dev/null # Ctrl+Home
+      bind '"\\e[1;5F": end-of-line' 2>/dev/null       # Ctrl+End
+      bind '"\\e[1;3H": beginning-of-line' 2>/dev/null # Alt+Home
+      bind '"\\e[1;3F": end-of-line' 2>/dev/null       # Alt+End
+      bind '"\\e[3;2~": delete-char' 2>/dev/null       # Shift+Delete
+      bind '"\\e[3;5~": kill-word' 2>/dev/null         # Ctrl+Delete
+      bind '"\\e[3;3~": kill-word' 2>/dev/null         # Alt+Delete
+    fi
+    """
+
+    /// The marker block written into the rc: just sources the payload file.
+    private static func sourceBlock(_ payloadPath: String) -> String {
+        """
+        \(beginMarker)
+        [ -r "$HOME/\(payloadPath)" ] && source "$HOME/\(payloadPath)"
+        \(endMarker)
+        """
+    }
+
+    private static var targets: [Target] {
+        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? ""
+        return [
+            Target(rcPath: ".zshrc",
+                   payloadPath: ".config/glint/keybindings.zsh",
+                   payloadBody: zshPayload,
+                   wantedWhenMissing: shell.contains("zsh")),
+            Target(rcPath: ".bashrc",
+                   payloadPath: ".config/glint/keybindings.bash",
+                   payloadBody: bashPayload,
+                   wantedWhenMissing: shell.contains("bash")),
+        ]
+    }
+
+    private static func url(_ rcPath: String) -> URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(rcPath)
+    }
+
+    /// Installed if any target rc already carries our source block.
+    static func isInstalled() -> Bool {
+        for t in targets {
+            if let body = try? String(contentsOf: url(t.rcPath), encoding: .utf8),
+               body.contains(beginMarker) {
+                return true
+            }
+        }
+        return false
+    }
+
+    static func install() {
+        for t in targets {
+            let rcURL = url(t.rcPath)
+            let exists = FileManager.default.fileExists(atPath: rcURL.path)
+            guard exists || t.wantedWhenMissing else { continue }
+            // 1) (re)write the payload file the rc will source.
+            writePayload(t.payloadBody, to: url(t.payloadPath))
+            // 2) upsert the one-line source block into the rc.
+            let current = (try? String(contentsOf: rcURL, encoding: .utf8)) ?? ""
+            let updated = upsertBlock(in: current, block: sourceBlock(t.payloadPath))
+            guard updated != current else { continue }
+            write(updated, to: rcURL, created: !exists)
+        }
+    }
+
+    static func uninstall() {
+        for t in targets {
+            let rcURL = url(t.rcPath)
+            if let current = try? String(contentsOf: rcURL, encoding: .utf8),
+               current.contains(beginMarker) {
+                let stripped = removeBlock(from: current)
+                if stripped != current { write(stripped, to: rcURL, created: false) }
+            }
+            try? FileManager.default.removeItem(at: url(t.payloadPath))
+        }
+        // Drop ~/.config/glint if it's now empty (ignore if it isn't).
+        let dir = url(".config/glint")
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: dir.path),
+           entries.isEmpty {
+            try? FileManager.default.removeItem(at: dir)
+        }
+    }
+
+    /// Write a sourced script, creating ~/.config/glint as needed.
+    private static func writePayload(_ text: String, to fileURL: URL) {
+        do {
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+            let created = !FileManager.default.fileExists(atPath: fileURL.path)
+            let mode = created ? 0o600 : posixPermissions(atPath: fileURL.path)
+            try text.write(to: fileURL, atomically: true, encoding: .utf8)
+            setPosixPermissions(mode, atPath: fileURL.path)
+        } catch {
+            NSLog("[glint] shell keybind payload write failed for \(fileURL.path): \(error)")
+        }
+    }
+
+    private static func write(_ text: String, to fileURL: URL, created: Bool) {
+        do {
+            // New file → 0600; existing file → preserve its mode across the
+            // atomic replace (which would otherwise reset to the umask).
+            let mode = created ? 0o600 : posixPermissions(atPath: fileURL.path)
+            try text.write(to: fileURL, atomically: true, encoding: .utf8)
+            setPosixPermissions(mode, atPath: fileURL.path)
+        } catch {
+            NSLog("[glint] shell keybind write failed for \(fileURL.path): \(error)")
+        }
+    }
+
+    private static func upsertBlock(in text: String, block: String) -> String {
+        if let range = markerRange(in: text) {
+            var out = text
+            out.replaceSubrange(range, with: block)
+            return out
+        }
+        var out = text
+        if !out.isEmpty && !out.hasSuffix("\n") { out += "\n" }
+        if !out.isEmpty { out += "\n" }
+        return out + block + "\n"
+    }
+
+    private static func removeBlock(from text: String) -> String {
+        guard let range = markerRange(in: text) else { return text }
+        var out = text
+        out.removeSubrange(range)
+        // Trim a leading blank line we may have left where the block sat.
+        if out.hasPrefix("\n") { out.removeFirst() }
+        return out
+    }
+
+    /// Span covering the marker block plus its trailing newline, so removing
+    /// it doesn't leave a dangling blank line.
+    private static func markerRange(in text: String) -> Range<String.Index>? {
+        guard let begin = text.range(of: beginMarker),
+              let end = text.range(of: endMarker),
+              begin.lowerBound < end.upperBound else { return nil }
+        var upper = end.upperBound
+        if upper < text.endIndex, text[upper] == "\n" {
+            upper = text.index(after: upper)
+        }
+        return begin.lowerBound..<upper
+    }
+}

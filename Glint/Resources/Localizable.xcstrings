@@ -1650,6 +1650,56 @@
         }
       }
     },
+    "Shell keybindings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell 按键绑定"
+          }
+        }
+      }
+    },
+    "Writes the bindings to ~/.config/glint/ and adds a single source line to ~/.zshrc (and ~/.bashrc if present) so modified keys behave sensibly at the shell prompt instead of inserting a raw escape like ;2;13~ or 1;2C. Covers Shift/Ctrl+Enter, Shift/Ctrl/Alt + arrows, Home/End and Delete (Ctrl+←/→ jump by word). Off by default. Doesn't affect Claude/Codex panes, which use these keys themselves." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把按键绑定写到 ~/.config/glint/,并在 ~/.zshrc(以及存在的话 ~/.bashrc)里只加一行 source 引用,让带修饰键在 shell 提示符下表现正常,而不是插入像 ;2;13~ 或 1;2C 这样的原始转义。覆盖 Shift/Ctrl+Enter、Shift/Ctrl/Alt + 方向键、Home/End 和 Delete(Ctrl+←/→ 按词移动)。默认关闭。不影响 Claude/Codex 窗格(它们自己要用这些键)。"
+          }
+        }
+      }
+    },
+    "Normalize modified keys" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "规整带修饰按键"
+          }
+        }
+      }
+    },
+    "Installed — open a new shell for it to take effect." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装 —— 新开一个 shell 后生效。"
+          }
+        }
+      }
+    },
+    "Not installed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未安装。"
+          }
+        }
+      }
+    },
     "Glint can register status hooks with %@ that report when an agent is thinking, finished, or waiting for approval. They only send events to Glint on this Mac. You can uninstall them anytime in Settings → Agents." : {
       "localizations" : {
         "zh-Hans" : {

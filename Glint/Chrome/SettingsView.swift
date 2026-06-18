@@ -529,6 +529,7 @@ private struct AppearancePane: View {
 
 private struct TerminalPane: View {
     @EnvironmentObject var store: WorkspaceStore
+    @State private var shellKeybindsInstallFailed = false
 
     /// Curated list of monospaced families we know ghostty can resolve.
     /// Extra families fall back to Menlo via the second `font-family` line
@@ -588,6 +589,37 @@ private struct TerminalPane: View {
                         subtitle: "Ask first when the clipboard contains newlines or control characters — a multi-line paste into a shell prompt runs each line immediately.") {
                 Toggle("", isOn: $store.warnBeforeUnsafePaste)
                     .toggleStyle(.switch).labelsHidden()
+            }
+        }
+
+        SettingsCard("Shell keybindings",
+                     footer: "Writes the bindings to ~/.config/glint/ and adds a single source line to ~/.zshrc (and ~/.bashrc if present) so modified keys behave sensibly at the shell prompt instead of inserting a raw escape like ;2;13~ or 1;2C. Covers Shift/Ctrl+Enter, Shift/Ctrl/Alt + arrows, Home/End and Delete (Ctrl+←/→ jump by word). Off by default. Doesn't affect Claude/Codex panes, which use these keys themselves.") {
+            SettingsRow("Normalize modified keys",
+                        subtitle: shellKeybindsInstallFailed
+                        ? "Install failed — check Console for [glint] logs."
+                        : (store.shellKeybindsInstalled
+                           ? "Installed — open a new shell for it to take effect."
+                           : "Not installed.")) {
+                HStack(spacing: 8) {
+                    StatusPill(
+                        label: store.shellKeybindsInstalled ? "Installed" : "Not installed",
+                        tone: store.shellKeybindsInstalled ? .ok : .neutral
+                    )
+                    if store.shellKeybindsInstalled {
+                        Button("Uninstall") {
+                            store.uninstallShellKeybinds()
+                            shellKeybindsInstallFailed = false
+                        }
+                            .controlSize(.small)
+                    } else {
+                        Button("Install") {
+                            store.installShellKeybinds()
+                            shellKeybindsInstallFailed = !store.shellKeybindsInstalled
+                        }
+                            .controlSize(.small)
+                            .tint(store.accent)
+                    }
+                }
             }
         }
     }

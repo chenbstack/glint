@@ -456,6 +456,10 @@ final class WorkspaceStore: ObservableObject {
     /// Whether Glint's OpenCode plugin is installed in `~/.config/opencode/plugins`.
     @Published var opencodeHooksInstalled: Bool = false
 
+    /// Whether Glint's modified-Enter shell keybindings are present in the
+    /// user's shell rc (~/.zshrc / ~/.bashrc). Opt-in, default off.
+    @Published var shellKeybindsInstalled: Bool = false
+
     /// Single switch for all behind-window vibrancy in the chrome (sidebar,
     /// toolbar, and the matching settings sidebar). When off, chrome falls
     /// back to flat opaque surfaces — useful on older Macs and gives a
@@ -709,6 +713,16 @@ final class WorkspaceStore: ObservableObject {
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
     }
 
+    func installShellKeybinds() {
+        ShellKeybindInstaller.install()
+        self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
+    }
+
+    func uninstallShellKeybinds() {
+        ShellKeybindInstaller.uninstall()
+        self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
+    }
+
     /// Best-effort "is this agent installed on this Mac" checks, surfaced in
     /// Settings → Agents so a card reads "Not detected" instead of silently
     /// offering to install hooks for a tool the user doesn't have.
@@ -854,6 +868,7 @@ final class WorkspaceStore: ObservableObject {
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
+        self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: .glintAgentEvent,
             object: nil,
