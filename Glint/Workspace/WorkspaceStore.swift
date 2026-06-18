@@ -109,10 +109,6 @@ struct WorkspaceTab: Identifiable, Codable {
     var name: String?
     var root: SplitNode
     var focusedPane: PaneID
-    /// Current agent identity ("claude"/"codex"/"opencode") for this tab,
-    /// mirrored from live process state and cleared when the tab returns to
-    /// shell. Synthesized Codable decodes a missing key (older saves) as nil.
-    var iconHint: String? = nil
 }
 
 struct Workspace: Identifiable, Codable {
@@ -124,11 +120,6 @@ struct Workspace: Identifiable, Codable {
     /// Hex string like "5E5CE6" for Codable simplicity.
     var accentHex: String
     var symbol: String
-    /// Current agent identity ("claude"/"codex"/"opencode") mirrored from
-    /// live process state and cleared when the workspace returns to shell.
-    /// The live agent *status* (thinking/needsPermission/…) is runtime-only
-    /// and intentionally not saved. See `iconKind(for:)`.
-    var iconHint: String?
     /// Parked away from the main sidebar list. The model (panes, splits,
     /// cwd, lastAgent) survives intact; only the live surfaces are dropped,
     /// so unarchive resumes from the saved state via the same code path as
@@ -152,7 +143,7 @@ struct Workspace: Identifiable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, userNamed, accentHex, symbol, iconHint, archived
+        case id, name, userNamed, accentHex, symbol, archived
         case tabs, selectedTabID, nextTabSeq, panes, nextPaneSeq
         // Legacy single-tree keys, still read so pre-tabs saves migrate.
         case root, focusedPane
@@ -160,14 +151,13 @@ struct Workspace: Identifiable, Codable {
 
     init(id: UUID, name: String, userNamed: Bool, accentHex: String, symbol: String,
          tabs: [WorkspaceTab], selectedTabID: TabID, nextTabSeq: UInt32,
-         panes: [PaneID: Pane], nextPaneSeq: UInt32, iconHint: String? = nil,
+         panes: [PaneID: Pane], nextPaneSeq: UInt32,
          archived: Bool = false) {
         self.id = id
         self.name = name
         self.userNamed = userNamed
         self.accentHex = accentHex
         self.symbol = symbol
-        self.iconHint = iconHint
         self.archived = archived
         self.tabs = tabs
         self.selectedTabID = selectedTabID
@@ -185,9 +175,6 @@ struct Workspace: Identifiable, Codable {
         self.userNamed = (try? c.decode(Bool.self, forKey: .userNamed)) ?? true
         self.accentHex = try c.decode(String.self, forKey: .accentHex)
         self.symbol = try c.decode(String.self, forKey: .symbol)
-        // Older saves predate the persisted icon hint — fine, it stays nil and
-        // the icon is derived live until an agent reports.
-        self.iconHint = try c.decodeIfPresent(String.self, forKey: .iconHint)
         // Older saves predate the archive feature — default to active.
         self.archived = (try? c.decode(Bool.self, forKey: .archived)) ?? false
         self.panes = try c.decode([PaneID: Pane].self, forKey: .panes)
@@ -225,7 +212,6 @@ struct Workspace: Identifiable, Codable {
         try c.encode(userNamed, forKey: .userNamed)
         try c.encode(accentHex, forKey: .accentHex)
         try c.encode(symbol, forKey: .symbol)
-        try c.encodeIfPresent(iconHint, forKey: .iconHint)
         if archived { try c.encode(true, forKey: .archived) }   // omit the common case
         try c.encode(tabs, forKey: .tabs)
         try c.encode(selectedTabID, forKey: .selectedTabID)
@@ -335,31 +321,46 @@ extension Workspace {
             ?? tab.root.leaves.compactMap { panes[$0]?.workingDirectory }.first
     }
 
-    private static func shortTabLabel(forCwd path: String?) -> String? {
-        guard var path, !path.isEmpty else { return nil }
+    /// Shared cwd → label preamble: trims trailing slashes and resolves the
+    /// special roots so the two formatters below can't drift on them. Returns
+    /// `.done` for a finished label (`~` / `/` / nil-when-unusable), or
+    /// `.path` with the cleaned absolute path + home for the caller to shorten.
+    private enum CwdBase { case done(String?), path(String, home: String) }
+    private static func cwdBase(_ path: String?) -> CwdBase {
+        guard var path, !path.isEmpty else { return .done(nil) }
         while path.count > 1, path.hasSuffix("/") { path.removeLast() }
         let home = NSHomeDirectory()
-        if path == home { return "~" }
-        if path == "/" { return "/" }
-        let label = URL(fileURLWithPath: path).lastPathComponent
-        return label.isEmpty ? nil : label
+        if path == home { return .done("~") }
+        if path == "/" { return .done("/") }
+        return .path(path, home: home)
     }
 
-    private static func shortLabel(forCwd path: String?) -> String? {
-        guard let path, !path.isEmpty else { return nil }
-        let home = NSHomeDirectory()
-        if path == home { return "~" }
-        if path == "/" { return "/" }
-        if path.hasPrefix(home + "/") {
-            let rel = String(path.dropFirst(home.count + 1))
-            let parts = rel.split(separator: "/")
-            // ~/foo or ~/foo/bar — keep up to two trailing segments.
-            if parts.count <= 2 {
-                return "~/" + parts.joined(separator: "/")
-            }
-            return "~/…/" + parts.suffix(2).joined(separator: "/")
+    /// Compact tab-chip label: just the folder name.
+    private static func shortTabLabel(forCwd path: String?) -> String? {
+        switch cwdBase(path) {
+        case .done(let label): return label
+        case .path(let path, _):
+            let label = URL(fileURLWithPath: path).lastPathComponent
+            return label.isEmpty ? nil : label
         }
-        return URL(fileURLWithPath: path).lastPathComponent
+    }
+
+    /// Sidebar label: home-relative, keeping up to two trailing segments.
+    private static func shortLabel(forCwd path: String?) -> String? {
+        switch cwdBase(path) {
+        case .done(let label): return label
+        case .path(let path, let home):
+            if path.hasPrefix(home + "/") {
+                let rel = String(path.dropFirst(home.count + 1))
+                let parts = rel.split(separator: "/")
+                // ~/foo or ~/foo/bar — keep up to two trailing segments.
+                if parts.count <= 2 {
+                    return "~/" + parts.joined(separator: "/")
+                }
+                return "~/…/" + parts.suffix(2).joined(separator: "/")
+            }
+            return URL(fileURLWithPath: path).lastPathComponent
+        }
     }
 }
 
@@ -499,15 +500,7 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
-    var accent: Color {
-        switch accentName {
-        case "cyan":   return Theme.cyan
-        case "pink":   return Theme.pink
-        case "orange": return Theme.orange
-        case "green":  return Theme.green
-        default:       return Theme.accentBright
-        }
-    }
+    var accent: Color { Theme.accent(named: accentName) }
 
     /// On launch, re-select the workspace that was focused at last quit.
     /// When off, Glint starts on the first workspace in the list. Persists
@@ -828,9 +821,6 @@ final class WorkspaceStore: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.captureCwdsFromLiveSurfaces()
-                // Mirror the current agent identity, and clear it once the pane
-                // returns to shell, so sidebar icons don't stick after exit.
-                self.syncIconHints()
                 // Snapshot terminal scrollback to disk roughly every 5s (off
                 // the IO/main hot path; skips panes with no new output).
                 self.scrollbackFlushTick += 1
@@ -867,7 +857,6 @@ final class WorkspaceStore: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.captureCwdsFromLiveSurfaces()
-                self.syncIconHints()
                 self.flushScrollback()
                 self.persist()
             }
@@ -1951,26 +1940,6 @@ enum WorkspaceIconKind {
         }
     }
 
-    /// Stable token for the kinds worth persisting as a workspace's identity —
-    /// the AI agents. Transient process/tool kinds (ssh/vim/python/git/…) return
-    /// nil: they're re-derived live each session and shouldn't stick forever.
-    var persistToken: String? {
-        switch self {
-        case .claude: return "claude"
-        case .codex:  return "codex"
-        case .opencode: return "opencode"
-        default:      return nil
-        }
-    }
-
-    static func fromPersistToken(_ token: String) -> WorkspaceIconKind? {
-        switch token {
-        case "claude": return .claude
-        case "codex":  return .codex
-        case "opencode": return .opencode
-        default:       return nil
-        }
-    }
 }
 
 /// Claude icon family for the whole UI (sidebar mascot, tab chips,
@@ -2051,10 +2020,6 @@ extension WorkspaceStore {
     /// Icon for a single tab chip. Only live process/hook state affects the
     /// icon; when an agent exits back to shell, the chip returns to shell.
     func tabIconKind(_ tab: WorkspaceTab, in workspace: Workspace) -> WorkspaceIconKind {
-        // Tab chips never restore an agent identity from `iconHint` — only
-        // a live claude/codex process surfaces an agent icon. Sidebar cards
-        // and the workspace switcher still go through iconKind(for:) and
-        // keep their memory behavior.
         liveIconKind(paneIDs: tab.root.leaves, workspaceID: workspace.id)
     }
 
@@ -2064,34 +2029,6 @@ extension WorkspaceStore {
         liveIconKind(for: workspace)
     }
 
-    /// Mirror each workspace's — and each of its tabs' — current live agent
-    /// identity into the saved model. Dropping back to shell clears the hint
-    /// so a previous Claude/Codex/OpenCode session does not stick forever.
-    /// Status is never persisted.
-    func syncIconHints() {
-        var changed = false
-        for i in workspaces.indices {
-            let token = liveIconKind(for: workspaces[i]).persistToken
-            if workspaces[i].iconHint != token {
-                workspaces[i].iconHint = token
-                changed = true
-            }
-            // Same policy per tab, scoped to that tab's panes.
-            for j in workspaces[i].tabs.indices {
-                let leaves = workspaces[i].tabs[j].root.leaves
-                let token = liveIconKind(paneIDs: leaves,
-                                         workspaceID: workspaces[i].id).persistToken
-                if workspaces[i].tabs[j].iconHint != token {
-                    workspaces[i].tabs[j].iconHint = token
-                    changed = true
-                }
-            }
-        }
-        // Flush immediately rather than waiting on the 0.5s autosave debounce:
-        // a stale agent hint makes the sidebar lie after an exit/restart.
-        // Cheap because `changed` is almost always false.
-        if changed { persist() }
-    }
 
     /// Pick the most representative icon for a workspace based on what its
     /// panes are currently running. AI / SSH / dev tools beat plain shell.

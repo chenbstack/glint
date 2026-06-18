@@ -504,15 +504,7 @@ private struct AppearancePane: View {
     enum AccentOption: String, CaseIterable, Identifiable {
         case indigo, cyan, pink, orange, green
         var id: String { rawValue }
-        var color: Color {
-            switch self {
-            case .indigo: return Theme.accentBright
-            case .cyan:   return Theme.cyan
-            case .pink:   return Theme.pink
-            case .orange: return Theme.orange
-            case .green:  return Theme.green
-            }
-        }
+        var color: Color { Theme.accent(named: rawValue) }
     }
 }
 

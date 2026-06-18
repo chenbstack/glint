@@ -37,6 +37,34 @@ enum Theme {
     // separators
     static let divider = Color.white.opacity(0.045)
     static let border  = Color.white.opacity(0.07)
+
+    /// Canonical accent palette keyed by the `glint.accentName` token. Single
+    /// source for the SwiftUI chrome accent (`WorkspaceStore.accent`), the
+    /// Settings swatches, and the terminal cursor/selection color so the three
+    /// never drift. "indigo" / unset map to `accentBright`.
+    static func accent(named name: String?) -> Color {
+        switch name {
+        case "cyan":   return cyan
+        case "pink":   return pink
+        case "orange": return orange
+        case "green":  return green
+        default:       return accentBright
+        }
+    }
+}
+
+extension Color {
+    /// "RRGGBB" in sRGB. Lets a chrome accent `Color` feed ghostty's text
+    /// config (cursor/selection), which only accepts hex strings — so the
+    /// terminal color is derived from the same `Theme` color the UI uses
+    /// rather than a hand-kept parallel hex table.
+    var rgbHex: String {
+        let ns = NSColor(self).usingColorSpace(.sRGB) ?? NSColor(self)
+        let r = Int((ns.redComponent * 255).rounded())
+        let g = Int((ns.greenComponent * 255).rounded())
+        let b = Int((ns.blueComponent * 255).rounded())
+        return String(format: "%02X%02X%02X", r, g, b)
+    }
 }
 
 extension Font {
