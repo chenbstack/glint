@@ -6,12 +6,16 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.21</title>
-      <sparkle:version>202606181458</sparkle:version>
-      <sparkle:shortVersionString>0.1.21</sparkle:shortVersionString>
-      <pubDate>Thu, 18 Jun 2026 15:00:44 +0000</pubDate>
+      <title>Glint 0.1.22-beta.1</title>
+      <sparkle:version>202606181643</sparkle:version>
+      <sparkle:shortVersionString>0.1.22-beta.1</sparkle:shortVersionString>
+      <sparkle:channel>beta</sparkle:channel>
+      <pubDate>Thu, 18 Jun 2026 16:45:26 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21</h3><ul>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.22-beta.1</h3><ul>
+    <li><strong>feat(control): external pane control bridge with opt-in toggle</strong><br><span style="color:#666">新增「外部控制」功能——本机其它程序可经 ~/.glint/run 下的 socket 聚焦 pane、</span></li>
+    <li>release: appcast for v0.1.21</li>
+  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21</h3><ul>
     <li><strong>feat(chrome): double-click the header to zoom the window</strong><br><span style="color:#666">窗口: 双击 header(玻璃浮岛/band 以及侧边栏顶部标题栏条)最大化窗口,和原生标题栏一致。原来靠 mouseDownCanMoveWindow 自动拖窗导致视图收不到 mouseDown,改为单击手动 performDrag、双击 window.zoom(nil)。</span></li>
     <li><strong>feat(terminal): opt-in shell keybindings to normalize modified keys</strong><br><span style="color:#666">终端: 新增可选的 Shell 按键绑定(设置 → 终端,默认关),规整 ghostty 发出但裸 zsh/bash 不认识的带修饰键转义,避免在提示符下泄漏(Shift+Enter → ;2;13~、Shift+Right → 1;2C)或失效。覆盖带修饰 Enter/方向键/Home/End/Delete。绑定写到 ~/.config/glint/ 独立文件,rc 里只加一行 source 引用;卸载时删除引用并移除文件。不影响 Claude/Codex 窗格(它们自己要用这些转义)。</span></li>
     <li><strong>feat(agent): gate hook auto-install on agent presence + OpenCode icons &amp; resume</strong><br><span style="color:#666">智能体: hook 自动安装改为先检测本机是否装了对应 agent,只为真正存在的 agent 弹安装提示(不再无脑写三家配置);未安装的 agent 不标记已处理,以后装了还会再提示。设置页按 agent 显示&quot;未检测到&quot;状态。新增 OpenCode&quot;启动时恢复会话&quot;开关(opencode --continue)。并入 OpenCode 图标/吉祥物组。</span></li>
@@ -29,13 +33,35 @@
     <li>release: appcast for v0.1.21-beta.2</li>
     <li>release: appcast for v0.1.21-beta.1</li>
     <li>release: appcast for v0.1.20</li>
-  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.20</h3><ul>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.6</h3><ul>
+    <li><strong>feat(chrome): double-click the header to zoom the window</strong><br><span style="color:#666">窗口: 双击 header(玻璃浮岛/band 以及侧边栏顶部标题栏条)最大化窗口,和原生标题栏一致。原来靠 mouseDownCanMoveWindow 自动拖窗导致视图收不到 mouseDown,改为单击手动 performDrag、双击 window.zoom(nil)。</span></li>
+    <li><strong>fix(sidebar): keep workspace card height constant across agent status</strong><br><span style="color:#666">侧边栏: 修复 workspace 卡片在 agent 运行中比空闲时矮约 1.5pt 的问题——次要行在「空闲(metadata 胶囊徽章)」和「运行中(纯状态文字)」之间切换,胶囊更高;给该行固定 minHeight(取较高的空闲态)使两种状态高度一致。</span></li>
+    <li><strong>fix(assets): commit OpenCode icon set so it ships in release builds</strong><br><span style="color:#666">资源: 补提交 OpenCode 图标资源(吉祥物各状态 + mark),之前只提交了引用它们的代码、asset 文件本身没被跟踪,导致发布版缺图标、OpenCode 窗格图标空白(本地 dev 因有未跟踪文件而正常,掩盖了问题)。</span></li>
+    <li>release: appcast for v0.1.21-beta.5</li>
+    <li>release: appcast for v0.1.21-beta.4</li>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.5</h3><ul>
+    <li><strong>fix(assets): commit OpenCode icon set so it ships in release builds</strong><br><span style="color:#666">资源: 补提交 OpenCode 图标资源(吉祥物各状态 + mark),之前只提交了引用它们的代码、asset 文件本身没被跟踪,导致发布版缺图标、OpenCode 窗格图标空白(本地 dev 因有未跟踪文件而正常,掩盖了问题)。</span></li>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.3</h3><ul>
+    <li><strong>feat(terminal): paste Finder files as paths &amp; ⌘-click to open files</strong><br><span style="color:#666">⌘V 粘贴 Finder 文件改为粘贴文件完整路径;⌘点击终端里的文件路径可直接打开(相对路径按 cwd 解析;可执行文件/应用改为在 Finder 中显示,防止执行不可信内容)</span></li>
+    <li>release: appcast for v0.1.21-beta.2</li>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.2</h3><ul>
+    <li><strong>feat(tabs): inline rename for tab chips</strong><br><span style="color:#666">顶部标签条支持重命名 —— 右键 &quot;Rename&quot; 把标签切成 TextField，</span></li>
+    <li>release: appcast for v0.1.21-beta.1</li>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.1</h3><ul>
+    <li><strong>polish(sidebar): move archived marker to top-right corner</strong><br><span style="color:#666">工作区&quot;已归档&quot;徽标从二行胶囊移到卡片右上角，卡片主体跟普通卡片</span></li>
+    <li>release: appcast for v0.1.20</li>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.20</h3><ul>
     <li><strong>feat(tabs): drag-to-reorder header tab chips</strong><br><span style="color:#666">标签页支持拖动重排，手感跟 sidebar 工作区卡片一致。</span></li>
     <li><strong>polish(sidebar): archive badge, usage icons, header spacing</strong><br><span style="color:#666">工作区&quot;已归档&quot;徽标加底色+图标，更显眼；侧边栏额度行的 Claude/</span></li>
     <li><strong>fix(dev): isolate dev/prod via .dev bundle id + prod-snapshot fallback</strong><br><span style="color:#666">修复 dev/prod 共用一份偏好/缓存的 bug（Debug 改用 .dev bundle</span></li>
     <li><strong>ci(release): sort changelog entries — features first, fixes after</strong><br><span style="color:#666">changelog 按提交类型排序:新功能/变化在上,bug 修复在中,</span></li>
     <li><strong>ci(release): show bilingual changelog on GitHub Releases page</strong><br><span style="color:#666">GitHub Releases 页面现在展示和 Sparkle 一样的双语 changelog</span></li>
     <li>release: appcast for v0.1.20-beta.1</li>
+    <li>release: appcast for v0.1.19</li>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.20-beta.1</h3><ul>
+    <li><strong>polish(sidebar): archive badge, usage icons, header spacing</strong><br><span style="color:#666">工作区&quot;已归档&quot;徽标加底色+图标，更显眼；侧边栏额度行的 Claude/</span></li>
+    <li><strong>fix(dev): isolate dev/prod via .dev bundle id + prod-snapshot fallback</strong><br><span style="color:#666">修复 dev/prod 共用一份偏好/缓存的 bug（Debug 改用 .dev bundle</span></li>
+    <li><strong>feat(tabs): drag-to-reorder header tab chips</strong><br><span style="color:#666">标签页支持拖动重排，手感跟 sidebar 工作区卡片一致。</span></li>
     <li>release: appcast for v0.1.19</li>
   </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.19</h3><ul>
     <li>release: appcast for v0.1.18-beta.13</li>
@@ -45,118 +71,161 @@
     <li>release: appcast for v0.1.18-beta.11</li>
     <li><strong>fix(scroll): match upstream Ghostty 2x multiplier on precise trackpad deltas</strong><br><span style="color:#666">滚动手感: 触控板精确滚动对齐上游 Ghostty.app 的 2 倍速,不再发涩</span></li>
     <li>release: appcast for v0.1.18</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18</h3><ul>
-    <li>release: appcast for v0.1.18-beta.10</li>
-    <li><strong>fix(viewport-top-offset): align hit-test + IME with rounded renderer inset</strong><br><span style="color:#666">修复 viewport-top-offset 下选中文本错位一行 + 输入法定位偏离的两处子 cell 余数 bug,选区/输入法坐标改用渲染器实际使用的整 cell 取整值。</span></li>
-    <li>release: appcast for v0.1.18-beta.9</li>
-    <li><strong>fix(header): apply floating header inset on pre-26 too</strong><br><span style="color:#666">修复 macOS 15.x 上开启玻璃效果时浮岛 header 与终端首行重叠的问题（之前误判为只有 macOS 26 才需要 padding）。</span></li>
-    <li><strong>feat(paste): add &quot;Don&#x27;t ask again&quot; + Settings toggle for multi-line paste warning</strong><br><span style="color:#666">粘贴多行文本的确认弹框新增&quot;不再询问&quot;勾选框，设置 → 终端 → 粘贴里也有同名开关可以随时切回。</span></li>
-    <li>release: appcast for v0.1.18-beta.8</li>
-    <li><strong>release: v0.1.18-beta.8 (re-publish for signature mismatch in beta.7)</strong><br><span style="color:#666">重新发布 beta.7 内容,修复上一版构建竞争导致的 Sparkle 签名错位</span></li>
-    <li>release: appcast for v0.1.18-beta.7</li>
-    <li>release: appcast for v0.1.18-beta.7</li>
-    <li><strong>ghosttykit: publish xcframework-fb620db-v1</strong><br><span style="color:#666">更新 GhosttyKit 预构建,匹配新 ghostty 子模块</span></li>
-    <li><strong>feat(header): use ghostty viewport-top-offset for floating header inset</strong><br><span style="color:#666">浮岛 header 改用 ghostty viewport-top-offset 渲染滚动内容,prompt 紧贴 islands 下沿,不再插空行</span></li>
-    <li>release: appcast for v0.1.18-beta.6</li>
-    <li><strong>revert: drop ZDOTDIR-swap per-pane history (back to industry default)</strong><br><span style="color:#666">撤掉 ZDOTDIR 注入方案——zsh 的 rc 加载语义跟 $ZDOTDIR 绑定,我们镜像不完(beta.4/5 PATH 丢失就是这个根因),且 Prezto/oh-my-zsh 等读 ZDOTDIR 也会撞;业界(Kitty/Wezterm/Alacritty/Ghostty)都不做这事是有道理的;需要这能力的用户推荐装 atuin。</span></li>
-    <li>release: appcast for v0.1.18-beta.5</li>
-    <li><strong>fix(shell): also delegate .zshenv and .zprofile to user&#x27;s real dir</strong><br><span style="color:#666">修复 beta.4 漏写 .zshenv/.zprofile 委托,导致 brew/orbstack/cargo 在恢复的终端里 PATH 丢失(pnpm not found 就是这个根因);现在补两个 stub,新开 pane 立即恢复正常。</span></li>
-    <li>release: appcast for v0.1.18-beta.4</li>
-    <li><strong>feat(shell): per-pane zsh history + history-driven ghost-text completion</strong><br><span style="color:#666">每个终端的命令历史独立(↑ 只看本 pane,关闭时合并回全局),并新增历史驱动的暗灰自动补全(右方向键/End 接受完整,Ctrl-→ 接受一个词);设置→终端→Shell 可关。</span></li>
-    <li>release: appcast for v0.1.18-beta.3</li>
-    <li><strong>feat(chrome): floating glass islands on macOS &lt; 26, tighter tab chips</strong><br><span style="color:#666">macOS 26 以下也能用浮岛风的玻璃 header；标签页横向更紧凑。</span></li>
-    <li>release: appcast for v0.1.18-beta.2</li>
-    <li><strong>feat: default Claude icon switches to the Spark mark</strong><br><span style="color:#666">Claude 默认图标从橙色吉祥物改为 ✦ 火花标——已在 Settings 里选过的人保留原选择,新用户/未选过的人现在默认看到 spark</span></li>
-    <li><strong>fix(pane): start bottom split prompt at the divider, not 3 rows below</strong><br><span style="color:#666">修复 Shift+Cmd+D 纵向分屏出来的下半 pane 顶部空 3 行的问题——下半 pane 不接触浮动 header,不再注入垫行启动脚本;横向分屏(左右)两边仍按需垫行</span></li>
-    <li><strong>docs: refresh README screenshots</strong><br><span style="color:#666">更新 README 截图——主图换成最新的 Liquid Glass 界面,新增一张侧栏多状态总览图(thinking/tool/等待批准/已完成/失败 一次看清)</span></li>
-    <li>release: appcast for v0.1.18-beta.1</li>
-    <li><strong>feat: stop tab chips from remembering agents; new default icon</strong><br><span style="color:#666">标签页图标不再记忆已退场的 agent——只反映当前真实在跑的;默认终端图标统一改为 ⌘ command(sidebar、工作区切换器、标签页都一致)</span></li>
-    <li><strong>release: appcast for v0.1.17</strong><br><span style="color:#666">补回 v0.1.17 流水线未能提交的 appcast item,恢复稳定版自动更新分发</span></li>
-    <li><strong>fix(ci): force-checkout main when committing appcast</strong><br><span style="color:#666">修复发版流水线最后一步——切回 main 提交 appcast 时用 -f 丢弃工作区脏文件,不再因 appcast.xml 冲突中止</span></li>
-    <li>release: appcast for v0.1.17-beta.9</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.17</h3><ul>
-    <li><strong>fix: restore agent input-box backgrounds without wrapping; bigger tab icons</strong><br><span style="color:#666">修复终端历史恢复时 agent 输入框满宽底色条卷行的问题——按字符裁掉行尾空格、用 \e[K 把底色重新铺到当前窗口右边缘、等宽度稳定后再回显;标签页图标 15→18 加大。</span></li>
-    <li>release: appcast for v0.1.17-beta.8</li>
-    <li><strong>fix: restore terminal scrollback without re-wrapping or piling up</strong><br><span style="color:#666">修复终端历史恢复：等 surface 达到内容宽度再回放（不再因启动时窗口暂窄而把整行内容回卷）；恢复的历史作为稳定前缀只追加新内容（不再每次重启重复堆叠欢迎框/旧宽度行）；按行裁掉默认背景的尾随 padding，保留输入框等带背景的填充。</span></li>
-    <li><strong>feat: animate tab chip icons while an agent is running</strong><br><span style="color:#666">标签页图标在 agent 运行时跟侧边栏一样播放动画（复用同一套 GIF 优化，空闲时冻结首帧零开销）；并为每个标签页持久化 iconHint，重启后能各自恢复 agent 图标。</span></li>
-    <li>release: appcast for v0.1.17-beta.7</li>
-    <li><strong>fix: stop re-prompting for keychain on every Claude-usage update</strong><br><span style="color:#666">修复侧栏 Claude 额度每次版本更新都要重新钥匙串认证的问题——token 改存到 Application Support 下的 AES-GCM 加密文件,不再放钥匙串</span></li>
-    <li>release: appcast for v0.1.17-beta.6</li>
-    <li><strong>fix: reliable sidebar card drag-to-reorder</strong><br><span style="color:#666">修复侧栏卡片拖动重排不可靠的问题——改用手动手势按指针位置精确命中,不再出现拖一张动两张、放不到目标位置</span></li>
-    <li>release: appcast for v0.1.17-beta.5</li>
-    <li><strong>fix: Claude weekly quota showing 100% instead of 1%</strong><br><span style="color:#666">修复侧栏 Claude 周额度把 1% 误显示为 100% 的问题</span></li>
-    <li><strong>fix: rejoin soft-wrapped lines on scrollback restore</strong><br><span style="color:#666">修复会话恢复时长行被拆成两行的问题(软换行行现在会重新合并)</span></li>
-    <li>Revert &quot;release: add stable local code signing&quot;</li>
-    <li>Revert &quot;fix: trust local signing cert in release workflow&quot;</li>
-    <li>Revert &quot;fix: pass local signing cert separately&quot;</li>
-    <li>Revert &quot;fix: simplify local certificate signing&quot;</li>
-    <li>Revert &quot;release: appcast for v0.1.17-beta.5&quot;</li>
-    <li>release: appcast for v0.1.17-beta.5</li>
-    <li>fix: simplify local certificate signing</li>
-    <li>fix: pass local signing cert separately</li>
-    <li>fix: trust local signing cert in release workflow</li>
-    <li>release: add stable local code signing</li>
-    <li>release: appcast for v0.1.17-beta.1</li>
-    <li><strong>fix: clear agent approval state on submitted decisions</strong><br><span style="color:#666">批准 Codex/Claude 权限请求后立即清除标签页和侧栏的等待批准状态，并补上 Codex StopFailure hook。</span></li>
-    <li>release: appcast for v0.1.16</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.16</h3><ul>
-    <li>release: appcast for v0.1.16-beta.1</li>
-    <li><strong>feat: precise window-drag zones and ⌘ workspace shortcut badges</strong><br><span style="color:#666">优化窗口拖动：侧边栏仅顶部区域可拖动、标题栏整条可拖动；按住 ⌘ 时工作区卡片显示 ⌘1–⌘9 切换快捷键角标</span></li>
-    <li><strong>chore: isolate dev builds from production config and updates</strong><br><span style="color:#666">开发版与正式版完全隔离：独立配置与数据目录，开发版不再弹更新提示，版本号显示为 dev</span></li>
-    <li>release: appcast for v0.1.15-beta.11</li>
-    <li><strong>feat: refine floating header islands and unify agent status beacons</strong><br><span style="color:#666">打磨浮动玻璃 header：活动标签淡化为低饱和胶囊、悬浮岛显示箭头光标、sidebar 切换按钮补上 hover 高亮、收起 sidebar 时工作区切换器并入左侧胶囊；侧栏卡片的红绿灯状态改为与标签页一致的单点呼吸灯</span></li>
-    <li><strong>feat: padded shell launcher keeps fresh prompts below the floating header</strong><br><span style="color:#666">新终端用垫行启动脚本把提示符压到浮动玻璃 header 下方并隐藏 Last login 横幅；恢复历史的标签跳过该脚本，避免清屏把恢复内容挤进回滚区</span></li>
-    <li><strong>fix: keep fresh terminal content below the floating glass header</strong><br><span style="color:#666">修复新终端内容被悬浮 header 遮住：玻璃模式下终端网格原生下移 52pt（需关闭 padding balance 才生效）；标签改为胶囊内 accent 药丸并与左右浮岛等高；侧栏全面去盒子化，选中态改为主题色色块</span></li>
-    <li><strong>feat: adopt macOS 26 Liquid Glass chrome with floating header islands</strong><br><span style="color:#666">适配 macOS 26 液态玻璃：header 改为悬浮玻璃岛、终端顶到窗口顶部，命令面板与标签胶囊换原生玻璃，选中态统一为主题色药丸；侧栏与内容区无缝同色并去掉多余卡片框；旧系统与关闭玻璃时保持原样式</span></li>
-    <li>release: appcast for v0.1.15</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.15</h3><ul>
-    <li>release: appcast for v0.1.15-beta.10</li>
-    <li><strong>feat: richer completion celebration on sidebar cards</strong><br><span style="color:#666">优化 sidebar 卡片完成时的绿色动效：由「瞬亮线性淡出」改为先快速绽放再缓慢呼出的双段节奏，新增卡片淡绿色泛光与向外扩散的光晕层；开启「减弱动态效果」时仅保留淡入淡出。</span></li>
-    <li>release: appcast for v0.1.15-beta.9</li>
-    <li><strong>perf: skip unchanged scrollback snapshots and move rebuild off the main thread</strong><br><span style="color:#666">修复开启「恢复终端历史」后 CPU 占用偏高：快照内容未变化时直接跳过（此前每 5 秒对每个 pane 全量导出+重建+写盘且全在主线程），重建与写盘移至后台线程；退出时同步落盘最后一帧快照；Codex 用量改为只读 rollout 文件尾部。</span></li>
-    <li><strong>chore: bump GitHub Actions off deprecated Node 20 runtimes</strong><br><span style="color:#666">升级 CI/Release workflow 的 GitHub Actions 版本,消除 Node 20 弃用警告。</span></li>
-    <li>release: appcast for v0.1.15-beta.8</li>
-    <li><strong>fix: Claude quota bar freezing after repeated token rotations</strong><br><span style="color:#666">修复 Claude 周额度长期运行后冻结不更新的问题——token 轮换回源从每次启动一次改为 15 分钟节流。</span></li>
-    <li><strong>feat: per-cue notification sounds + custom glass dropdowns in Settings</strong><br><span style="color:#666">三个提示音支持自定义系统音效(行内播放按钮可试听);设置里的原生下拉(语言/字体/光标样式/滚动行数)全部换成与标签页菜单同款的玻璃风格自定义下拉。</span></li>
-    <li><strong>chore: default off for scrollback restore and usage bars</strong><br><span style="color:#666">「恢复终端历史」与 Claude/Codex「在侧栏显示额度」三项改为默认关闭,改为用户主动开启。</span></li>
-    <li><strong>feat: Claude spark icon style option + alert localization fixes</strong><br><span style="color:#666">新增 Claude 图标样式选项(吉祥物/火花),火花动画随状态切换且不变色;补齐关闭标签页确认与 hook 安装弹窗的中文本地化。</span></li>
-    <li><strong>feat: tab bar overflow menu, traffic-light status dots, per-tab done badges</strong><br><span style="color:#666">标签栏支持 +N 溢出收纳与红绿灯状态呼吸灯，完成/出错徽章细化到标签页粒度</span></li>
-    <li>release: appcast for v0.1.15-beta.7</li>
-    <li><strong>fix: copy appcast.xml before checkout to avoid tracked-file conflict</strong><br><span style="color:#666">tag commit 继承上个 release commit 时 appcast.xml 已被追踪，checkout main 会报冲突；修复：切换前先备份到临时目录，切换后还原</span></li>
-    <li>chore: ignore GhosttyKit.xcframework.upstream and _design directories</li>
-    <li><strong>feat: add tab support with keyboard shortcuts and header UI</strong><br><span style="color:#666">为工作区添加选项卡管理功能，支持键盘快捷键、标头UI和状态指示器</span></li>
-    <li>release: appcast for v0.1.15-beta.5</li>
-    <li><strong>fix: blank-pane-on-switch, Codex live usage, and running-state cleanup</strong><br><span style="color:#666">修复 workspace 切换面板空白（workspaceID 按值传递 + post-commit surface re-assert + 强制重绘）；Codex 用量改用实时 ChatGPT 端点读取；thinking/tool 合并为统一 running… 状态</span></li>
-    <li>release: appcast for v0.1.15-beta.4</li>
-    <li><strong>feat: purge saved scrollback when terminal-history restore is turned off</strong><br><span style="color:#666">关闭&quot;恢复终端历史&quot;开关时,清空已保存的滚动历史快照,不再残留持久化数据</span></li>
-    <li>release: appcast for v0.1.15-beta.3</li>
-    <li><strong>feat: color terminal history restore, agent error state, and turn-timer fixes</strong><br><span style="color:#666">终端历史按窗格带颜色恢复、agent 报错显示红色 error 状态(不再卡在 thinking)、侧边栏额度条、执行计时改为整轮耗时(批准后重新计时)、仅选中卡片显示边框</span></li>
-    <li>release: appcast for v0.1.15-beta.2</li>
-    <li>fix: stabilize beta channel and agent status UI</li>
-    <li>release: appcast for v0.1.15-beta.1</li>
-    <li>ghosttykit: publish xcframework-b39a70c-v1</li>
-    <li>Revert &quot;release: prepare v0.1.15-beta.1&quot;</li>
-    <li>release: prepare v0.1.15-beta.1</li>
-    <li>release: appcast for v0.1.14</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.14</h3><ul>
-    <li><strong>ghosttykit: publish artifact releases as prereleases</strong><br><span style="color:#666">修复 GhosttyKit 构建产物抢占 GitHub Latest 位置的问题</span></li>
-    <li><strong>l10n: translate the beta updates toggle</strong><br><span style="color:#666">补上「接收 Beta 更新」开关的中文文案</span></li>
-    <li><strong>ghosttykit: publish xcframework-e9120d4-v1</strong><br><span style="color:#666">登记新的 GhosttyKit 预构建产物（含后台工作区内存优化）</span></li>
-    <li><strong>release: Sparkle beta channel for prerelease tags</strong><br><span style="color:#666">新增 Beta 更新通道——设置里开启「接收 Beta 更新」即可提前收到预发布版本；正式版用户不受影响，brew 始终安装稳定版</span></li>
-    <li><strong>ghostty: switch submodule to chenbstack fork with occlusion memory fix</strong><br><span style="color:#666">修复隐藏工作区的显存占用——被遮挡的 pane 释放 3 张全尺寸渲染缓冲，3 个后台工作区约省 110MB 内存；子模块改指自有 fork，让登记的 SHA 与产物真实来源一致</span></li>
-    <li>release: appcast for v0.1.13</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.13</h3><ul>
-    <li><strong>sidebar: traffic-light status pill, edge beacon and unified card chrome</strong><br><span style="color:#666">卡片状态改为红绿灯胶囊+左缘呼吸光条,统一边框与图标配色,新建按钮更醒目</span></li>
-    <li><strong>icons: animated Codex mascot in three agent states</strong><br><span style="color:#666">Codex 窗格图标升级为三态动画吉祥物(工作/思考/空闲)</span></li>
-    <li><strong>pane: resolve npm-shim CLIs through node argv for the sidebar icon</strong><br><span style="color:#666">侧栏图标支持 npm 安装的 codex/claude——穿透 node shim 识别真实 agent</span></li>
-    <li><strong>ci: auto-bump homebrew tap cask on release</strong><br><span style="color:#666">发版时自动更新 Homebrew tap 的 cask 版本,brew 安装不再是老版本</span></li>
-    <li>release: bilingual notes for v0.1.12</li>
-    <li>release: appcast for v0.1.12</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.12</h3><ul>
-    <li><strong>app: check for updates hourly instead of daily</strong><br><span style="color:#666">自动更新检查间隔从每天一次缩短到每小时一次</span></li>
-    <li><strong>app: localize destructive-confirm alerts, fill missing zh-Hans strings</strong><br><span style="color:#666">退出/关闭面板/删除工作区等确认弹窗汉化,并补齐右键菜单等缺失的中文翻译</span></li>
-    <li>release: appcast for v0.1.11</li>
   </ul></div>]]></description>
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.22-beta.1/Glint-0.1.22-beta.1.dmg" length="15349764" type="application/octet-stream" sparkle:edSignature="7eWiEvgtlP4N/E4XCNoxpIOE8uS9ODmOG2fXCOsCg/MJXLzaQvux4yJyVpBVzS3Er+72WXZtuNMuhW8TWwi8Aw==" />
+    </item>
+    <item>
+      <title>Glint 0.1.21</title>
+      <sparkle:version>202606181458</sparkle:version>
+      <sparkle:shortVersionString>0.1.21</sparkle:shortVersionString>
+      <pubDate>Thu, 18 Jun 2026 15:00:44 +0000</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description>&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.21&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(chrome): double-click the header to zoom the window&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;窗口: 双击 header(玻璃浮岛/band 以及侧边栏顶部标题栏条)最大化窗口,和原生标题栏一致。原来靠 mouseDownCanMoveWindow 自动拖窗导致视图收不到 mouseDown,改为单击手动 performDrag、双击 window.zoom(nil)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(terminal): opt-in shell keybindings to normalize modified keys&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;终端: 新增可选的 Shell 按键绑定(设置 → 终端,默认关),规整 ghostty 发出但裸 zsh/bash 不认识的带修饰键转义,避免在提示符下泄漏(Shift+Enter → ;2;13~、Shift+Right → 1;2C)或失效。覆盖带修饰 Enter/方向键/Home/End/Delete。绑定写到 ~/.config/glint/ 独立文件,rc 里只加一行 source 引用;卸载时删除引用并移除文件。不影响 Claude/Codex 窗格(它们自己要用这些转义)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(agent): gate hook auto-install on agent presence + OpenCode icons &amp;amp; resume&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;智能体: hook 自动安装改为先检测本机是否装了对应 agent,只为真正存在的 agent 弹安装提示(不再无脑写三家配置);未安装的 agent 不标记已处理,以后装了还会再提示。设置页按 agent 显示&amp;quot;未检测到&amp;quot;状态。新增 OpenCode&amp;quot;启动时恢复会话&amp;quot;开关(opencode --continue)。并入 OpenCode 图标/吉祥物组。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(agent): add OpenCode status support (#4)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增 OpenCode 一等公民支持——独立身份/图标、hook 插件驱动状态、设置页安装开关,不再被识别成 Claude。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(terminal): paste Finder files as paths &amp;amp; ⌘-click to open files&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;⌘V 粘贴 Finder 文件改为粘贴文件完整路径;⌘点击终端里的文件路径可直接打开(相对路径按 cwd 解析;可执行文件/应用改为在 Finder 中显示,防止执行不可信内容)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(tabs): inline rename for tab chips&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;顶部标签条支持重命名 —— 右键 &amp;quot;Rename&amp;quot; 把标签切成 TextField，&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;polish(sidebar): move archived marker to top-right corner&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;工作区&amp;quot;已归档&amp;quot;徽标从二行胶囊移到卡片右上角，卡片主体跟普通卡片&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(sidebar): keep workspace card height constant across agent status&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;侧边栏: 修复 workspace 卡片在 agent 运行中比空闲时矮约 1.5pt 的问题——次要行在「空闲(metadata 胶囊徽章)」和「运行中(纯状态文字)」之间切换,胶囊更高;给该行固定 minHeight(取较高的空闲态)使两种状态高度一致。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(assets): commit OpenCode icon set so it ships in release builds&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;资源: 补提交 OpenCode 图标资源(吉祥物各状态 + mark),之前只提交了引用它们的代码、asset 文件本身没被跟踪,导致发布版缺图标、OpenCode 窗格图标空白(本地 dev 因有未跟踪文件而正常,掩盖了问题)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(input): handle Shift+Enter (and modified keys) with Chinese IMEs&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;输入法: 修复中文输入法激活时 Shift+Enter 被输入法的 Shift 切换吃掉、传不到终端的问题。改为先用带文本累加器的 interpretKeyEvents 让输入法旁观这个组合键而不产生副作用,再由我们把按键发给 surface,surface 没处理才回退。flagsChanged 重写为按左右修饰键分别判定按下/抬起,且组字期间不触发。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.6&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.5&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.4&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.3&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.2&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.1&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.20&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;!--GLINT_HISTORY_BELOW--&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3 style="color:#666;"&gt;历史版本 · Previous releases&lt;/h3&gt;&lt;/div&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.20&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(tabs): drag-to-reorder header tab chips&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;标签页支持拖动重排，手感跟 sidebar 工作区卡片一致。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;polish(sidebar): archive badge, usage icons, header spacing&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;工作区&amp;quot;已归档&amp;quot;徽标加底色+图标，更显眼；侧边栏额度行的 Claude/&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(dev): isolate dev/prod via .dev bundle id + prod-snapshot fallback&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 dev/prod 共用一份偏好/缓存的 bug（Debug 改用 .dev bundle&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ci(release): sort changelog entries — features first, fixes after&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;changelog 按提交类型排序:新功能/变化在上,bug 修复在中,&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ci(release): show bilingual changelog on GitHub Releases page&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;GitHub Releases 页面现在展示和 Sparkle 一样的双语 changelog&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.20-beta.1&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.19&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.19&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.13&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(workspace): archive workspaces to a collapsible sidebar group&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增工作区归档：把工作区收进 sidebar 顶部的可折叠&amp;quot;已归档 N&amp;quot;区，&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.12&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(agents): opt-in resume of claude/codex sessions on launch&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;智能体: 新增&amp;quot;启动时恢复会话&amp;quot;开关(Claude/Codex 各一,默认关),开后切回上次跑 agent 的窗格时自动执行 claude --continue / codex resume --last&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.11&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(scroll): match upstream Ghostty 2x multiplier on precise trackpad deltas&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;滚动手感: 触控板精确滚动对齐上游 Ghostty.app 的 2 倍速,不再发涩&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.10&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(viewport-top-offset): align hit-test + IME with rounded renderer inset&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 viewport-top-offset 下选中文本错位一行 + 输入法定位偏离的两处子 cell 余数 bug,选区/输入法坐标改用渲染器实际使用的整 cell 取整值。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.9&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(header): apply floating header inset on pre-26 too&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 macOS 15.x 上开启玻璃效果时浮岛 header 与终端首行重叠的问题（之前误判为只有 macOS 26 才需要 padding）。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(paste): add &amp;quot;Don&amp;#x27;t ask again&amp;quot; + Settings toggle for multi-line paste warning&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;粘贴多行文本的确认弹框新增&amp;quot;不再询问&amp;quot;勾选框，设置 → 终端 → 粘贴里也有同名开关可以随时切回。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.8&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: v0.1.18-beta.8 (re-publish for signature mismatch in beta.7)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;重新发布 beta.7 内容,修复上一版构建竞争导致的 Sparkle 签名错位&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.7&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.7&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ghosttykit: publish xcframework-fb620db-v1&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;更新 GhosttyKit 预构建,匹配新 ghostty 子模块&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(header): use ghostty viewport-top-offset for floating header inset&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;浮岛 header 改用 ghostty viewport-top-offset 渲染滚动内容,prompt 紧贴 islands 下沿,不再插空行&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.6&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;revert: drop ZDOTDIR-swap per-pane history (back to industry default)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;撤掉 ZDOTDIR 注入方案——zsh 的 rc 加载语义跟 $ZDOTDIR 绑定,我们镜像不完(beta.4/5 PATH 丢失就是这个根因),且 Prezto/oh-my-zsh 等读 ZDOTDIR 也会撞;业界(Kitty/Wezterm/Alacritty/Ghostty)都不做这事是有道理的;需要这能力的用户推荐装 atuin。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.5&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(shell): also delegate .zshenv and .zprofile to user&amp;#x27;s real dir&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 beta.4 漏写 .zshenv/.zprofile 委托,导致 brew/orbstack/cargo 在恢复的终端里 PATH 丢失(pnpm not found 就是这个根因);现在补两个 stub,新开 pane 立即恢复正常。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.4&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(shell): per-pane zsh history + history-driven ghost-text completion&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;每个终端的命令历史独立(↑ 只看本 pane,关闭时合并回全局),并新增历史驱动的暗灰自动补全(右方向键/End 接受完整,Ctrl-→ 接受一个词);设置→终端→Shell 可关。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.3&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(chrome): floating glass islands on macOS &amp;lt; 26, tighter tab chips&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;macOS 26 以下也能用浮岛风的玻璃 header；标签页横向更紧凑。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.2&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: default Claude icon switches to the Spark mark&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Claude 默认图标从橙色吉祥物改为 ✦ 火花标——已在 Settings 里选过的人保留原选择,新用户/未选过的人现在默认看到 spark&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(pane): start bottom split prompt at the divider, not 3 rows below&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 Shift+Cmd+D 纵向分屏出来的下半 pane 顶部空 3 行的问题——下半 pane 不接触浮动 header,不再注入垫行启动脚本;横向分屏(左右)两边仍按需垫行&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;docs: refresh README screenshots&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;更新 README 截图——主图换成最新的 Liquid Glass 界面,新增一张侧栏多状态总览图(thinking/tool/等待批准/已完成/失败 一次看清)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.1&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: stop tab chips from remembering agents; new default icon&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;标签页图标不再记忆已退场的 agent——只反映当前真实在跑的;默认终端图标统一改为 ⌘ command(sidebar、工作区切换器、标签页都一致)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: appcast for v0.1.17&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补回 v0.1.17 流水线未能提交的 appcast item,恢复稳定版自动更新分发&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(ci): force-checkout main when committing appcast&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复发版流水线最后一步——切回 main 提交 appcast 时用 -f 丢弃工作区脏文件,不再因 appcast.xml 冲突中止&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.9&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.17&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix: restore agent input-box backgrounds without wrapping; bigger tab icons&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复终端历史恢复时 agent 输入框满宽底色条卷行的问题——按字符裁掉行尾空格、用 \e[K 把底色重新铺到当前窗口右边缘、等宽度稳定后再回显;标签页图标 15→18 加大。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.8&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: restore terminal scrollback without re-wrapping or piling up&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复终端历史恢复：等 surface 达到内容宽度再回放（不再因启动时窗口暂窄而把整行内容回卷）；恢复的历史作为稳定前缀只追加新内容（不再每次重启重复堆叠欢迎框/旧宽度行）；按行裁掉默认背景的尾随 padding，保留输入框等带背景的填充。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: animate tab chip icons while an agent is running&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;标签页图标在 agent 运行时跟侧边栏一样播放动画（复用同一套 GIF 优化，空闲时冻结首帧零开销）；并为每个标签页持久化 iconHint，重启后能各自恢复 agent 图标。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.7&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: stop re-prompting for keychain on every Claude-usage update&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复侧栏 Claude 额度每次版本更新都要重新钥匙串认证的问题——token 改存到 Application Support 下的 AES-GCM 加密文件,不再放钥匙串&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.6&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: reliable sidebar card drag-to-reorder&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复侧栏卡片拖动重排不可靠的问题——改用手动手势按指针位置精确命中,不再出现拖一张动两张、放不到目标位置&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.5&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: Claude weekly quota showing 100% instead of 1%&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复侧栏 Claude 周额度把 1% 误显示为 100% 的问题&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: rejoin soft-wrapped lines on scrollback restore&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复会话恢复时长行被拆成两行的问题(软换行行现在会重新合并)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;Revert &amp;quot;release: add stable local code signing&amp;quot;&lt;/li&gt;
+    &lt;li&gt;Revert &amp;quot;fix: trust local signing cert in release workflow&amp;quot;&lt;/li&gt;
+    &lt;li&gt;Revert &amp;quot;fix: pass local signing cert separately&amp;quot;&lt;/li&gt;
+    &lt;li&gt;Revert &amp;quot;fix: simplify local certificate signing&amp;quot;&lt;/li&gt;
+    &lt;li&gt;Revert &amp;quot;release: appcast for v0.1.17-beta.5&amp;quot;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.5&lt;/li&gt;
+    &lt;li&gt;fix: simplify local certificate signing&lt;/li&gt;
+    &lt;li&gt;fix: pass local signing cert separately&lt;/li&gt;
+    &lt;li&gt;fix: trust local signing cert in release workflow&lt;/li&gt;
+    &lt;li&gt;release: add stable local code signing&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.1&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: clear agent approval state on submitted decisions&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;批准 Codex/Claude 权限请求后立即清除标签页和侧栏的等待批准状态，并补上 Codex StopFailure hook。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.16&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.16&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;release: appcast for v0.1.16-beta.1&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: precise window-drag zones and ⌘ workspace shortcut badges&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;优化窗口拖动：侧边栏仅顶部区域可拖动、标题栏整条可拖动；按住 ⌘ 时工作区卡片显示 ⌘1–⌘9 切换快捷键角标&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;chore: isolate dev builds from production config and updates&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;开发版与正式版完全隔离：独立配置与数据目录，开发版不再弹更新提示，版本号显示为 dev&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.11&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: refine floating header islands and unify agent status beacons&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;打磨浮动玻璃 header：活动标签淡化为低饱和胶囊、悬浮岛显示箭头光标、sidebar 切换按钮补上 hover 高亮、收起 sidebar 时工作区切换器并入左侧胶囊；侧栏卡片的红绿灯状态改为与标签页一致的单点呼吸灯&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: padded shell launcher keeps fresh prompts below the floating header&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新终端用垫行启动脚本把提示符压到浮动玻璃 header 下方并隐藏 Last login 横幅；恢复历史的标签跳过该脚本，避免清屏把恢复内容挤进回滚区&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: keep fresh terminal content below the floating glass header&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复新终端内容被悬浮 header 遮住：玻璃模式下终端网格原生下移 52pt（需关闭 padding balance 才生效）；标签改为胶囊内 accent 药丸并与左右浮岛等高；侧栏全面去盒子化，选中态改为主题色色块&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: adopt macOS 26 Liquid Glass chrome with floating header islands&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;适配 macOS 26 液态玻璃：header 改为悬浮玻璃岛、终端顶到窗口顶部，命令面板与标签胶囊换原生玻璃，选中态统一为主题色药丸；侧栏与内容区无缝同色并去掉多余卡片框；旧系统与关闭玻璃时保持原样式&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.15&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.10&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: richer completion celebration on sidebar cards&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;优化 sidebar 卡片完成时的绿色动效：由「瞬亮线性淡出」改为先快速绽放再缓慢呼出的双段节奏，新增卡片淡绿色泛光与向外扩散的光晕层；开启「减弱动态效果」时仅保留淡入淡出。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.9&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;perf: skip unchanged scrollback snapshots and move rebuild off the main thread&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复开启「恢复终端历史」后 CPU 占用偏高：快照内容未变化时直接跳过（此前每 5 秒对每个 pane 全量导出+重建+写盘且全在主线程），重建与写盘移至后台线程；退出时同步落盘最后一帧快照；Codex 用量改为只读 rollout 文件尾部。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;chore: bump GitHub Actions off deprecated Node 20 runtimes&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;升级 CI/Release workflow 的 GitHub Actions 版本,消除 Node 20 弃用警告。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.8&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: Claude quota bar freezing after repeated token rotations&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 Claude 周额度长期运行后冻结不更新的问题——token 轮换回源从每次启动一次改为 15 分钟节流。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: per-cue notification sounds + custom glass dropdowns in Settings&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;三个提示音支持自定义系统音效(行内播放按钮可试听);设置里的原生下拉(语言/字体/光标样式/滚动行数)全部换成与标签页菜单同款的玻璃风格自定义下拉。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;chore: default off for scrollback restore and usage bars&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;「恢复终端历史」与 Claude/Codex「在侧栏显示额度」三项改为默认关闭,改为用户主动开启。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: Claude spark icon style option + alert localization fixes&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增 Claude 图标样式选项(吉祥物/火花),火花动画随状态切换且不变色;补齐关闭标签页确认与 hook 安装弹窗的中文本地化。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: tab bar overflow menu, traffic-light status dots, per-tab done badges&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;标签栏支持 +N 溢出收纳与红绿灯状态呼吸灯，完成/出错徽章细化到标签页粒度&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.7&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: copy appcast.xml before checkout to avoid tracked-file conflict&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;tag commit 继承上个 release commit 时 appcast.xml 已被追踪，checkout main 会报冲突；修复：切换前先备份到临时目录，切换后还原&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;chore: ignore GhosttyKit.xcframework.upstream and _design directories&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: add tab support with keyboard shortcuts and header UI&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;为工作区添加选项卡管理功能，支持键盘快捷键、标头UI和状态指示器&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.5&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: blank-pane-on-switch, Codex live usage, and running-state cleanup&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 workspace 切换面板空白（workspaceID 按值传递 + post-commit surface re-assert + 强制重绘）；Codex 用量改用实时 ChatGPT 端点读取；thinking/tool 合并为统一 running… 状态&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.4&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: purge saved scrollback when terminal-history restore is turned off&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;关闭&amp;quot;恢复终端历史&amp;quot;开关时,清空已保存的滚动历史快照,不再残留持久化数据&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.3&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: color terminal history restore, agent error state, and turn-timer fixes&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;终端历史按窗格带颜色恢复、agent 报错显示红色 error 状态(不再卡在 thinking)、侧边栏额度条、执行计时改为整轮耗时(批准后重新计时)、仅选中卡片显示边框&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.2&lt;/li&gt;
+    &lt;li&gt;fix: stabilize beta channel and agent status UI&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.15-beta.1&lt;/li&gt;
+    &lt;li&gt;ghosttykit: publish xcframework-b39a70c-v1&lt;/li&gt;
+    &lt;li&gt;Revert &amp;quot;release: prepare v0.1.15-beta.1&amp;quot;&lt;/li&gt;
+    &lt;li&gt;release: prepare v0.1.15-beta.1&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.14&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.14&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;ghosttykit: publish artifact releases as prereleases&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 GhosttyKit 构建产物抢占 GitHub Latest 位置的问题&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;l10n: translate the beta updates toggle&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补上「接收 Beta 更新」开关的中文文案&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ghosttykit: publish xcframework-e9120d4-v1&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;登记新的 GhosttyKit 预构建产物（含后台工作区内存优化）&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: Sparkle beta channel for prerelease tags&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增 Beta 更新通道——设置里开启「接收 Beta 更新」即可提前收到预发布版本；正式版用户不受影响，brew 始终安装稳定版&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ghostty: switch submodule to chenbstack fork with occlusion memory fix&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复隐藏工作区的显存占用——被遮挡的 pane 释放 3 张全尺寸渲染缓冲，3 个后台工作区约省 110MB 内存；子模块改指自有 fork，让登记的 SHA 与产物真实来源一致&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.13&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.13&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;sidebar: traffic-light status pill, edge beacon and unified card chrome&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;卡片状态改为红绿灯胶囊+左缘呼吸光条,统一边框与图标配色,新建按钮更醒目&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;icons: animated Codex mascot in three agent states&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Codex 窗格图标升级为三态动画吉祥物(工作/思考/空闲)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;pane: resolve npm-shim CLIs through node argv for the sidebar icon&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;侧栏图标支持 npm 安装的 codex/claude——穿透 node shim 识别真实 agent&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ci: auto-bump homebrew tap cask on release&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;发版时自动更新 Homebrew tap 的 cask 版本,brew 安装不再是老版本&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: bilingual notes for v0.1.12&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.12&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.12&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;app: check for updates hourly instead of daily&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;自动更新检查间隔从每天一次缩短到每小时一次&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;app: localize destructive-confirm alerts, fill missing zh-Hans strings&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;退出/关闭面板/删除工作区等确认弹窗汉化,并补齐右键菜单等缺失的中文翻译&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.11&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;</description>
       <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.21/Glint-0.1.21.dmg" length="14289536" type="application/octet-stream" sparkle:edSignature="wPjuaZ1Y9qsATC/KxvPJR6wZxU1fCUW91sPWsNzvj1EowsN0L36SBLEFgN4rIdzu0oJvEvShX2FVkWqbfdknCQ==" />
     </item>
     <item>
