@@ -6,15 +6,21 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.21-beta.5</title>
-      <sparkle:version>202606181412</sparkle:version>
-      <sparkle:shortVersionString>0.1.21-beta.5</sparkle:shortVersionString>
+      <title>Glint 0.1.21-beta.6</title>
+      <sparkle:version>202606181424</sparkle:version>
+      <sparkle:shortVersionString>0.1.21-beta.6</sparkle:shortVersionString>
       <sparkle:channel>beta</sparkle:channel>
-      <pubDate>Thu, 18 Jun 2026 14:13:23 +0000</pubDate>
+      <pubDate>Thu, 18 Jun 2026 14:25:21 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.5</h3><ul>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.6</h3><ul>
+    <li><strong>feat(chrome): double-click the header to zoom the window</strong><br><span style="color:#666">窗口: 双击 header(玻璃浮岛/band 以及侧边栏顶部标题栏条)最大化窗口,和原生标题栏一致。原来靠 mouseDownCanMoveWindow 自动拖窗导致视图收不到 mouseDown,改为单击手动 performDrag、双击 window.zoom(nil)。</span></li>
+    <li><strong>fix(sidebar): keep workspace card height constant across agent status</strong><br><span style="color:#666">侧边栏: 修复 workspace 卡片在 agent 运行中比空闲时矮约 1.5pt 的问题——次要行在「空闲(metadata 胶囊徽章)」和「运行中(纯状态文字)」之间切换,胶囊更高;给该行固定 minHeight(取较高的空闲态)使两种状态高度一致。</span></li>
     <li><strong>fix(assets): commit OpenCode icon set so it ships in release builds</strong><br><span style="color:#666">资源: 补提交 OpenCode 图标资源(吉祥物各状态 + mark),之前只提交了引用它们的代码、asset 文件本身没被跟踪,导致发布版缺图标、OpenCode 窗格图标空白(本地 dev 因有未跟踪文件而正常,掩盖了问题)。</span></li>
-  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.3</h3><ul>
+    <li>release: appcast for v0.1.21-beta.5</li>
+    <li>release: appcast for v0.1.21-beta.4</li>
+  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.5</h3><ul>
+    <li><strong>fix(assets): commit OpenCode icon set so it ships in release builds</strong><br><span style="color:#666">资源: 补提交 OpenCode 图标资源(吉祥物各状态 + mark),之前只提交了引用它们的代码、asset 文件本身没被跟踪,导致发布版缺图标、OpenCode 窗格图标空白(本地 dev 因有未跟踪文件而正常,掩盖了问题)。</span></li>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.3</h3><ul>
     <li><strong>feat(terminal): paste Finder files as paths &amp; ⌘-click to open files</strong><br><span style="color:#666">⌘V 粘贴 Finder 文件改为粘贴文件完整路径;⌘点击终端里的文件路径可直接打开(相对路径按 cwd 解析;可执行文件/应用改为在 Finder 中显示,防止执行不可信内容)</span></li>
     <li>release: appcast for v0.1.21-beta.2</li>
   </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.2</h3><ul>
@@ -50,10 +56,58 @@
   </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.12</h3><ul>
     <li><strong>feat(agents): opt-in resume of claude/codex sessions on launch</strong><br><span style="color:#666">智能体: 新增&quot;启动时恢复会话&quot;开关(Claude/Codex 各一,默认关),开后切回上次跑 agent 的窗格时自动执行 claude --continue / codex resume --last</span></li>
     <li>release: appcast for v0.1.18-beta.11</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.11</h3><ul>
-    <li><strong>fix(scroll): match upstream Ghostty 2x multiplier on precise trackpad deltas</strong><br><span style="color:#666">滚动手感: 触控板精确滚动对齐上游 Ghostty.app 的 2 倍速,不再发涩</span></li>
-    <li>release: appcast for v0.1.18</li>
   </ul></div>]]></description>
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.21-beta.6/Glint-0.1.21-beta.6.dmg" length="14289574" type="application/octet-stream" sparkle:edSignature="+8bOS/R/aPeoVM+BkmRlX13iSu3a3Mme7oe4dtBxDSF/qHRc2EClMSfcHZwY3jFBFVdjxoKalfVvBO/xb5JeCA==" />
+    </item>
+    <item>
+      <title>Glint 0.1.21-beta.5</title>
+      <sparkle:version>202606181412</sparkle:version>
+      <sparkle:shortVersionString>0.1.21-beta.5</sparkle:shortVersionString>
+      <sparkle:channel>beta</sparkle:channel>
+      <pubDate>Thu, 18 Jun 2026 14:13:23 +0000</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description>&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.21-beta.5&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix(assets): commit OpenCode icon set so it ships in release builds&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;资源: 补提交 OpenCode 图标资源(吉祥物各状态 + mark),之前只提交了引用它们的代码、asset 文件本身没被跟踪,导致发布版缺图标、OpenCode 窗格图标空白(本地 dev 因有未跟踪文件而正常,掩盖了问题)。&lt;/span&gt;&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;!--GLINT_HISTORY_BELOW--&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3 style="color:#666;"&gt;历史版本 · Previous releases&lt;/h3&gt;&lt;/div&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.21-beta.3&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(terminal): paste Finder files as paths &amp;amp; ⌘-click to open files&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;⌘V 粘贴 Finder 文件改为粘贴文件完整路径;⌘点击终端里的文件路径可直接打开(相对路径按 cwd 解析;可执行文件/应用改为在 Finder 中显示,防止执行不可信内容)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.2&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.21-beta.2&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(tabs): inline rename for tab chips&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;顶部标签条支持重命名 —— 右键 &amp;quot;Rename&amp;quot; 把标签切成 TextField，&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.1&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.21-beta.1&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;polish(sidebar): move archived marker to top-right corner&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;工作区&amp;quot;已归档&amp;quot;徽标从二行胶囊移到卡片右上角，卡片主体跟普通卡片&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.20&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.20&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(tabs): drag-to-reorder header tab chips&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;标签页支持拖动重排，手感跟 sidebar 工作区卡片一致。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;polish(sidebar): archive badge, usage icons, header spacing&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;工作区&amp;quot;已归档&amp;quot;徽标加底色+图标，更显眼；侧边栏额度行的 Claude/&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(dev): isolate dev/prod via .dev bundle id + prod-snapshot fallback&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 dev/prod 共用一份偏好/缓存的 bug（Debug 改用 .dev bundle&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ci(release): sort changelog entries — features first, fixes after&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;changelog 按提交类型排序:新功能/变化在上,bug 修复在中,&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ci(release): show bilingual changelog on GitHub Releases page&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;GitHub Releases 页面现在展示和 Sparkle 一样的双语 changelog&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.20-beta.1&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.19&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.20-beta.1&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;polish(sidebar): archive badge, usage icons, header spacing&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;工作区&amp;quot;已归档&amp;quot;徽标加底色+图标，更显眼；侧边栏额度行的 Claude/&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(dev): isolate dev/prod via .dev bundle id + prod-snapshot fallback&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 dev/prod 共用一份偏好/缓存的 bug（Debug 改用 .dev bundle&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(tabs): drag-to-reorder header tab chips&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;标签页支持拖动重排，手感跟 sidebar 工作区卡片一致。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.19&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.19&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.13&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(workspace): archive workspaces to a collapsible sidebar group&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增工作区归档：把工作区收进 sidebar 顶部的可折叠&amp;quot;已归档 N&amp;quot;区，&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.12&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(agents): opt-in resume of claude/codex sessions on launch&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;智能体: 新增&amp;quot;启动时恢复会话&amp;quot;开关(Claude/Codex 各一,默认关),开后切回上次跑 agent 的窗格时自动执行 claude --continue / codex resume --last&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.11&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(scroll): match upstream Ghostty 2x multiplier on precise trackpad deltas&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;滚动手感: 触控板精确滚动对齐上游 Ghostty.app 的 2 倍速,不再发涩&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.13&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(workspace): archive workspaces to a collapsible sidebar group&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增工作区归档：把工作区收进 sidebar 顶部的可折叠&amp;quot;已归档 N&amp;quot;区，&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.12&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.12&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(agents): opt-in resume of claude/codex sessions on launch&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;智能体: 新增&amp;quot;启动时恢复会话&amp;quot;开关(Claude/Codex 各一,默认关),开后切回上次跑 agent 的窗格时自动执行 claude --continue / codex resume --last&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.11&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.11&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix(scroll): match upstream Ghostty 2x multiplier on precise trackpad deltas&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;滚动手感: 触控板精确滚动对齐上游 Ghostty.app 的 2 倍速,不再发涩&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;</description>
       <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.21-beta.5/Glint-0.1.21-beta.5.dmg" length="15341501" type="application/octet-stream" sparkle:edSignature="+7vy9z0+xcFOAELpY8yNZCIN71YLzqmc/nNBLJ5yAJfan1UTiVeLEgy0czL7qK+OKIWg1sHtEWR67wuX9MH2Ag==" />
     </item>
     <item>
