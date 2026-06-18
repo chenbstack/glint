@@ -1,10 +1,10 @@
 import Foundation
 
-/// Which CLI agent the pane is running. Right now only Claude Code is
-/// wired through; codex/aider/etc. can be added when their hooks land.
+/// Which CLI agent the pane is running.
 enum PaneAgentKind: String, Codable {
     case claude
     case codex
+    case opencode
 }
 
 enum PaneAgentStatus: String, Codable {
