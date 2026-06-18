@@ -1032,11 +1032,16 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     }
 
     override func flagsChanged(with event: NSEvent) {
-        // Modifier-only events — forward as a key press w/ empty text so
-        // ghostty stays in sync with mods.
+        // `flagsChanged` is emitted for both modifier press and release.
+        // Sending every edge as PRESS leaves Ghostty with phantom Shift
+        // events; with IMEs that use Shift to toggle languages this can feel
+        // like Shift+Enter fired Shift more than once.
         guard let s = surface else { return }
+        guard !hasMarkedText(),
+              let action = Self.modifierAction(for: event) else { return }
+
         var key = ghostty_input_key_s()
-        key.action = GHOSTTY_ACTION_PRESS
+        key.action = action
         key.mods = currentMods(event.modifierFlags)
         key.consumed_mods = ghostty_input_mods_e(rawValue: 0)
         key.keycode = UInt32(event.keyCode)
@@ -1044,6 +1049,51 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         key.unshifted_codepoint = 0
         key.composing = false
         _ = ghostty_surface_key(s, key)
+    }
+
+    private static func modifierAction(for event: NSEvent) -> ghostty_input_action_e? {
+        let modifierActive: Bool
+        switch event.keyCode {
+        case 0x39:
+            modifierActive = event.modifierFlags.contains(.capsLock)
+        case 0x38, 0x3C:
+            modifierActive = event.modifierFlags.contains(.shift)
+        case 0x3B, 0x3E:
+            modifierActive = event.modifierFlags.contains(.control)
+        case 0x3A, 0x3D:
+            modifierActive = event.modifierFlags.contains(.option)
+        case 0x37, 0x36:
+            modifierActive = event.modifierFlags.contains(.command)
+        default:
+            return nil
+        }
+
+        guard modifierActive else { return GHOSTTY_ACTION_RELEASE }
+
+        let flags = event.modifierFlags.rawValue
+        let sidePressed: Bool
+        switch event.keyCode {
+        case 0x38:
+            sidePressed = flags & UInt(NX_DEVICELSHIFTKEYMASK) != 0
+        case 0x3C:
+            sidePressed = flags & UInt(NX_DEVICERSHIFTKEYMASK) != 0
+        case 0x3B:
+            sidePressed = flags & UInt(NX_DEVICELCTLKEYMASK) != 0
+        case 0x3E:
+            sidePressed = flags & UInt(NX_DEVICERCTLKEYMASK) != 0
+        case 0x3A:
+            sidePressed = flags & UInt(NX_DEVICELALTKEYMASK) != 0
+        case 0x3D:
+            sidePressed = flags & UInt(NX_DEVICERALTKEYMASK) != 0
+        case 0x37:
+            sidePressed = flags & UInt(NX_DEVICELCMDKEYMASK) != 0
+        case 0x36:
+            sidePressed = flags & UInt(NX_DEVICERCMDKEYMASK) != 0
+        default:
+            sidePressed = true
+        }
+
+        return sidePressed ? GHOSTTY_ACTION_PRESS : GHOSTTY_ACTION_RELEASE
     }
 
     @discardableResult
