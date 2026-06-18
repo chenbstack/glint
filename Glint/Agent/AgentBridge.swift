@@ -155,14 +155,17 @@ final class AgentBridge {
             return
         }
         DispatchQueue.main.async {
+            var userInfo: [String: Any] = [
+                "pane": env.pane,
+                "hook": env.hook,
+            ]
+            if let agent = env.agent, !agent.isEmpty {
+                userInfo["agent"] = agent
+            }
             NotificationCenter.default.post(
                 name: .glintAgentEvent,
                 object: nil,
-                userInfo: [
-                    "pane": env.pane,
-                    "hook": env.hook,
-                    "agent": env.agent ?? "claude",
-                ]
+                userInfo: userInfo
             )
         }
     }
