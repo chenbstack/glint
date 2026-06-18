@@ -19,6 +19,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     private var surface: ghostty_surface_t?
     private var trackingArea: NSTrackingArea?
     private var markedTextValue: NSAttributedString = NSAttributedString(string: "")
+    private var keyTextAccumulator: [String]?
     private let initialCwd: String?
     /// Identifier (`"<wsuuid>:<paneSeq>"`) passed into the pty as
     /// `$GLINT_PANE_ID` so CLI-agent hooks can address us back.
@@ -968,6 +969,20 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             NotificationCenter.default.post(
                 name: .glintPaneReturnPressed, object: nil, userInfo: ["pane": pk])
         }
+
+        if Self.isShiftReturn(event) && !hasMarkedText() {
+            // Let the input method observe the whole Shift+Return chord. Some
+            // Chinese IMEs toggle languages on a "standalone" Shift; if Return
+            // bypasses AppKit's text-input path, the IME can misclassify the
+            // chord and flip Chinese/English mode after inserting the newline.
+            keyTextAccumulator = []
+            interpretKeyEvents([event])
+            keyTextAccumulator = nil
+            let handled = sendKey(event, action: GHOSTTY_ACTION_PRESS, surface: s)
+            if !handled { interpretKeyEvents([event]) }
+            return
+        }
+
         let hasBindingMod = mods.contains(.control) || mods.contains(.command)
             || optionActsAsMeta(mods, surface: s)
         if hasBindingMod || Self.isSpecialKey(event.keyCode) {
@@ -982,6 +997,15 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             // a white-background "marked text" until the user moves the cursor.
             interpretKeyEvents([event])
         }
+    }
+
+    private static func isShiftReturn(_ event: NSEvent) -> Bool {
+        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        return (event.keyCode == 36 || event.keyCode == 76)
+            && mods.contains(.shift)
+            && !mods.contains(.command)
+            && !mods.contains(.option)
+            && !mods.contains(.control)
     }
 
     /// Whether an Option-modified press should be routed through ghostty
@@ -1724,6 +1748,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         case let s as String: text = s
         case let s as NSAttributedString: text = s.string
         default: return
+        }
+        if keyTextAccumulator != nil {
+            keyTextAccumulator?.append(text)
+            return
         }
         guard !text.isEmpty, let s = surface else { return }
         text.withCString { ptr in
