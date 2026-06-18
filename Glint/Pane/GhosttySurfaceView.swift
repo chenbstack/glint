@@ -1766,6 +1766,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         markedTextValue = NSAttributedString(string: "")
     }
 
+    override func doCommand(by selector: Selector) {
+        guard keyTextAccumulator == nil else { return }
+        super.doCommand(by: selector)
+    }
+
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
         let text: String
         switch string {
