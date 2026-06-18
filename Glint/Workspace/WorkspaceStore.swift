@@ -316,13 +316,34 @@ extension Workspace {
         return Self.shortLabel(forCwd: cwd) ?? name
     }
 
-    /// Label for a tab chip: the user's name if set, otherwise a short cwd
-    /// label from the tab's focused pane, otherwise a generic fallback.
+    /// Label for a tab chip: the user's name if set, otherwise the focused
+    /// pane's folder name, otherwise a generic fallback.
     func tabDisplayName(_ tab: WorkspaceTab) -> String {
         if let n = tab.name, !n.isEmpty { return n }
-        let cwd = panes[tab.focusedPane]?.workingDirectory
+        return Self.shortTabLabel(forCwd: tabCwd(tab)) ?? String(localized: "Terminal")
+    }
+
+    /// Tooltip for a tab chip. The visible label stays compact, while hover
+    /// still exposes the full working directory when Glint knows it.
+    func tabHelpText(_ tab: WorkspaceTab) -> String {
+        let display = tabDisplayName(tab)
+        guard let cwd = tabCwd(tab), !cwd.isEmpty, cwd != display else { return display }
+        return "\(display)\n\(cwd)"
+    }
+
+    private func tabCwd(_ tab: WorkspaceTab) -> String? {
+        panes[tab.focusedPane]?.workingDirectory
             ?? tab.root.leaves.compactMap { panes[$0]?.workingDirectory }.first
-        return Self.shortLabel(forCwd: cwd) ?? String(localized: "Terminal")
+    }
+
+    private static func shortTabLabel(forCwd path: String?) -> String? {
+        guard var path, !path.isEmpty else { return nil }
+        while path.count > 1, path.hasSuffix("/") { path.removeLast() }
+        let home = NSHomeDirectory()
+        if path == home { return "~" }
+        if path == "/" { return "/" }
+        let label = URL(fileURLWithPath: path).lastPathComponent
+        return label.isEmpty ? nil : label
     }
 
     private static func shortLabel(forCwd path: String?) -> String? {
