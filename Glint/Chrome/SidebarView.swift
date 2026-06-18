@@ -261,7 +261,7 @@ struct SidebarView: View {
                 .fill(Color.white.opacity(searchFocused ? 0.08 : 0.04))
         )
         // Make the entire pill hit-testable so clicking anywhere (the
-        // magnifying glass, the empty padding, the trailing ⌘K tag) hands
+        // magnifying glass, the empty padding, the trailing key hint) hands
         // focus to the TextField. Without contentShape SwiftUI only routes
         // hits that land directly on the TextField's text baseline.
         .contentShape(Rectangle())

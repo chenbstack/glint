@@ -953,6 +953,15 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             }
             return
         }
+        // ⌘K is terminal muscle memory for clearing the screen/scrollback.
+        // Keep it out of app-level shortcuts so it always targets the
+        // focused terminal surface.
+        if mods.contains(.command),
+           !mods.contains(.shift), !mods.contains(.option), !mods.contains(.control),
+           event.keyCode == 40 {
+            triggerBindingAction(s, "clear_screen")
+            return
+        }
         // Plain Esc: neither claude nor codex emit any hook when the user
         // interrupts a turn (Stop explicitly skips interrupts), so the
         // sidebar would show "thinking" forever. The wrapper does see the
@@ -1515,11 +1524,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         m.addItem(withTitle: String(localized: "Select All"),
                   action: #selector(menuSelectAll(_:)),
                   keyEquivalent: "a").target = self
-        // No key equivalent: ⌘K is bound to the command palette app-wide,
-        // so advertising it here would lie about what the shortcut does.
         m.addItem(withTitle: String(localized: "Clear"),
                   action: #selector(menuClear(_:)),
-                  keyEquivalent: "").target = self
+                  keyEquivalent: "k").target = self
         return m
     }
 

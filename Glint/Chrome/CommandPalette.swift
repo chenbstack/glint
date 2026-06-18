@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Centered modal overlay summoned by ⌘K or the toolbar's ⌘ button.
+/// Centered modal overlay summoned by ⌘⇧P or the toolbar's ⌘ button.
 /// Type to fuzzy-filter; ↑↓ to move selection; ⏎ to execute; ⎋ to close.
 struct CommandPalette: View {
     @EnvironmentObject var store: WorkspaceStore

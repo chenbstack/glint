@@ -140,7 +140,7 @@ struct ToolbarHeader: View {
             TabBar()
                 .padding(.horizontal, 12)
             HStack(spacing: 4) {
-                ToolbarIconButton(symbol: "command", help: "Command Palette (⌘K)") {
+                ToolbarIconButton(symbol: "command", help: "Command Palette (⌘⇧P)") {
                     store.commandPaletteOpen = true
                 }
                 ToolbarIconButton(symbol: "gearshape", help: "Settings (⌘,)") {

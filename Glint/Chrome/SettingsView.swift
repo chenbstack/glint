@@ -335,7 +335,7 @@ struct SettingsDivider: View {
     }
 }
 
-/// Compact key-cap pill, e.g. `⌘K`, used in the shortcuts list and footers.
+/// Compact key-cap pill, e.g. `⌘⇧P`, used in the shortcuts list and footers.
 struct KeyCap: View {
     let label: String
     var body: some View {
@@ -1168,7 +1168,7 @@ private struct ShortcutsPane: View {
         SettingsCard("Window") {
             shortcutRow("Toggle Sidebar", keys: ["⌘", "/"])
             SettingsDivider()
-            shortcutRow("Command Palette", keys: ["⌘", "K"])
+            shortcutRow("Command Palette", keys: ["⌘", "⇧", "P"])
             SettingsDivider()
             shortcutRow("Find in Sidebar", keys: ["⌥", "⌘", "F"])
             SettingsDivider()

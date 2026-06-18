@@ -104,7 +104,7 @@ struct GlintApp: App {
                 Button("Command Palette") {
                     workspaceStore.commandPaletteOpen.toggle()
                 }
-                .keyboardShortcut("k", modifiers: .command)
+                .keyboardShortcut("p", modifiers: [.command, .shift])
                 Button("Find in Sidebar") {
                     workspaceStore.focusSidebarSearch()
                 }

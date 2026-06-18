@@ -361,7 +361,7 @@ final class WorkspaceStore: ObservableObject {
     @Published var paneAgentState: [WorkspacePaneKey: PaneAgentState] = [:]
 
     /// Drives the command-palette overlay. Toggled by the toolbar's ⌘
-    /// button and the ⌘K global shortcut.
+    /// button and the ⌘⇧P global shortcut.
     @Published var commandPaletteOpen: Bool = false
 
     /// Drives the Settings sheet attached to the main window. We host

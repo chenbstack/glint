@@ -563,13 +563,13 @@
         }
       }
     },
-    "Command Palette (⌘K)" : {
+    "Command Palette (⌘⇧P)" : {
       "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "命令面板 (⌘K)"
+            "value" : "命令面板 (⌘⇧P)"
           }
         }
       }
