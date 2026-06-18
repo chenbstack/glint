@@ -509,13 +509,16 @@ private struct TabChip: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(Text(verbatim: ws.tabDisplayName(tab)))
-        .onTapGesture {
+        .onTapGesture(count: 2) {
+            if !isEditing { startEditing() }
+        }
+        .onTapGesture(count: 1) {
             // Single-tap selects the tab. During edit the tap is the user
             // clicking into the field — don't steal the focus to selectTab.
             if !isEditing { store.selectTab(tab.id) }
         }
         .onHover { hovering = $0 && !isEditing }
-        .help(ws.tabDisplayName(tab))
+        .help(ws.tabHelpText(tab))
         .contextMenu {
             Button("Rename") { startEditing() }
         }
