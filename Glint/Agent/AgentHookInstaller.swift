@@ -20,6 +20,46 @@ private func setPosixPermissions(_ mode: Int, atPath path: String) {
     try? FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: path)
 }
 
+/// Best-effort detection of whether a CLI agent is actually present on this
+/// Mac. Used to avoid offering (or auto-installing) hooks for agents the
+/// user doesn't have. We trust the agent's config/state directory first —
+/// it's the strongest signal that they actually use it — and fall back to
+/// probing common executable locations, because a GUI app launched from
+/// Finder doesn't inherit the login shell's `PATH`, so `PATH` alone misses
+/// most installs.
+enum AgentPresence {
+    static func directoryExists(_ relativeToHome: String) -> Bool {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(relativeToHome)
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
+    }
+
+    static func fileExists(_ relativeToHome: String) -> Bool {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(relativeToHome)
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    static func commandExists(_ name: String) -> Bool {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser.path
+        var dirs = [
+            "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin",
+            "\(home)/.local/bin", "\(home)/bin",
+            "\(home)/.bun/bin", "\(home)/.deno/bin",
+            "\(home)/.npm-global/bin", "\(home)/.opencode/bin",
+        ]
+        if let path = ProcessInfo.processInfo.environment["PATH"] {
+            dirs.append(contentsOf: path.split(separator: ":").map(String.init))
+        }
+        for dir in dirs where fm.isExecutableFile(atPath: "\(dir)/\(name)") {
+            return true
+        }
+        return false
+    }
+}
+
 /// Drops the Claude Code hook script onto disk and merges its hook entries
 /// into `~/.claude/settings.json`. The merge is idempotent: existing Glint
 /// entries (recognized by command path) are replaced, everything else is
@@ -67,6 +107,14 @@ enum AgentHookInstaller {
             }
         }
         return false
+    }
+
+    /// Whether Claude Code itself looks installed on this Mac, independent of
+    /// whether Glint's hooks are registered yet.
+    static func isAgentPresent() -> Bool {
+        AgentPresence.directoryExists(".claude")
+            || AgentPresence.fileExists(".claude.json")
+            || AgentPresence.commandExists("claude")
     }
 
     /// Strip Glint's hook entries from `~/.claude/settings.json` and delete
@@ -344,6 +392,12 @@ enum CodexHookInstaller {
         return false
     }
 
+    /// Whether the Codex CLI itself looks installed on this Mac.
+    static func isAgentPresent() -> Bool {
+        AgentPresence.directoryExists(".codex")
+            || AgentPresence.commandExists("codex")
+    }
+
     static func installIfNeeded(socketPath: String) {
         guard let scriptPath = AgentHookInstaller.ensureReporterScript() else { return }
         mergeCodexHooks(scriptPath: scriptPath)
@@ -498,6 +552,12 @@ enum OpenCodeHookInstaller {
     static func isInstalled() -> Bool {
         guard let body = try? String(contentsOf: pluginURL) else { return false }
         return body.contains(marker)
+    }
+
+    /// Whether OpenCode itself looks installed on this Mac.
+    static func isAgentPresent() -> Bool {
+        AgentPresence.directoryExists(".config/opencode")
+            || AgentPresence.commandExists("opencode")
     }
 
     static func installIfNeeded(socketPath: String) {

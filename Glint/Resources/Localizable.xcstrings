@@ -1589,6 +1589,147 @@
         }
       }
     },
+    "When Glint reopens, run `opencode --continue` in any pane that was running OpenCode at last quit." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 重新打开时，对上次退出前在跑 OpenCode 的窗格自动执行 `opencode --continue`。"
+          }
+        }
+      }
+    },
+    "Plugin file" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "插件文件"
+          }
+        }
+      }
+    },
+    "Loaded by OpenCode automatically on startup; it only reports when Glint's pane environment variables are present." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenCode 启动时自动加载；仅当存在 Glint 的窗格环境变量时才会上报。"
+          }
+        }
+      }
+    },
+    "Glint installs a global OpenCode plugin at ~/.config/opencode/plugins/glint-agent-bridge.js so OpenCode sessions can report status without being shown as Claude." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 会在 ~/.config/opencode/plugins/glint-agent-bridge.js 安装一个全局 OpenCode 插件，让 OpenCode 会话能上报状态、而不被显示成 Claude。"
+          }
+        }
+      }
+    },
+    "Plugin installed into your OpenCode plugins directory." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "插件已安装到你的 OpenCode 插件目录。"
+          }
+        }
+      }
+    },
+    "Install failed — check Console for [glint] logs." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装失败 —— 请在「控制台」中查看 [glint] 日志。"
+          }
+        }
+      }
+    },
+    "Glint can register status hooks with %@ that report when an agent is thinking, finished, or waiting for approval. They only send events to Glint on this Mac. You can uninstall them anytime in Settings → Agents." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 可以为 %@ 注册状态 hook，在 agent 思考中、已完成或等待批准时上报。事件只会发送到本机的 Glint。你随时可以在「设置 → Agents」里卸载。"
+          }
+        }
+      }
+    },
+    "Not detected" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未检测到"
+          }
+        }
+      }
+    },
+    "Claude Code detected — install the reporter to show its status." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已检测到 Claude Code —— 安装上报脚本即可显示其状态。"
+          }
+        }
+      }
+    },
+    "Claude Code not detected on this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本机未检测到 Claude Code。"
+          }
+        }
+      }
+    },
+    "Codex detected — install the reporter to show its status." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已检测到 Codex —— 安装上报脚本即可显示其状态。"
+          }
+        }
+      }
+    },
+    "Codex not detected on this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本机未检测到 Codex。"
+          }
+        }
+      }
+    },
+    "OpenCode detected — install the plugin to show its status." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已检测到 OpenCode —— 安装插件即可显示其状态。"
+          }
+        }
+      }
+    },
+    "OpenCode not detected on this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本机未检测到 OpenCode。"
+          }
+        }
+      }
+    },
     "Retry" : {
       "extractionState" : "stale",
       "localizations" : {

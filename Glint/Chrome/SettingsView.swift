@@ -605,10 +605,14 @@ private struct AgentsPane: View {
                      footer: "Glint offers to install a reporter into ~/.claude/settings.json on first launch. Existing hooks are preserved.") {
             SettingsRow("Status", subtitle: claudeInstallFailed
                         ? "Install failed — check Console for [glint] logs (often a malformed settings.json)."
-                        : "Hooks merged into your Claude settings.") {
+                        : (store.claudeHooksInstalled
+                           ? "Hooks merged into your Claude settings."
+                           : (store.claudeDetected
+                              ? "Claude Code detected — install the reporter to show its status."
+                              : "Claude Code not detected on this Mac."))) {
                 HStack(spacing: 8) {
                     StatusPill(
-                        label: store.claudeHooksInstalled ? "Installed" : "Not installed",
+                        label: store.claudeHooksInstalled ? "Installed" : (store.claudeDetected ? "Not installed" : "Not detected"),
                         tone: store.claudeHooksInstalled ? .ok : .neutral
                     )
                     if store.claudeHooksInstalled {
@@ -662,10 +666,14 @@ private struct AgentsPane: View {
                      footer: "Glint writes its hook entries into ~/.codex/hooks.json so Codex sessions surface the same status as Claude.") {
             SettingsRow("Status", subtitle: codexInstallFailed
                         ? "Install failed — check Console for [glint] logs (often a malformed hooks.json)."
-                        : "Hooks merged into your Codex config.") {
+                        : (store.codexHooksInstalled
+                           ? "Hooks merged into your Codex config."
+                           : (store.codexDetected
+                              ? "Codex detected — install the reporter to show its status."
+                              : "Codex not detected on this Mac."))) {
                 HStack(spacing: 8) {
                     StatusPill(
-                        label: store.codexHooksInstalled ? "Installed" : "Not installed",
+                        label: store.codexHooksInstalled ? "Installed" : (store.codexDetected ? "Not installed" : "Not detected"),
                         tone: store.codexHooksInstalled ? .ok : .neutral
                     )
                     if store.codexHooksInstalled {
@@ -702,10 +710,14 @@ private struct AgentsPane: View {
                      footer: "Glint installs a global OpenCode plugin at ~/.config/opencode/plugins/glint-agent-bridge.js so OpenCode sessions can report status without being shown as Claude.") {
             SettingsRow("Status", subtitle: opencodeInstallFailed
                         ? "Install failed — check Console for [glint] logs."
-                        : "Plugin installed into your OpenCode plugins directory.") {
+                        : (store.opencodeHooksInstalled
+                           ? "Plugin installed into your OpenCode plugins directory."
+                           : (store.opencodeDetected
+                              ? "OpenCode detected — install the plugin to show its status."
+                              : "OpenCode not detected on this Mac."))) {
                 HStack(spacing: 8) {
                     StatusPill(
-                        label: store.opencodeHooksInstalled ? "Installed" : "Not installed",
+                        label: store.opencodeHooksInstalled ? "Installed" : (store.opencodeDetected ? "Not installed" : "Not detected"),
                         tone: store.opencodeHooksInstalled ? .ok : .neutral
                     )
                     if store.opencodeHooksInstalled {
@@ -723,6 +735,12 @@ private struct AgentsPane: View {
                             .tint(store.accent)
                     }
                 }
+            }
+            SettingsDivider()
+            SettingsRow("Resume session on launch",
+                        subtitle: "When Glint reopens, run `opencode --continue` in any pane that was running OpenCode at last quit.") {
+                Toggle("", isOn: $store.restoreOpenCodeSession)
+                    .toggleStyle(.switch).labelsHidden()
             }
             SettingsDivider()
             SettingsRow("Plugin file",

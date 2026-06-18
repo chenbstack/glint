@@ -504,6 +504,11 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreCodexSession, forKey: "glint.restoreCodexSession") }
     }
 
+    /// Same as `restoreClaudeSession` but for OpenCode — feeds `opencode --continue`.
+    @Published var restoreOpenCodeSession: Bool = (UserDefaults.standard.object(forKey: "glint.restoreOpenCodeSession") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(restoreOpenCodeSession, forKey: "glint.restoreOpenCodeSession") }
+    }
+
     /// Whether the sidebar's "Archived" section is currently expanded.
     /// Persists across launches so a user who keeps it open doesn't have to
     /// re-open it every cold start.
@@ -595,42 +600,75 @@ final class WorkspaceStore: ObservableObject {
     /// refreshed every launch — script-body and event-list updates shipped
     /// with new Glint versions must propagate even though the prompt is
     /// skipped.
+    private struct AgentHookSpec {
+        let handledKey: String
+        let displayName: String
+        let isPresent: () -> Bool
+        let isInstalled: () -> Bool
+        let install: () -> Void
+    }
+
+    private static func agentHookSpecs(socketPath: String) -> [AgentHookSpec] {
+        [
+            AgentHookSpec(
+                handledKey: "glint.claudeHooksAutoInstalled",
+                displayName: "Claude Code",
+                isPresent: AgentHookInstaller.isAgentPresent,
+                isInstalled: AgentHookInstaller.isInstalled,
+                install: { AgentHookInstaller.installIfNeeded(socketPath: socketPath) }
+            ),
+            AgentHookSpec(
+                handledKey: "glint.codexHooksAutoInstalled",
+                displayName: "Codex",
+                isPresent: CodexHookInstaller.isAgentPresent,
+                isInstalled: CodexHookInstaller.isInstalled,
+                install: { CodexHookInstaller.installIfNeeded(socketPath: socketPath) }
+            ),
+            AgentHookSpec(
+                handledKey: "glint.opencodeHooksAutoInstalled",
+                displayName: "OpenCode",
+                isPresent: OpenCodeHookInstaller.isAgentPresent,
+                isInstalled: OpenCodeHookInstaller.isInstalled,
+                install: { OpenCodeHookInstaller.installIfNeeded(socketPath: socketPath) }
+            ),
+        ]
+    }
+
     private static func autoInstallAgentHooksOnFirstLaunch(socketPath: String) {
         let defaults = UserDefaults.standard
-        let claudeHandled = defaults.bool(forKey: "glint.claudeHooksAutoInstalled")
-        let codexHandled = defaults.bool(forKey: "glint.codexHooksAutoInstalled")
-        let opencodeHandled = defaults.bool(forKey: "glint.opencodeHooksAutoInstalled")
+        let specs = agentHookSpecs(socketPath: socketPath)
 
-        if claudeHandled, AgentHookInstaller.isInstalled() {
-            AgentHookInstaller.installIfNeeded(socketPath: socketPath)
+        // Refresh hooks we already manage so script-body / event-list changes
+        // shipped with a new Glint version propagate even when the prompt is
+        // skipped.
+        for spec in specs where defaults.bool(forKey: spec.handledKey) && spec.isInstalled() {
+            spec.install()
         }
-        if codexHandled, CodexHookInstaller.isInstalled() {
-            CodexHookInstaller.installIfNeeded(socketPath: socketPath)
-        }
-        if opencodeHandled, OpenCodeHookInstaller.isInstalled() {
-            OpenCodeHookInstaller.installIfNeeded(socketPath: socketPath)
-        }
-        guard !claudeHandled || !codexHandled || !opencodeHandled else { return }
+
+        // Only offer to install for agents the user actually has on this Mac
+        // AND we haven't asked about yet. Absent agents are deliberately NOT
+        // marked handled, so if one is installed later we'll offer hooks for
+        // it on a future launch instead of blindly writing config for tools
+        // that aren't there.
+        let pending = specs.filter { !defaults.bool(forKey: $0.handledKey) && $0.isPresent() }
+        guard !pending.isEmpty else { return }
 
         // Defer past launch so the alert doesn't pop before the main window.
         Task { @MainActor in
+            let names = pending.map(\.displayName)
+            let list = ListFormatter.localizedString(byJoining: names)
             let alert = NSAlert()
             alert.messageText = String(localized: "Show agent status in the sidebar?")
-            alert.informativeText = String(localized: "Glint can register small hooks with Claude Code (~/.claude/settings.json), Codex (~/.codex/hooks.json), and OpenCode (~/.config/opencode/plugins) that report when an agent is thinking, finished, or waiting for approval. They only send events to Glint on this Mac. You can uninstall them anytime in Settings → Agents.")
+            alert.informativeText = String(
+                format: String(localized: "Glint can register status hooks with %@ that report when an agent is thinking, finished, or waiting for approval. They only send events to Glint on this Mac. You can uninstall them anytime in Settings → Agents."),
+                list
+            )
             alert.addButton(withTitle: String(localized: "Install Hooks"))
             alert.addButton(withTitle: String(localized: "Not Now"))
             let install = alert.runModal() == .alertFirstButtonReturn
-            if !claudeHandled {
-                if install { AgentHookInstaller.installIfNeeded(socketPath: socketPath) }
-                defaults.set(true, forKey: "glint.claudeHooksAutoInstalled")
-            }
-            if !codexHandled {
-                if install { CodexHookInstaller.installIfNeeded(socketPath: socketPath) }
-                defaults.set(true, forKey: "glint.codexHooksAutoInstalled")
-            }
-            if !opencodeHandled {
-                if install { OpenCodeHookInstaller.installIfNeeded(socketPath: socketPath) }
-                defaults.set(true, forKey: "glint.opencodeHooksAutoInstalled")
+            for spec in pending {
+                if install { spec.install() }
+                defaults.set(true, forKey: spec.handledKey)
             }
             WorkspaceStore.current?.claudeHooksInstalled = AgentHookInstaller.isInstalled()
             WorkspaceStore.current?.codexHooksInstalled = CodexHookInstaller.isInstalled()
@@ -670,6 +708,13 @@ final class WorkspaceStore: ObservableObject {
         OpenCodeHookInstaller.uninstall()
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
     }
+
+    /// Best-effort "is this agent installed on this Mac" checks, surfaced in
+    /// Settings → Agents so a card reads "Not detected" instead of silently
+    /// offering to install hooks for a tool the user doesn't have.
+    var claudeDetected: Bool { AgentHookInstaller.isAgentPresent() }
+    var codexDetected: Bool { CodexHookInstaller.isAgentPresent() }
+    var opencodeDetected: Bool { OpenCodeHookInstaller.isAgentPresent() }
 
     /// Locale to inject into the SwiftUI environment. Driven by
     /// `preferredLanguage`. On macOS 14+, SwiftUI re-resolves
@@ -874,8 +919,9 @@ final class WorkspaceStore: ObservableObject {
             guard let pane = workspaces.first(where: { $0.id == workspaceID })?.panes[paneID]
             else { return nil }
             switch pane.lastAgent {
-            case "claude" where restoreClaudeSession: return "claude --continue\n"
-            case "codex"  where restoreCodexSession:  return "codex resume --last\n"
+            case "claude"   where restoreClaudeSession:   return "claude --continue\n"
+            case "codex"    where restoreCodexSession:    return "codex resume --last\n"
+            case "opencode" where restoreOpenCodeSession: return "opencode --continue\n"
             default: return nil
             }
         }()

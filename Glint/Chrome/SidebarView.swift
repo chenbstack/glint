@@ -751,11 +751,17 @@ private struct WorkspaceCard: View {
             if case .codex = kind { return true }
             return false
         }()
+        let isOpenCode: Bool = {
+            if case .opencode = kind { return true }
+            return false
+        }()
         return Group {
             if isClaude {
                 ClaudeMascotIcon(status: status)
             } else if isCodex {
                 CodexMascotIcon(status: status)
+            } else if isOpenCode {
+                OpenCodeMascotIcon(status: status)
             } else if let sf = kind.sfSymbol {
                 // No squircle container — a bit larger so the bare glyph
                 // holds the same visual weight as the mascots.
@@ -770,8 +776,10 @@ private struct WorkspaceCard: View {
         }
         .frame(width: 28, height: 28)
         .overlay(alignment: .bottomTrailing) {
-            AgentStatusDot(status: status)
-                .offset(x: 3, y: 3)
+            if !isOpenCode {
+                AgentStatusDot(status: status)
+                    .offset(x: 3, y: 3)
+            }
         }
         .shadow(
             color: active
@@ -779,7 +787,9 @@ private struct WorkspaceCard: View {
                     ? Color(red: 0.92, green: 0.55, blue: 0.32).opacity(0.5)
                     : isCodex
                         ? Color(red: 0.32, green: 0.38, blue: 1.0).opacity(0.5)
-                        : Theme.accent.opacity(0.5))
+                        : isOpenCode
+                            ? Color(red: 0.95, green: 0.94, blue: 0.90).opacity(0.32)
+                            : Theme.accent.opacity(0.5))
                 : .clear,
             radius: 8
         )
@@ -1106,6 +1116,18 @@ enum MascotAsset {
         case .some(.tool):       return "CodexWorking"
         }
     }
+
+    static func opencode(for s: PaneAgentStatus?) -> String {
+        switch s {
+        case .none, .some(.idle): return "OpenCodeIdle"
+        case .some(.thinking): return "OpenCodeThinking"
+        case .some(.tool): return "OpenCodeToolCall"
+        case .some(.compacting): return "OpenCodeCompressing"
+        case .some(.needsPermission): return "OpenCodeNeedsPermission"
+        case .some(.justCompleted): return "OpenCodeDone"
+        case .some(.failed): return "OpenCodeFailed"
+        }
+    }
 }
 
 /// Animated Claude mascot driven by per-status GIFs (idle / thinking /
@@ -1173,6 +1195,37 @@ private struct CodexMascotIcon: View {
             // sway headroom), so 30pt renders the mark itself at ~24pt —
             // same visual size as the static CodexMark it replaced.
             .frame(width: 30, height: 30)
+            .frame(width: 28, height: 28)
+            .scaleEffect(celebrateScale * tapScale, anchor: .bottom)
+            .onChange(of: status) { oldStatus, newStatus in
+                if newStatus == .justCompleted && oldStatus != .justCompleted {
+                    celebrateScale = 1.22
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
+                        celebrateScale = 1.0
+                    }
+                }
+            }
+            .onTapGesture {
+                tapScale = 0.85
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.5)) {
+                    tapScale = 1.0
+                }
+            }
+    }
+}
+
+/// OpenCode's official aperture mark adapted to Glint's dark chrome. The
+/// PNG/APNG assets keep the canvas transparent and carry state internally,
+/// so the icon does not need a corner badge or extra frame.
+private struct OpenCodeMascotIcon: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let status: PaneAgentStatus?
+    @State private var celebrateScale: CGFloat = 1.0
+    @State private var tapScale: CGFloat = 1.0
+
+    var body: some View {
+        AnimatedGIFView(assetName: MascotAsset.opencode(for: status), animates: !reduceMotion)
+            .frame(width: 34, height: 34)
             .frame(width: 28, height: 28)
             .scaleEffect(celebrateScale * tapScale, anchor: .bottom)
             .onChange(of: status) { oldStatus, newStatus in
