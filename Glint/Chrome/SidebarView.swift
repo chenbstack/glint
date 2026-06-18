@@ -201,11 +201,11 @@ struct SidebarView: View {
             HStack(spacing: 10) {
                 Image(systemName: "plus")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.accentBright)
+                    .foregroundStyle(store.accent)
                     .frame(width: 28, height: 28)
                     .background(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(Theme.accent.opacity(newWorkspaceHovered ? 0.30 : 0.18))
+                            .fill(store.accent.opacity(newWorkspaceHovered ? 0.30 : 0.18))
                     )
                 Text("New Workspace")
                     .font(.system(size: 12.5, weight: .medium))
@@ -789,7 +789,7 @@ private struct WorkspaceCard: View {
                         ? Color(red: 0.32, green: 0.38, blue: 1.0).opacity(0.5)
                         : isOpenCode
                             ? Color(red: 0.95, green: 0.94, blue: 0.90).opacity(0.32)
-                            : Theme.accent.opacity(0.5))
+                            : store.accent.opacity(0.5))
                 : .clear,
             radius: 8
         )
@@ -932,7 +932,7 @@ private struct WorkspaceCard: View {
             // accent tab pill. Idle rows are bare (no fill, no border) so
             // the list reads as rows on one shared surface, not a stack of
             // boxes.
-            if active { return Theme.accent.opacity(0.16) }
+            if active { return store.accent.opacity(0.16) }
             if isHovered { return Color.white.opacity(0.04) }
             return .clear
         }()
@@ -976,7 +976,7 @@ private struct WorkspaceCard: View {
     private func permissionPulseOverlay(status: PaneAgentStatus?) -> some View {
         if status == .needsPermission {
             BreathingBorder(
-                color: NSColor(Theme.accentBright),
+                color: NSColor(store.accent),
                 cornerRadius: 9,
                 lineWidth: 1.4,
                 // Reduce Motion: hold the border at full strength instead
@@ -993,7 +993,7 @@ private struct WorkspaceCard: View {
     private func workingBeaconOverlay(status: PaneAgentStatus?) -> some View {
         if let status, isWorking(status) {
             EdgeBeacon(
-                color: NSColor(Theme.accentBright),
+                color: NSColor(store.accent),
                 fast: status == .compacting,
                 animates: !reduceMotion
             )

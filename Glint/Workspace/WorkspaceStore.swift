@@ -468,12 +468,15 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(glassEffect, forKey: "glint.glassEffect") }
     }
 
-    /// UI accent color. Drives focus/selection highlights across the chrome
-    /// (command palette selection bar, workspace switcher checkmark, Install
-    /// buttons in Settings). Values: "indigo" | "cyan" | "pink" | "orange"
-    /// | "green". Default "indigo". Persists across launches.
+    /// UI accent color. Drives focus/selection highlights across the chrome,
+    /// plus the terminal cursor and selection highlight. Values: "indigo" |
+    /// "cyan" | "pink" | "orange" | "green". Default "indigo". Persists
+    /// across launches.
     @Published var accentName: String = UserDefaults.standard.string(forKey: "glint.accentName") ?? "indigo" {
-        didSet { UserDefaults.standard.set(accentName, forKey: "glint.accentName") }
+        didSet {
+            UserDefaults.standard.set(accentName, forKey: "glint.accentName")
+            GhosttyManager.shared.reloadConfig()
+        }
     }
 
     var accent: Color {

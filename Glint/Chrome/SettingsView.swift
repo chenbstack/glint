@@ -181,21 +181,10 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .about:      return "info.circle"
         }
     }
-    /// Accent for the icon chip when this row is selected. Cycles through
-    /// the system palette so each category reads as its own destination.
-    var tint: Color {
-        switch self {
-        case .general:    return Theme.accentBright
-        case .appearance: return Color(red: 1.0, green: 0.55, blue: 0.55)
-        case .terminal:   return Color(red: 0.40, green: 0.86, blue: 0.55)
-        case .agents:     return Color(red: 0.72, green: 0.68, blue: 1.0)
-        case .shortcuts:  return Color(red: 0.43, green: 0.72, blue: 0.86)
-        case .about:      return Theme.text3
-        }
-    }
 }
 
 private struct SettingsCategoryRow: View {
+    @EnvironmentObject var store: WorkspaceStore
     let category: SettingsCategory
     let isSelected: Bool
     let onSelect: () -> Void
@@ -206,10 +195,10 @@ private struct SettingsCategoryRow: View {
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isSelected ? category.tint.opacity(0.22) : Color.white.opacity(0.05))
+                        .fill(isSelected ? store.accent.opacity(0.22) : Color.white.opacity(0.05))
                     Image(systemName: category.icon)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(isSelected ? category.tint : Theme.text3)
+                        .foregroundStyle(isSelected ? store.accent : Theme.text3)
                 }
                 .frame(width: 22, height: 22)
 
