@@ -157,6 +157,7 @@ struct CommandPalette: View {
 
     private func allItems() -> [PaletteItem] {
         var items: [PaletteItem] = []
+        let actionTint = store.accent
 
         // Workspace jumpers — current workspace first and badged, so an
         // accidental ⏎ on an empty query is a harmless no-op (it just
@@ -181,6 +182,7 @@ struct CommandPalette: View {
             subtitle: "Create a fresh workspace",
             symbol: "plus.square",
             shortcut: "",
+            tint: actionTint,
             action: { store.addWorkspace() }
         ))
 
@@ -189,6 +191,7 @@ struct CommandPalette: View {
             subtitle: "Open a tab in this workspace",
             symbol: "plus.rectangle.on.rectangle",
             shortcut: "⌘T",
+            tint: actionTint,
             action: { store.newTab() }
         ))
         // Naming note: the store's `.horizontal` means an HSplit — panes
@@ -200,6 +203,7 @@ struct CommandPalette: View {
             subtitle: "Open a new pane on the right",
             symbol: "rectangle.split.2x1",
             shortcut: "⌘D",
+            tint: actionTint,
             action: { store.splitFocused(.horizontal) }
         ))
         items.append(.action(
@@ -207,6 +211,7 @@ struct CommandPalette: View {
             subtitle: "Stack a new pane below",
             symbol: "rectangle.split.1x2",
             shortcut: "⌘⇧D",
+            tint: actionTint,
             action: { store.splitFocused(.vertical) }
         ))
         items.append(.action(
@@ -214,6 +219,7 @@ struct CommandPalette: View {
             subtitle: "Close the focused pane",
             symbol: "xmark.square",
             shortcut: "⌘W",
+            tint: actionTint,
             action: { store.closeFocused() }
         ))
         items.append(.action(
@@ -221,6 +227,7 @@ struct CommandPalette: View {
             subtitle: "Cycle pane focus within this workspace",
             symbol: "arrow.triangle.2.circlepath",
             shortcut: "⌘]",
+            tint: actionTint,
             action: { store.focusNext() }
         ))
         items.append(.action(
@@ -228,6 +235,7 @@ struct CommandPalette: View {
             subtitle: "Show or hide the workspace sidebar",
             symbol: "sidebar.left",
             shortcut: "⌘/",
+            tint: actionTint,
             action: { store.sidebarCollapsed.toggle() }
         ))
 
@@ -433,9 +441,10 @@ private struct PaletteItem: Identifiable {
     }
 
     static func action(title: String, subtitle: String, symbol: String,
-                       shortcut: String, action: @escaping () -> Void) -> PaletteItem {
+                       shortcut: String, tint: Color,
+                       action: @escaping () -> Void) -> PaletteItem {
         PaletteItem(title: title, subtitle: subtitle,
-                    icon: .symbol(symbol, Theme.accentBright),
+                    icon: .symbol(symbol, tint),
                     trailing: shortcut.isEmpty ? .kind("ACTION") : .kbd(shortcut),
                     userContent: false,
                     action: action)

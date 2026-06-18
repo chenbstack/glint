@@ -110,6 +110,7 @@ final class GhosttyManager {
         }()
         let cursorStyle = defaults.string(forKey: "glint.terminalCursorStyle") ?? "block"
         let cursorBlink = (defaults.object(forKey: "glint.terminalCursorBlink") as? Bool) ?? true
+        let accentHex = Self.accentHex(defaults.string(forKey: "glint.accentName"))
         let scrollback: Int = {
             let v = defaults.integer(forKey: "glint.terminalScrollback")
             return v == 0 ? 10_000 : v
@@ -123,10 +124,10 @@ final class GhosttyManager {
         let overrides = """
         background = 0B0A14
         foreground = ECEDF2
-        cursor-color = 5E5CE6
+        cursor-color = \(accentHex)
         cursor-style = \(cursorStyle)
         cursor-style-blink = \(cursorBlink)
-        selection-background = 5E5CE6
+        selection-background = \(accentHex)
         selection-foreground = ECEDF2
         font-family = \(family)
         font-family = Menlo
@@ -143,6 +144,16 @@ final class GhosttyManager {
             source.withCString { src in
                 ghostty_config_load_string(cfg, ovr, UInt(strlen(ovr)), src)
             }
+        }
+    }
+
+    private static func accentHex(_ name: String?) -> String {
+        switch name {
+        case "cyan":   return "64D2FF"
+        case "pink":   return "FF6482"
+        case "orange": return "FF9F0A"
+        case "green":  return "30D158"
+        default:       return "8C8CFF"
         }
     }
 
