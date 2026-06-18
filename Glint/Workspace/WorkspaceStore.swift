@@ -453,6 +453,9 @@ final class WorkspaceStore: ObservableObject {
     /// Whether Glint's Codex hook script is registered in `~/.codex/hooks.json`.
     @Published var codexHooksInstalled: Bool = false
 
+    /// Whether Glint's OpenCode plugin is installed in `~/.config/opencode/plugins`.
+    @Published var opencodeHooksInstalled: Bool = false
+
     /// Single switch for all behind-window vibrancy in the chrome (sidebar,
     /// toolbar, and the matching settings sidebar). When off, chrome falls
     /// back to flat opaque surfaces — useful on older Macs and gives a
@@ -596,6 +599,7 @@ final class WorkspaceStore: ObservableObject {
         let defaults = UserDefaults.standard
         let claudeHandled = defaults.bool(forKey: "glint.claudeHooksAutoInstalled")
         let codexHandled = defaults.bool(forKey: "glint.codexHooksAutoInstalled")
+        let opencodeHandled = defaults.bool(forKey: "glint.opencodeHooksAutoInstalled")
 
         if claudeHandled, AgentHookInstaller.isInstalled() {
             AgentHookInstaller.installIfNeeded(socketPath: socketPath)
@@ -603,13 +607,16 @@ final class WorkspaceStore: ObservableObject {
         if codexHandled, CodexHookInstaller.isInstalled() {
             CodexHookInstaller.installIfNeeded(socketPath: socketPath)
         }
-        guard !claudeHandled || !codexHandled else { return }
+        if opencodeHandled, OpenCodeHookInstaller.isInstalled() {
+            OpenCodeHookInstaller.installIfNeeded(socketPath: socketPath)
+        }
+        guard !claudeHandled || !codexHandled || !opencodeHandled else { return }
 
         // Defer past launch so the alert doesn't pop before the main window.
         Task { @MainActor in
             let alert = NSAlert()
             alert.messageText = String(localized: "Show agent status in the sidebar?")
-            alert.informativeText = String(localized: "Glint can register a small hook with Claude Code (~/.claude/settings.json) and Codex (~/.codex/hooks.json) that reports when an agent is thinking, finished, or waiting for approval. It only sends events to Glint on this Mac. You can uninstall it anytime in Settings → Agents.")
+            alert.informativeText = String(localized: "Glint can register small hooks with Claude Code (~/.claude/settings.json), Codex (~/.codex/hooks.json), and OpenCode (~/.config/opencode/plugins) that report when an agent is thinking, finished, or waiting for approval. They only send events to Glint on this Mac. You can uninstall them anytime in Settings → Agents.")
             alert.addButton(withTitle: String(localized: "Install Hooks"))
             alert.addButton(withTitle: String(localized: "Not Now"))
             let install = alert.runModal() == .alertFirstButtonReturn
@@ -621,8 +628,13 @@ final class WorkspaceStore: ObservableObject {
                 if install { CodexHookInstaller.installIfNeeded(socketPath: socketPath) }
                 defaults.set(true, forKey: "glint.codexHooksAutoInstalled")
             }
+            if !opencodeHandled {
+                if install { OpenCodeHookInstaller.installIfNeeded(socketPath: socketPath) }
+                defaults.set(true, forKey: "glint.opencodeHooksAutoInstalled")
+            }
             WorkspaceStore.current?.claudeHooksInstalled = AgentHookInstaller.isInstalled()
             WorkspaceStore.current?.codexHooksInstalled = CodexHookInstaller.isInstalled()
+            WorkspaceStore.current?.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
         }
     }
 
@@ -647,6 +659,16 @@ final class WorkspaceStore: ObservableObject {
     func uninstallCodexHooks() {
         CodexHookInstaller.uninstall()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
+    }
+
+    func installOpenCodeHooks() {
+        OpenCodeHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
+        self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
+    }
+
+    func uninstallOpenCodeHooks() {
+        OpenCodeHookInstaller.uninstall()
+        self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
     }
 
     /// Locale to inject into the SwiftUI environment. Driven by
@@ -786,6 +808,7 @@ final class WorkspaceStore: ObservableObject {
         Self.autoInstallAgentHooksOnFirstLaunch(socketPath: AgentBridge.shared.socketPath)
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
+        self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: .glintAgentEvent,
             object: nil,
@@ -924,6 +947,7 @@ final class WorkspaceStore: ObservableObject {
                     let agent: String? = {
                         if lower.contains("claude") { return "claude" }
                         if lower.contains("codex")  { return "codex" }
+                        if lower.contains("opencode") { return "opencode" }
                         return nil
                     }()
                     if workspaces[i].panes[paneID]?.lastAgent != agent {
@@ -951,7 +975,8 @@ final class WorkspaceStore: ObservableObject {
             guard var state = paneAgentState[key] else { continue }
             let runningKind: PaneAgentKind? =
                 name.contains("claude") ? .claude :
-                name.contains("codex") ? .codex : nil
+                name.contains("codex") ? .codex :
+                name.contains("opencode") ? .opencode : nil
             if let runningKind, runningKind != state.kind {
                 state.kind = runningKind
                 state.status = .idle
@@ -974,7 +999,13 @@ final class WorkspaceStore: ObservableObject {
               let key = Self.parsePaneKey(paneStr) else { return }
 
         let agentStr = (info["agent"] as? String) ?? "claude"
-        let kind: PaneAgentKind = (agentStr == "codex") ? .codex : .claude
+        let kind: PaneAgentKind = {
+            switch agentStr.lowercased() {
+            case "codex": return .codex
+            case "opencode": return .opencode
+            default: return .claude
+            }
+        }()
 
         // Note: we deliberately do NOT force-write paneProcesses here. The
         // 1s poller owns that dictionary and replaces it wholesale, so any
@@ -1662,6 +1693,7 @@ enum WorkspaceIconKind {
     case shell      // zsh / bash / fish / sh / login (nothing special running)
     case claude
     case codex
+    case opencode
     case ssh
     case vim
     case python
@@ -1678,7 +1710,7 @@ enum WorkspaceIconKind {
         case .python: return "chevron.left.forwardslash.chevron.right"
         case .node:   return "hexagon.fill"
         case .git:    return "arrow.triangle.branch"
-        case .claude, .codex, .other:
+        case .claude, .codex, .opencode, .other:
             return nil
         }
     }
@@ -1688,6 +1720,7 @@ enum WorkspaceIconKind {
         switch self {
         case .claude: return "✦"
         case .codex:  return "λ"
+        case .opencode: return "O"
         case .other(let s):
             return s.first.map { String($0).uppercased() } ?? "?"
         default:
@@ -1702,6 +1735,7 @@ enum WorkspaceIconKind {
         switch self {
         case .claude: return "claude"
         case .codex:  return "codex"
+        case .opencode: return "opencode"
         default:      return nil
         }
     }
@@ -1710,6 +1744,7 @@ enum WorkspaceIconKind {
         switch token {
         case "claude": return .claude
         case "codex":  return .codex
+        case "opencode": return .opencode
         default:       return nil
         }
     }
@@ -1876,7 +1911,11 @@ extension WorkspaceStore {
             }
         }
         if let bestAgent {
-            return bestAgent.kind == .codex ? .codex : .claude
+            switch bestAgent.kind {
+            case .claude: return .claude
+            case .codex: return .codex
+            case .opencode: return .opencode
+            }
         }
 
         let names = paneIDs.compactMap {
@@ -1887,6 +1926,7 @@ extension WorkspaceStore {
         if names.contains(where: { $0 == "ssh" || $0 == "mosh" }) { return .ssh }
         if names.contains(where: { $0.contains("claude") })        { return .claude }
         if names.contains(where: { $0 == "codex" || $0.contains("codex") }) { return .codex }
+        if names.contains(where: { $0 == "opencode" || $0.contains("opencode") }) { return .opencode }
         if names.contains(where: { $0 == "vim" || $0 == "nvim" || $0 == "vi" }) { return .vim }
         if names.contains(where: { $0 == "python" || $0 == "python3" || $0 == "ipython" }) { return .python }
         if names.contains(where: { $0 == "node" || $0 == "deno" || $0 == "bun" }) { return .node }

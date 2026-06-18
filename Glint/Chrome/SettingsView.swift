@@ -598,6 +598,7 @@ private struct AgentsPane: View {
     @EnvironmentObject var usage: UsageStore
     @State private var claudeInstallFailed = false
     @State private var codexInstallFailed = false
+    @State private var opencodeInstallFailed = false
 
     var body: some View {
         SettingsCard("Claude Code",
@@ -658,7 +659,7 @@ private struct AgentsPane: View {
         }
 
         SettingsCard("Codex",
-                     footer: "Glint writes its hook entries into ~/.codex/hooks.json so codex sessions surface the same status as Claude.") {
+                     footer: "Glint writes its hook entries into ~/.codex/hooks.json so Codex sessions surface the same status as Claude.") {
             SettingsRow("Status", subtitle: codexInstallFailed
                         ? "Install failed — check Console for [glint] logs (often a malformed hooks.json)."
                         : "Hooks merged into your Codex config.") {
@@ -694,6 +695,43 @@ private struct AgentsPane: View {
                         subtitle: "When Glint reopens, run `codex resume --last` in any pane that was running Codex at last quit.") {
                 Toggle("", isOn: $store.restoreCodexSession)
                     .toggleStyle(.switch).labelsHidden()
+            }
+        }
+
+        SettingsCard("OpenCode",
+                     footer: "Glint installs a global OpenCode plugin at ~/.config/opencode/plugins/glint-agent-bridge.js so OpenCode sessions can report status without being shown as Claude.") {
+            SettingsRow("Status", subtitle: opencodeInstallFailed
+                        ? "Install failed — check Console for [glint] logs."
+                        : "Plugin installed into your OpenCode plugins directory.") {
+                HStack(spacing: 8) {
+                    StatusPill(
+                        label: store.opencodeHooksInstalled ? "Installed" : "Not installed",
+                        tone: store.opencodeHooksInstalled ? .ok : .neutral
+                    )
+                    if store.opencodeHooksInstalled {
+                        Button("Uninstall") {
+                            store.uninstallOpenCodeHooks()
+                            opencodeInstallFailed = false
+                        }
+                            .controlSize(.small)
+                    } else {
+                        Button("Install") {
+                            store.installOpenCodeHooks()
+                            opencodeInstallFailed = !store.opencodeHooksInstalled
+                        }
+                            .controlSize(.small)
+                            .tint(store.accent)
+                    }
+                }
+            }
+            SettingsDivider()
+            SettingsRow("Plugin file",
+                        subtitle: "Loaded by OpenCode automatically on startup; it only reports when Glint's pane environment variables are present.") {
+                Text("~/.config/opencode/plugins/glint-agent-bridge.js")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.text3)
+                    .lineLimit(1)
+                    .truncationMode(.head)
             }
         }
 
