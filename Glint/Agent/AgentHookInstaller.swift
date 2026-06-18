@@ -316,7 +316,13 @@ enum AgentHookInstaller {
     }
 
     /// Pure POSIX sh — runs inside the pty so `$GLINT_PANE_ID` resolves.
-    /// Stays cheap (single `nc` send, swallows stdin).
+    /// Stays cheap (single send, swallows stdin).
+    ///
+    /// Uses `/usr/bin/nc` (absolute) not bare `nc`: Homebrew's GNU netcat
+    /// (`/opt/homebrew/bin/nc`, netcat 0.7.1) shadows it and rejects `-U`
+    /// (`nc: invalid option -- U`), so every report failed silently and the
+    /// pane never entered a busy state. macOS always ships BSD nc at
+    /// `/usr/bin/nc` with Unix-domain socket support.
     ///
     /// Argv[1] = hook event name (e.g. "PostToolUse").
     /// Argv[2] = agent kind ("claude" or "codex"); defaults to "claude" so
@@ -335,7 +341,7 @@ enum AgentHookInstaller {
     cat >/dev/null 2>&1
 
     printf '{"pane":"%s","hook":"%s","agent":"%s"}\\n' "$GLINT_PANE_ID" "$HOOK" "$AGENT" \\
-      | nc -U -w 1 "$GLINT_AGENT_SOCK" >/dev/null 2>&1 || true
+      | /usr/bin/nc -U -w 1 "$GLINT_AGENT_SOCK" >/dev/null 2>&1 || true
     exit 0
     """
 
