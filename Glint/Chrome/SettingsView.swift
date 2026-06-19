@@ -499,6 +499,33 @@ private struct AppearancePane: View {
                     .toggleStyle(.switch).labelsHidden()
             }
         }
+
+        SettingsCard("应用图标",
+                     footer: "切换程序坞（Dock）中的图标。「默认」在 macOS 26 上保留 Liquid Glass 玻璃图标；其余配色为静态图标。") {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 5), spacing: 14) {
+                ForEach(AppIconPreset.allCases) { preset in
+                    VStack(spacing: 5) {
+                        Image(preset.previewAsset)
+                            .resizable().interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 46, height: 46)
+                            .background(
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .fill(preset == store.appIconPreset ? Color.white.opacity(0.16) : .clear)
+                                    .padding(-5)
+                            )
+                            .scaleEffect(preset == store.appIconPreset ? 1.06 : 1.0)
+                            .animation(.easeOut(duration: 0.15), value: store.appIconPreset)
+                        Text(preset.displayName)
+                            .font(.system(size: 9.5, weight: preset == store.appIconPreset ? .semibold : .regular))
+                            .foregroundStyle(preset == store.appIconPreset ? Theme.text1 : Theme.text2)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { store.appIconPreset = preset }
+                }
+            }
+            .padding(.vertical, 4)
+        }
     }
 
     enum AccentOption: String, CaseIterable, Identifiable {
@@ -1197,11 +1224,12 @@ private struct ShortcutsPane: View {
 
 private struct AboutPane: View {
     @EnvironmentObject var updater: UpdaterController
+    @EnvironmentObject var store: WorkspaceStore
 
     var body: some View {
         VStack(spacing: 24) {
             VStack(spacing: 14) {
-                Image("GlintLogo")
+                Image(store.appIconPreset.headerLogoAsset)
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)

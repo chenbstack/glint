@@ -20,6 +20,7 @@
 		7D07A40DF6411A613624827A /* PaneSurfaceRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16137B405E48DBE262A15B6D /* PaneSurfaceRepresentable.swift */; };
 		7FC12666816053BEB64079CB /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 050E267AE14712D4D6633B4F /* Theme.swift */; };
 		942ED7C1C1A2E823BA52F67A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3023490E670A10EC38870B12 /* Assets.xcassets */; };
+		A91EFEF0FEA392A0745724DE /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 89B8883C4456681F07B6D662 /* AppIcon.icon */; };
 		AB89FA6EF5785EC4026F4402 /* VisualEffectBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */; };
 		B70CAFEBB2416E25B0FFED97 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C48F9D3C512A0ABE8369D0F4 /* Sparkle */; };
 		C0E8D97C08BA3F0FA33F31E7 /* CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 235E2D958A2244483CAA0812 /* CommandPalette.swift */; };
@@ -54,6 +55,7 @@
 		6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		7CB74659D174004C620D538A /* GlintApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintApp.swift; sourceTree = "<group>"; };
 		81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GhosttyKit.xcframework; path = Vendor/GhosttyKit.xcframework; sourceTree = "<group>"; };
+		89B8883C4456681F07B6D662 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		8EDE0D7C434B8E9C76C4A297 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
 		9E67CF5D8552AE1F51386161 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A8C269A6E9AE87961C3356DC /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
@@ -80,6 +82,7 @@
 		169D300DD0731BE0FC20E230 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				89B8883C4456681F07B6D662 /* AppIcon.icon */,
 				3023490E670A10EC38870B12 /* Assets.xcassets */,
 				25DADCEBA9C483C729B69388 /* Glint.entitlements */,
 				F5A69ACF962AEDE189F98649 /* Info.plist */,
@@ -256,6 +259,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A91EFEF0FEA392A0745724DE /* AppIcon.icon in Resources */,
 				942ED7C1C1A2E823BA52F67A /* Assets.xcassets in Resources */,
 				FCB67525DF16A4DCF9B2AF7A /* Localizable.xcstrings in Resources */,
 			);

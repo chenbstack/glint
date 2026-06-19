@@ -502,6 +502,35 @@ final class WorkspaceStore: ObservableObject {
 
     var accent: Color { Theme.accent(named: accentName) }
 
+    /// Dock icon the user picked. `.default` keeps the bundle's `.icon`
+    /// asset (Liquid Glass on macOS 26); every other case overrides the
+    /// running Dock tile with a static, pre-rendered image via
+    /// `applyAppIcon()`. Persists across launches; `AppDelegate` restores
+    /// it on startup.
+    @Published var appIconPreset: AppIconPreset = {
+        let raw = UserDefaults.standard.string(forKey: "glint.appIconPreset") ?? ""
+        return AppIconPreset(rawValue: raw) ?? .default
+    }() {
+        didSet {
+            UserDefaults.standard.set(appIconPreset.rawValue, forKey: "glint.appIconPreset")
+            applyAppIcon()
+        }
+    }
+
+    /// Push `appIconPreset` to the live Dock tile. A `nil` image restores
+    /// the bundle icon (so macOS 26 re-applies Liquid Glass); a named asset
+    /// overrides it with a static icon. Runtime icon overrides go through
+    /// `NSImage`, which bypasses Liquid Glass — that's why the non-default
+    /// presets are pre-rendered with their own padding and corner.
+    /// Must run on the main thread; `didSet` and the launch restore both do.
+    func applyAppIcon() {
+        if let asset = appIconPreset.assetName {
+            NSApp.applicationIconImage = NSImage(named: asset)
+        } else {
+            NSApp.applicationIconImage = nil
+        }
+    }
+
     /// On launch, re-select the workspace that was focused at last quit.
     /// When off, Glint starts on the first workspace in the list. Persists
     /// to UserDefaults so the choice survives restarts. Defaults to on.
@@ -1947,6 +1976,48 @@ enum WorkspaceIconKind {
 enum ClaudeIconStyle: String, CaseIterable {
     case mascot
     case spark
+}
+
+/// Dock-icon palette options shown in Settings. `.default` is the bundle
+/// `.icon` (Liquid Glass on macOS 26); the rest are static images backed by
+/// `AppIconPreset-<name>` image sets in Assets.xcassets.
+enum AppIconPreset: String, CaseIterable, Identifiable {
+    case `default`
+    case sunrise, classic, aurora, arctic, steel, ultraviolet, jade, ember, graphite
+
+    var id: String { rawValue }
+
+    /// Asset for the runtime override, or nil to fall back to the bundle icon.
+    var assetName: String? {
+        self == .default ? nil : "AppIconPreset-\(rawValue)"
+    }
+
+    /// Thumbnail for the Settings picker. `.default` borrows the sunrise art
+    /// since the bundle icon ships that palette.
+    var previewAsset: String {
+        self == .default ? "AppIconPreset-sunrise" : "AppIconPreset-\(rawValue)"
+    }
+
+    /// Compact (full-bleed) logo drawn in the chrome header / settings header
+    /// so it tracks the chosen palette. `.default` follows the sunrise art.
+    var headerLogoAsset: String {
+        self == .default ? "GlintLogo-sunrise" : "GlintLogo-\(rawValue)"
+    }
+
+    var displayName: String {
+        switch self {
+        case .default: return "默认"
+        case .sunrise: return "日出"
+        case .classic: return "经典"
+        case .aurora: return "极光"
+        case .arctic: return "极地"
+        case .steel: return "钢蓝"
+        case .ultraviolet: return "紫罗兰"
+        case .jade: return "翡翠"
+        case .ember: return "余烬"
+        case .graphite: return "石墨"
+        }
+    }
 }
 
 extension WorkspaceStore {

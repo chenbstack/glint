@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async {
             self.configureMainWindow()
             self.patchMainMenu()
+            // Re-apply the saved Dock icon override (no-op for .default).
+            WorkspaceStore.current?.applyAppIcon()
         }
     }
 

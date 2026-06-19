@@ -1096,9 +1096,10 @@ private struct ToolbarIconButton: View {
 /// "Glint" wordmark in SF Pro semibold. The spark carries a cool gradient
 /// + soft halo so it reads as the app's signature without needing an asset.
 struct GlintBrandMark: View {
+    @EnvironmentObject var store: WorkspaceStore
     var body: some View {
         HStack(spacing: 7) {
-            Image("GlintLogo")
+            Image(store.appIconPreset.headerLogoAsset)
                 .resizable()
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
