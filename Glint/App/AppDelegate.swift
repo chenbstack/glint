@@ -18,6 +18,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Re-apply the saved Dock icon override (no-op for .default).
             WorkspaceStore.current?.applyAppIcon()
         }
+        // Declare the launch healthy once we've been alive and on-screen for a
+        // few seconds — long enough to clear the window's first render, where a
+        // bad sticky setting would crash. Until then the crash-loop marker
+        // stays armed (see SettingsSafety).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            SettingsSafety.shared.markHealthy()
+        }
     }
 
     /// SwiftUI auto-adds File > Close Window bound to Cmd+W; that competes with
@@ -70,6 +77,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // didEndLiveResize never fired this session (e.g. user opens, never
         // touches the window, quits).
         persistMainWindowFrame()
+        // Clean quit: disarm the crash-loop marker so the next launch isn't
+        // mistaken for a crash. Deliberately does NOT advance the healthy
+        // high-water mark — a setting changed this session can still crash the
+        // next launch (issue #15), so it must stay rollback-eligible.
+        SettingsSafety.shared.markCleanExit()
     }
 
     private func configureMainWindow() {

@@ -33,6 +33,7 @@
 		E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05F2CA2243872C8111048EF2 /* AgentBridge.swift */; };
 		EF3ACBA990526130228FAD0B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */; };
 		EF937781512647E835836F83 /* ControlBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21868C7211897C87A6CAD7C3 /* ControlBridge.swift */; };
+		F6AFF715FCE5357CEB07683D /* SettingsSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */; };
 		FCB67525DF16A4DCF9B2AF7A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 376568363043C189904E4E0A /* Localizable.xcstrings */; };
 /* End PBXBuildFile section */
 
@@ -62,6 +63,7 @@
 		9E67CF5D8552AE1F51386161 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A8C269A6E9AE87961C3356DC /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectBackground.swift; sourceTree = "<group>"; };
+		DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSafety.swift; sourceTree = "<group>"; };
 		E298AD81B1615CBBFD69F48A /* GhosttySurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttySurfaceView.swift; sourceTree = "<group>"; };
 		F5A69ACF962AEDE189F98649 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F8A1F24DAA7220AD4EE961E2 /* UsageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStore.swift; sourceTree = "<group>"; };
@@ -166,6 +168,7 @@
 			children = (
 				9E67CF5D8552AE1F51386161 /* AppDelegate.swift */,
 				7CB74659D174004C620D538A /* GlintApp.swift */,
+				DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */,
 				4408F9761E584DE2AB6630E2 /* UpdaterController.swift */,
 			);
 			path = App;
@@ -290,6 +293,7 @@
 				49DF8EE59313B7CFE29DA303 /* PaneTreeView.swift in Sources */,
 				6D74FE6545631EB8193C82E1 /* PaneView.swift in Sources */,
 				175E069EE844FB32C6EE51BB /* Persistence.swift in Sources */,
+				F6AFF715FCE5357CEB07683D /* SettingsSafety.swift in Sources */,
 				EF3ACBA990526130228FAD0B /* SettingsView.swift in Sources */,
 				CD30F5E1B78B3C46C9990FD6 /* SidebarView.swift in Sources */,
 				7FC12666816053BEB64079CB /* Theme.swift in Sources */,

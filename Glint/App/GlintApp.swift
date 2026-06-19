@@ -22,6 +22,13 @@ struct GlintApp: App {
         }
         #endif
 
+        // Crash-loop guard: if the previous launch died before going healthy,
+        // roll back the setting change that most likely caused it BEFORE we
+        // read any preference below — otherwise a bad sticky value (issue #15)
+        // replays the same crash on every launch. Also starts journaling
+        // subsequent setting changes so the next crash can be undone.
+        SettingsSafety.shared.beginLaunch()
+
         // Apply the stored language choice BEFORE any view materializes so
         // Bundle.main picks the right .lproj at its first lookup. "system"
         // clears the override so macOS falls back to the user's OS-level
