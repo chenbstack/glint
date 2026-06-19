@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glint · 为 vibe coding 而生的 macOS 终端</title>
+<meta name="description" content="一个人,指挥一队 AI。Glint 是为 vibe coding 打造的精致 macOS 终端,底层基于 Ghostty,侧边栏一眼看清每个 AI 代理:谁在跑、谁等你、谁跑完了。">
+<link rel="icon" href="./glint-logo.png">
+<meta property="og:title" content="Glint · 一个人,指挥一队 AI">
+<meta property="og:description" content="为 vibe coding 而生的精致 macOS 终端,底层基于 Ghostty。">
+<meta property="og:image" content="./screenshot.png">
+<style>
+  :root{
+    --accent:#7C6CF0;
+    --accent-2:#9C6CF0;
+    --bg:#0A0B10;
+    --ink:#ECEDF2;
+    --ink-2:#A7A7BE;
+    --ink-3:#6B6B82;
+    --line:rgba(255,255,255,.08);
+    --panel:rgba(255,255,255,.03);
+    --amber:#FFBD2E; --red:#FF5E57; --green:#29C740; --cyan:#43B8DB;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden;
+  }
+  /* ambient glows */
+  body::before,body::after{content:"";position:fixed;border-radius:50%;
+    filter:blur(120px);z-index:0;pointer-events:none;}
+  body::before{width:680px;height:680px;top:-280px;right:-160px;
+    background:radial-gradient(circle,rgba(124,108,240,.40),transparent 70%);}
+  body::after{width:560px;height:560px;bottom:-240px;left:-200px;
+    background:radial-gradient(circle,rgba(67,120,219,.28),transparent 70%);}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 28px;position:relative;z-index:1;}
+  a{color:inherit;text-decoration:none;}
+
+  /* ---------- nav ---------- */
+  nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(160%) blur(18px);
+    background:rgba(10,11,16,.62);border-bottom:1px solid var(--line);}
+  nav .wrap{display:flex;align-items:center;height:62px;gap:22px;}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;letter-spacing:.3px;}
+  .brand img{width:28px;height:28px;border-radius:7px;box-shadow:0 2px 10px rgba(124,108,240,.4);}
+  nav .links{display:flex;gap:24px;margin-left:14px;font-size:14px;color:var(--ink-2);}
+  nav .links a:hover{color:var(--ink);}
+  nav .right{margin-left:auto;display:flex;align-items:center;gap:12px;}
+  .ghbtn{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);
+    border:1px solid var(--line);border-radius:9px;padding:7px 11px;font-variant-numeric:tabular-nums;}
+  .ghbtn:hover{border-color:rgba(255,255,255,.22);color:var(--ink);}
+  .ghbtn .star{color:var(--amber);}
+  .ghbtn b{color:var(--ink);font-family:var(--mono);}
+  .cta{background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    color:#fff;font-weight:600;font-size:14px;border-radius:10px;padding:9px 16px;
+    box-shadow:0 6px 20px rgba(124,108,240,.35);transition:transform .15s,box-shadow .15s;}
+  .cta:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(124,108,240,.5);}
+
+  /* ---------- hero ---------- */
+  header{padding:86px 0 30px;text-align:center;}
+  .eyebrow{display:inline-block;color:var(--accent);font-weight:700;font-size:13px;
+    letter-spacing:3px;margin-bottom:22px;
+    border:1px solid rgba(124,108,240,.3);border-radius:999px;padding:6px 16px;
+    background:rgba(124,108,240,.07);}
+  h1{font-size:clamp(44px,7vw,86px);font-weight:800;line-height:1.04;letter-spacing:-1px;}
+  h1 .grad{background:linear-gradient(120deg,#fff 20%,var(--accent) 70%,var(--cyan));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  header p.sub{margin:26px auto 0;max-width:620px;font-size:clamp(17px,2.4vw,21px);color:var(--ink-2);}
+  .actions{display:flex;gap:14px;justify-content:center;margin-top:38px;flex-wrap:wrap;}
+  .btn-lg{font-size:15.5px;padding:14px 26px;border-radius:12px;font-weight:600;display:inline-flex;align-items:center;gap:9px;}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;
+    box-shadow:0 10px 30px rgba(124,108,240,.4);transition:transform .15s,box-shadow .15s;}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(124,108,240,.55);}
+  .btn-ghost{border:1px solid var(--line);color:var(--ink);background:var(--panel);}
+  .btn-ghost:hover{border-color:rgba(255,255,255,.25);}
+  .hero-meta{margin-top:26px;display:flex;gap:10px;justify-content:center;align-items:center;
+    flex-wrap:wrap;color:var(--ink-3);font-size:13.5px;}
+  .hero-meta .pill{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);
+    color:var(--ink-2);background:var(--panel);border:1px solid var(--line);
+    border-radius:999px;padding:5px 13px;font-variant-numeric:tabular-nums;}
+  .hero-meta .pill b{color:var(--ink);}
+
+  /* ---------- shot ---------- */
+  .shotwrap{margin:60px auto 0;max-width:1000px;position:relative;}
+  .shotwrap::before{content:"";position:absolute;inset:-6% -4% -16%;
+    background:radial-gradient(60% 60% at 50% 20%,rgba(124,108,240,.35),transparent 70%);
+    filter:blur(40px);z-index:-1;}
+  .shot{width:100%;border-radius:14px;display:block;
+    border:1px solid rgba(255,255,255,.1);
+    box-shadow:0 40px 90px rgba(0,0,0,.6),0 14px 34px rgba(0,0,0,.45);}
+  .dots-legend{display:flex;gap:20px;justify-content:center;margin-top:30px;flex-wrap:wrap;
+    color:var(--ink-2);font-size:13.5px;}
+  .dots-legend span{display:inline-flex;align-items:center;gap:8px;}
+  .dots-legend i{width:9px;height:9px;border-radius:50%;display:inline-block;box-shadow:0 0 8px currentColor;}
+
+  /* ---------- live stats band ---------- */
+  .statsband{margin:96px 0 0;border:1px solid var(--line);border-radius:20px;
+    background:linear-gradient(180deg,rgba(124,108,240,.06),rgba(255,255,255,.01));
+    padding:14px 0;}
+  .statsband .grid{display:grid;grid-template-columns:repeat(4,1fr);}
+  .stat{padding:30px 22px;text-align:center;position:relative;}
+  .stat + .stat::before{content:"";position:absolute;left:0;top:24%;height:52%;width:1px;background:var(--line);}
+  .stat .num{font-family:var(--mono);font-size:clamp(38px,6vw,58px);font-weight:700;
+    letter-spacing:-1px;line-height:1;font-variant-numeric:tabular-nums;
+    background:linear-gradient(120deg,#fff,var(--accent));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  .stat .lbl{margin-top:12px;color:var(--ink-2);font-size:14px;}
+  .stat .sub{margin-top:4px;color:var(--ink-3);font-size:12px;font-family:var(--mono);}
+  .live{display:flex;align-items:center;justify-content:center;gap:8px;
+    color:var(--ink-3);font-size:12px;padding:8px 0 4px;border-top:1px solid var(--line);margin-top:2px;}
+  .live .dot{width:7px;height:7px;border-radius:50%;background:var(--green);
+    box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .live a{color:var(--ink-2);border-bottom:1px dashed var(--ink-3);}
+  /* beta channel breakdown */
+  .beta-break{padding:4px 26px 16px;border-top:1px solid var(--line);margin-top:2px;}
+  .beta-break .bh{color:var(--ink-3);font-size:12px;font-family:var(--mono);
+    margin:12px 0 10px;display:flex;align-items:center;gap:8px;}
+  .beta-break .bh b{color:var(--ink-2);}
+  .beta-row{display:grid;grid-template-columns:170px 1fr 40px;align-items:center;gap:14px;
+    font-family:var(--mono);font-size:12.5px;padding:3px 0;}
+  .beta-row .v{color:var(--ink-2);white-space:nowrap;display:flex;align-items:center;}
+  .beta-row .track{height:7px;border-radius:4px;background:rgba(255,255,255,.05);overflow:hidden;}
+  .beta-row .fill{height:100%;border-radius:4px;width:0;
+    background:linear-gradient(90deg,var(--accent),var(--cyan));transition:width .7s cubic-bezier(.2,.7,.2,1);}
+  .beta-row .n{text-align:right;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .beta-row.peak .v,.beta-row.peak .n{color:#fff;}
+  .beta-row.peak .fill{background:linear-gradient(90deg,var(--accent),#fff);}
+  .beta-row .tag{font-size:10px;color:var(--accent);border:1px solid rgba(124,108,240,.4);
+    border-radius:5px;padding:1px 5px;margin-left:6px;vertical-align:middle;}
+  .beta-break .empty{color:var(--ink-3);font-size:12.5px;font-family:var(--mono);padding:4px 0;}
+
+  /* ---------- features ---------- */
+  section.feat{padding:110px 0 0;}
+  .sec-head{text-align:center;max-width:680px;margin:0 auto 56px;}
+  .sec-head h2{font-size:clamp(30px,4.4vw,44px);font-weight:800;letter-spacing:-.5px;}
+  .sec-head p{margin-top:16px;color:var(--ink-2);font-size:17px;}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+  .card{border:1px solid var(--line);border-radius:16px;padding:26px;background:var(--panel);
+    transition:border-color .2s,transform .2s;}
+  .card:hover{border-color:rgba(124,108,240,.4);transform:translateY(-3px);}
+  .card .ic{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+    font-size:21px;margin-bottom:16px;background:rgba(124,108,240,.12);border:1px solid rgba(124,108,240,.25);}
+  .card h3{font-size:18px;font-weight:700;margin-bottom:8px;}
+  .card p{color:var(--ink-2);font-size:14.5px;}
+
+  .showcase{margin-top:26px;display:grid;grid-template-columns:1.15fr .85fr;gap:22px;align-items:stretch;}
+  .showcase .panel{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#06070b;position:relative;}
+  .showcase .panel img{width:100%;height:100%;object-fit:cover;display:block;}
+  .showcase .cap{position:absolute;left:0;right:0;bottom:0;padding:20px 22px;
+    background:linear-gradient(0deg,rgba(6,7,11,.92),transparent);}
+  .showcase .cap h3{font-size:17px;font-weight:700;}
+  .showcase .cap p{color:var(--ink-2);font-size:13.5px;margin-top:3px;}
+
+  /* ---------- install ---------- */
+  section.install{padding:110px 0 0;}
+  .term{max-width:680px;margin:0 auto;border:1px solid var(--line);border-radius:14px;
+    background:#06070b;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.5);}
+  .term .bar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);}
+  .term .bar i{width:12px;height:12px;border-radius:50%;}
+  .term .bar .t{margin-left:10px;color:var(--ink-3);font-size:12.5px;font-family:var(--mono);}
+  .term .body{padding:22px 20px;font-family:var(--mono);font-size:14px;}
+  .cmd{display:flex;align-items:center;gap:12px;padding:8px 0;}
+  .cmd code{flex:1;color:var(--ink);}
+  .cmd code .c{color:var(--accent);}
+  .cmd code .m{color:var(--ink-3);}
+  .copy{border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--ink-2);
+    border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer;font-family:var(--sans);transition:.15s;}
+  .copy:hover{border-color:var(--accent);color:var(--ink);}
+  .copy.ok{color:var(--green);border-color:var(--green);}
+  .install .alt{text-align:center;margin-top:26px;color:var(--ink-3);font-size:14px;}
+  .install .alt a{color:var(--accent);border-bottom:1px solid rgba(124,108,240,.4);}
+
+  /* ---------- footer ---------- */
+  footer{margin-top:110px;padding:40px 0;border-top:1px solid var(--line);
+    display:flex;align-items:center;gap:16px;color:var(--ink-3);font-size:13.5px;flex-wrap:wrap;}
+  footer .brand{font-size:15px;color:var(--ink-2);}
+  footer .right{margin-left:auto;display:flex;gap:20px;}
+  footer a:hover{color:var(--ink);}
+
+  @media(max-width:760px){
+    nav .links{display:none;}
+    .statsband .grid,.cards{grid-template-columns:1fr;}
+    .stat + .stat::before{display:none;}
+    .stat + .stat{border-top:1px solid var(--line);}
+    .showcase{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="./glint-logo.png" alt="Glint">Glint</a>
+    <div class="links">
+      <a href="#features">功能</a>
+      <a href="#stats">数据</a>
+      <a href="#install">下载</a>
+    </div>
+    <div class="right">
+      <a class="ghbtn" href="https://github.com/chenbstack/glint" target="_blank" rel="noopener">
+        <span class="star">★</span><span>Star</span><b id="nav-stars">35</b>
+      </a>
+      <a class="cta" href="#install">下载</a>
+    </div>
+  </div>
+</nav>
+
+<header id="top">
+  <div class="wrap">
+    <span class="eyebrow">VIBE CODING · 多 AGENT 工作流</span>
+    <h1>一个人,<br><span class="grad">指挥一队 AI</span></h1>
+    <p class="sub">为 vibe coding 而生的精致 macOS 终端。底层基于 Ghostty,侧边栏一眼看清每个 AI 代理 —— 谁在跑、谁等你、谁跑完了。</p>
+    <div class="actions">
+      <a class="btn-lg btn-primary" href="#install">↓ 下载 for macOS</a>
+      <a class="btn-lg btn-ghost" href="https://github.com/chenbstack/glint" target="_blank" rel="noopener">在 GitHub 上查看</a>
+    </div>
+    <div class="hero-meta">
+      <span class="pill"><span class="star" style="color:var(--amber)">★</span> <b id="hero-stars">35</b> stars</span>
+      <span class="pill">↓ <b id="hero-downloads">234</b> 次下载</span>
+      <span class="pill">最新稳定版 <b id="hero-version">v0.1.21</b></span>
+      <span class="pill">MIT 开源</span>
+    </div>
+
+    <div class="shotwrap">
+      <img class="shot" src="./screenshot.png" alt="Glint 主界面截图">
+    </div>
+    <div class="dots-legend">
+      <span><i style="color:var(--amber)"></i>运行中</span>
+      <span><i style="color:var(--red)"></i>等待批准</span>
+      <span><i style="color:var(--green)"></i>已完成</span>
+      <span><i style="color:var(--cyan)"></i>空闲</span>
+    </div>
+  </div>
+</header>
+
+<!-- live stats -->
+<div class="wrap" id="stats">
+  <div class="statsband">
+    <div class="grid">
+      <div class="stat">
+        <div class="num" id="s-stars" data-target="35">—</div>
+        <div class="lbl">GitHub Stars</div>
+        <div class="sub">chenbstack/glint</div>
+      </div>
+      <div class="stat">
+        <div class="num" id="s-downloads" data-target="234">—</div>
+        <div class="lbl">累计下载</div>
+        <div class="sub">手动 + 自动更新 + brew</div>
+      </div>
+      <div class="stat">
+        <div class="num" id="s-latest" data-target="64">—</div>
+        <div class="lbl">最新稳定版下载</div>
+        <div class="sub" id="s-latest-ver">v0.1.21</div>
+      </div>
+      <div class="stat">
+        <div class="num" id="s-beta" data-target="13">—</div>
+        <div class="lbl">Beta 通道(峰值)</div>
+        <div class="sub" id="s-beta-sub">最高单版 ≈ 通道人数</div>
+      </div>
+    </div>
+    <div class="beta-break" id="beta-break">
+      <div class="bh">测试版分布 · <b id="beta-break-ver">v0.1.21</b> 之后各 beta 下载数<span style="color:var(--ink-3)"> · 取峰值 ≈ beta 通道人数(求和会重复计同一人)</span></div>
+      <div id="beta-rows"></div>
+    </div>
+    <div class="live">
+      <span class="dot"></span>
+      <span id="live-text">实时数据来自 GitHub · <a href="https://github.com/chenbstack/glint/releases" target="_blank" rel="noopener">Releases</a></span>
+    </div>
+  </div>
+</div>
+
+<!-- features -->
+<section class="feat" id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>为「多开党」设计的终端</h2>
+      <p>一个 workspace 里同时跑 Claude、Codex、OpenCode,分屏、多 tab,谁也不抢谁的注意力。</p>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="ic">🎯</div>
+        <h3>per-pane 状态一览</h3>
+        <p>每个 pane 的 AI 代理在干什么,状态点 + 悬浮明细一眼看清,不用逐个切过去问。</p>
+      </div>
+      <div class="card">
+        <div class="ic">⚡️</div>
+        <h3>多 agent 并行</h3>
+        <p>左边 Claude、右边 Codex、另一个 tab 跑 OpenCode,各自独立会话互不打扰。</p>
+      </div>
+      <div class="card">
+        <div class="ic">🪟</div>
+        <h3>分屏 · 多标签</h3>
+        <p>workspace-global 的 pane 模型,⌘T 开标签、随手分屏,布局怎么切 key 都不变。</p>
+      </div>
+      <div class="card">
+        <div class="ic">✨</div>
+        <h3>Liquid Glass 头部</h3>
+        <p>macOS 26 玻璃浮岛 header,终端内容顶到顶部,质感拉满。</p>
+      </div>
+      <div class="card">
+        <div class="ic">🚀</div>
+        <h3>基于 Ghostty</h3>
+        <p>底层用 Ghostty 渲染,SwiftUI + AppKit 重写交互,快且原生。</p>
+      </div>
+      <div class="card">
+        <div class="ic">🔄</div>
+        <h3>Sparkle 自动更新</h3>
+        <p>新版本静默推送、一键升级,brew cask 也能跟上。</p>
+      </div>
+    </div>
+
+    <div class="showcase">
+      <div class="panel">
+        <img src="./screenshot-sidebar.png" alt="侧边栏工作区状态">
+        <div class="cap">
+          <h3>侧边栏:谁在跑 · 谁等你 · 谁跑完了</h3>
+          <p>每个工作区显示当前代理、状态与已用时长,红点等批准、绿勾已完成。</p>
+        </div>
+      </div>
+      <div class="panel">
+        <img src="./screenshot.png" alt="分屏多代理">
+        <div class="cap">
+          <h3>分屏里跑多个代理</h3>
+          <p>同一个工作区左右分屏,两个 AI 各跑各的,状态实时汇总到 tab 与侧边栏。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- install -->
+<section class="install" id="install">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>装上它</h2>
+      <p>Homebrew 一行装好,或直接下载 DMG。macOS 专属。</p>
+    </div>
+    <div class="term">
+      <div class="bar">
+        <i style="background:#FF5F56"></i><i style="background:#FFBD2E"></i><i style="background:#27C93F"></i>
+        <span class="t">zsh — install glint</span>
+      </div>
+      <div class="body">
+        <div class="cmd">
+          <code><span class="c">brew</span> tap chenbstack/glint</code>
+          <button class="copy" data-cmd="brew tap chenbstack/glint">复制</button>
+        </div>
+        <div class="cmd">
+          <code><span class="c">brew</span> install --cask glint</code>
+          <button class="copy" data-cmd="brew install --cask glint">复制</button>
+        </div>
+        <div class="cmd">
+          <code class="m"># 升级</code>
+        </div>
+        <div class="cmd">
+          <code><span class="c">brew</span> upgrade --cask glint</code>
+          <button class="copy" data-cmd="brew update && brew upgrade --cask glint">复制</button>
+        </div>
+      </div>
+    </div>
+    <p class="alt">不想用 Homebrew?<a id="dmg-link" href="https://github.com/chenbstack/glint/releases/latest" target="_blank" rel="noopener">直接下载最新 DMG →</a></p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;width:100%;">
+    <a class="brand" href="#top" style="display:flex;align-items:center;gap:9px;">
+      <img src="./glint-logo.png" alt="" style="width:22px;height:22px;border-radius:6px;">Glint
+    </a>
+    <span>· MIT · 为 vibe coding 而生</span>
+    <div class="right">
+      <a href="https://github.com/chenbstack/glint" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/chenbstack/glint/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://ghostty.org" target="_blank" rel="noopener">Ghostty</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+const REPO = 'chenbstack/glint';
+const fmt = n => n.toLocaleString('en-US');
+
+// count-up animation — rolls from the currently shown value to the new one,
+// and no-ops when the value hasn't changed (so 10-min polls don't re-roll).
+function animate(el, target){
+  const cur = parseInt((el.textContent||'').replace(/[^\d]/g,''), 10);
+  if(cur === target) return;
+  const start = Number.isFinite(cur) ? cur : 0, dur = 900, t0 = performance.now();
+  const ease = t => 1 - Math.pow(1 - t, 3);
+  function step(now){
+    const p = Math.min(1, (now - t0) / dur);
+    el.textContent = fmt(Math.round(start + (target - start) * ease(p)));
+    if(p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function renderBetaBreakdown(stableVer, betas, peak){
+  document.getElementById('beta-break-ver').textContent = stableVer;
+  const box = document.getElementById('beta-rows');
+  if(!betas.length){
+    box.innerHTML = '<div class="empty">当前没有比稳定版更新的测试版 —— beta 通道和稳定版同步</div>';
+    return;
+  }
+  const max = Math.max(1, ...betas.map(b=>b.dl));
+  box.innerHTML = betas.map(b => {
+    const top = b.dl === peak && peak > 0;
+    return `<div class="beta-row${top?' peak':''}">
+       <span class="v">${b.tag.replace(/^v/,'')}${top?' <span class="tag">峰值</span>':''}</span>
+       <span class="track"><span class="fill" data-w="${Math.round(b.dl/max*100)}"></span></span>
+       <span class="n">${fmt(b.dl)}</span>
+     </div>`;
+  }).join('');
+  requestAnimationFrame(()=>box.querySelectorAll('.fill').forEach(f=>f.style.width=f.dataset.w+'%'));
+}
+
+function setLive(txt, ok=true){
+  const el = document.getElementById('live-text');
+  el.innerHTML = txt;
+  document.querySelector('.live .dot').style.background = ok ? 'var(--green)' : 'var(--amber)';
+  document.querySelector('.live .dot').style.boxShadow = '0 0 8px ' + (ok?'var(--green)':'var(--amber)');
+}
+
+// ---- data layer ----------------------------------------------------------
+// GitHub Pages is static (no server cache), so we cache in the browser:
+// localStorage holds the last good payload; within FRESH_MS we render it
+// without touching the API. This keeps reloads from draining the anonymous
+// 60-req/hour-per-IP budget. Each visitor has their own IP/budget in prod.
+const CACHE_KEY = 'glint-stats-v2';
+const FRESH_MS  = 10 * 60 * 1000;   // serve cache without refetching within 10 min
+const POLL_MS   = 10 * 60 * 1000;   // background refresh cadence (tab visible only)
+
+function readCache(){ try{ return JSON.parse(localStorage.getItem(CACHE_KEY)); }catch(_){ return null; } }
+function writeCache(d){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), d })); }catch(_){} }
+
+function parse(repo, rels){
+  const dmgDl = r => (r.assets||[]).filter(a=>a.name.endsWith('.dmg')).reduce((s,a)=>s+a.download_count,0);
+  let total = 0, latestStable = null;
+  for(const r of rels){
+    for(const a of (r.assets||[])) if(a.name.endsWith('.dmg')) total += a.download_count;
+    if(!r.prerelease && !r.draft && !latestStable) latestStable = r;
+  }
+  // beta channel = prereleases published AFTER the latest stable.
+  const stableTime = latestStable ? new Date(latestStable.published_at).getTime() : 0;
+  const betas = rels
+    .filter(r => r.prerelease && !r.draft && new Date(r.published_at).getTime() > stableTime)
+    .map(r => ({ tag: r.tag_name, dl: dmgDl(r) }));
+  // peak single-beta download ≈ beta channel population (summing would
+  // double-count: each beta user auto-updates through every beta).
+  const betaPeak = betas.reduce((m,b)=>Math.max(m,b.dl), 0);
+  return {
+    stars: repo.stargazers_count,
+    total,
+    stableDl: latestStable ? dmgDl(latestStable) : 0,
+    ver: latestStable ? latestStable.tag_name : 'v0.1.21',
+    betas, betaPeak,
+    peakTag: (betas.find(b=>b.dl===betaPeak)||{}).tag || '',
+    dmgUrl: latestStable ? latestStable.html_url : null,
+  };
+}
+
+function render(d){
+  animate(document.getElementById('s-stars'), d.stars);
+  animate(document.getElementById('s-downloads'), d.total);
+  animate(document.getElementById('s-latest'), d.stableDl);
+  animate(document.getElementById('s-beta'), d.betaPeak);
+  document.getElementById('s-latest-ver').textContent = d.ver;
+  document.getElementById('s-beta-sub').textContent =
+    d.betas.length ? `峰值 · ${d.peakTag.replace(/^v/,'')}` : '暂无更新的测试版';
+  renderBetaBreakdown(d.ver, d.betas, d.betaPeak);
+  document.getElementById('nav-stars').textContent = fmt(d.stars);
+  document.getElementById('hero-stars').textContent = fmt(d.stars);
+  document.getElementById('hero-downloads').textContent = fmt(d.total);
+  document.getElementById('hero-version').textContent = d.ver;
+  if(d.dmgUrl) document.getElementById('dmg-link').href = d.dmgUrl;
+}
+
+function fallbackStatic(){
+  ['s-stars','s-downloads','s-latest','s-beta'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) animate(el, +el.dataset.target);
+  });
+}
+
+async function fetchFresh(){
+  const [repoR, relsR] = await Promise.all([
+    fetch(`https://api.github.com/repos/${REPO}`),
+    fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100`)
+  ]);
+  if(repoR.status === 403 || relsR.status === 403){
+    const reset = relsR.headers.get('x-ratelimit-reset');
+    const mins = reset ? Math.max(1, Math.ceil((reset - Date.now()/1000)/60)) : 60;
+    setLive(`GitHub API 限流(本 IP 共享额度,约 ${mins} 分钟后恢复)· 显示缓存数据`, false);
+    return null;
+  }
+  const d = parse(await repoR.json(), await relsR.json());
+  writeCache(d);
+  const now = new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  setLive(`实时数据来自 GitHub · 更新于 ${now} · <a href="https://github.com/${REPO}/releases" target="_blank" rel="noopener">Releases</a>`);
+  return d;
+}
+
+async function refresh(force){
+  const c = readCache();
+  if(c) render(c.d);                                   // instant paint from cache
+  if(c && !force && Date.now() - c.ts < FRESH_MS){     // still fresh → no network
+    const t = new Date(c.ts).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+    setLive(`缓存数据 · ${t} 抓取 · 10 分钟内不重复请求 · <a href="https://github.com/${REPO}/releases" target="_blank" rel="noopener">Releases</a>`);
+    return;
+  }
+  try{
+    const d = await fetchFresh();
+    if(d) render(d);
+    else if(!c) fallbackStatic();                      // rate-limited & nothing cached
+  }catch(e){
+    if(c){ setLive('离线 · 显示的是缓存数据', false); }
+    else { fallbackStatic(); setLive('离线 · 显示的是页面预置数据', false); }
+  }
+}
+
+// copy buttons
+document.querySelectorAll('.copy').forEach(b=>{
+  b.addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(b.dataset.cmd);
+      const t = b.textContent; b.textContent = '已复制 ✓'; b.classList.add('ok');
+      setTimeout(()=>{ b.textContent = t; b.classList.remove('ok'); }, 1400);
+    }catch(_){}
+  });
+});
+
+refresh();
+// background poll, paused while the tab is hidden; refetch on return if stale
+setInterval(()=>{ if(!document.hidden) refresh(); }, POLL_MS);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden) return;
+  const c = readCache();
+  if(!c || Date.now() - c.ts >= FRESH_MS) refresh();
+});
+</script>
+</body>
+</html>
