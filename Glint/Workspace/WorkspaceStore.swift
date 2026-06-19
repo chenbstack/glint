@@ -611,6 +611,17 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(soundOnError, forKey: "glint.soundOnError") }
     }
 
+    /// Show a Dock badge count for background agent states that need a look.
+    /// Unlike notification banners this stays quiet and carries no prompt or
+    /// transcript text. Defaults to on because it is non-interruptive.
+    @Published var dockBadgeOnAgentAttention: Bool = (UserDefaults.standard.object(forKey: "glint.dockBadgeOnAgentAttention") as? Bool) ?? true {
+        didSet {
+            UserDefaults.standard.set(dockBadgeOnAgentAttention, forKey: "glint.dockBadgeOnAgentAttention")
+            if !dockBadgeOnAgentAttention { dockBadgePaneStatuses.removeAll() }
+            updateDockBadge()
+        }
+    }
+
     /// NSSound names for the three audio cues, persisted; the defaults are
     /// the original hardcoded chimes.
     @Published var soundPermissionName: String = UserDefaults.standard.string(forKey: "glint.soundPermissionName") ?? "Funk" {
@@ -804,6 +815,7 @@ final class WorkspaceStore: ObservableObject {
     /// Persistent NSView per global pane identity. Surfaces are keyed by
     /// (workspaceID, paneID) so switching workspaces doesn't destroy them.
     private var surfaceViews: [WorkspacePaneKey: GhosttySurfaceView] = [:]
+    private var dockBadgePaneStatuses: [WorkspacePaneKey: PaneAgentStatus] = [:]
 
     private var saveCancellable: AnyCancellable?
     private var cwdTimer: Timer?
@@ -885,6 +897,7 @@ final class WorkspaceStore: ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                self.clearDockBadge()
                 self.captureCwdsFromLiveSurfaces()
                 self.flushScrollback()
                 self.persist()
@@ -928,6 +941,7 @@ final class WorkspaceStore: ObservableObject {
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
+        updateDockBadge()
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: .glintAgentEvent,
             object: nil,
@@ -1233,6 +1247,7 @@ final class WorkspaceStore: ObservableObject {
                 break
             }
         }
+        syncDockBadge(for: key, oldStatus: oldStatus, newStatus: state.status, userIsWatching: userIsWatching)
     }
 
     /// User pressed plain Esc in a pane whose agent is mid-turn. Neither
@@ -1251,6 +1266,7 @@ final class WorkspaceStore: ObservableObject {
             state.status = .idle
             state.updatedAt = Date()
             paneAgentState[key] = state
+            clearDockBadge(for: key)
         case .idle, .justCompleted, .failed:
             // justCompleted/failed are unread badges — only viewing the
             // workspace clears them, not a stray Esc.
@@ -1274,6 +1290,7 @@ final class WorkspaceStore: ObservableObject {
         state.updatedAt = now
         state.turnStartedAt = now
         paneAgentState[key] = state
+        clearDockBadge(for: key)
     }
 
     /// Clear any `.justCompleted` / `.failed` panes back to `.idle` — but
@@ -1285,12 +1302,70 @@ final class WorkspaceStore: ObservableObject {
         guard let ws = workspaces.first(where: { $0.id == workspaceID }),
               let tab = ws.selectedTab else { return }
         let visible = Set(tab.root.leaves)
+        for key in Array(dockBadgePaneStatuses.keys)
+        where key.workspace == workspaceID && visible.contains(key.pane) {
+            clearDockBadge(for: key)
+        }
         for (key, state) in paneAgentState
         where key.workspace == workspaceID && visible.contains(key.pane)
             && (state.status == .justCompleted || state.status == .failed) {
             paneAgentState[key]?.status = .idle
             paneAgentState[key]?.updatedAt = Date()
         }
+    }
+
+    private static func isDockBadgeStatus(_ status: PaneAgentStatus) -> Bool {
+        switch status {
+        case .needsPermission, .justCompleted, .failed:
+            return true
+        case .idle, .thinking, .tool, .compacting:
+            return false
+        }
+    }
+
+    private func syncDockBadge(for key: WorkspacePaneKey,
+                               oldStatus: PaneAgentStatus,
+                               newStatus: PaneAgentStatus,
+                               userIsWatching: Bool) {
+        if userIsWatching {
+            clearDockBadge(for: key)
+            return
+        }
+        guard dockBadgeOnAgentAttention else { return }
+        if oldStatus != newStatus, Self.isDockBadgeStatus(newStatus) {
+            dockBadgePaneStatuses[key] = newStatus
+        } else if !Self.isDockBadgeStatus(newStatus) {
+            dockBadgePaneStatuses.removeValue(forKey: key)
+        }
+        updateDockBadge()
+    }
+
+    private func clearDockBadge(for key: WorkspacePaneKey) {
+        guard dockBadgePaneStatuses.removeValue(forKey: key) != nil else { return }
+        updateDockBadge()
+    }
+
+    private func clearDockBadges(for keys: [WorkspacePaneKey]) {
+        var changed = false
+        for key in keys where dockBadgePaneStatuses.removeValue(forKey: key) != nil {
+            changed = true
+        }
+        if changed { updateDockBadge() }
+    }
+
+    private func clearDockBadge() {
+        guard !dockBadgePaneStatuses.isEmpty || NSApp.dockTile.badgeLabel != nil else { return }
+        dockBadgePaneStatuses.removeAll()
+        updateDockBadge()
+    }
+
+    private func updateDockBadge() {
+        guard dockBadgeOnAgentAttention else {
+            NSApp.dockTile.badgeLabel = nil
+            return
+        }
+        let count = dockBadgePaneStatuses.count
+        NSApp.dockTile.badgeLabel = count == 0 ? nil : "\(count)"
     }
 
     /// True when `key`'s pane is on screen right now: its workspace is the
@@ -1487,6 +1562,7 @@ final class WorkspaceStore: ObservableObject {
         // ghost entries forever.
         paneAgentState.removeValue(forKey: key)
         paneProcesses.removeValue(forKey: key)
+        clearDockBadge(for: key)
         workspaces[i].tabs[t].focusedPane = survivor
             ?? workspaces[i].tabs[t].root.leaves.first
             ?? PaneID(value: 0)
@@ -1674,6 +1750,7 @@ final class WorkspaceStore: ObservableObject {
                 id: ScrollbackArchive.fileID(forPaneKey: "\(wsID.uuidString):\(pane.value)"))
             paneAgentState.removeValue(forKey: key)
             paneProcesses.removeValue(forKey: key)
+            clearDockBadge(for: key)
         }
         workspaces[i].tabs.remove(at: t)
         if wasSelected {
@@ -1768,6 +1845,7 @@ final class WorkspaceStore: ObservableObject {
         // Drop every surface tied to this workspace (their ghostty surfaces
         // get freed in GhosttySurfaceView.deinit when the dict releases them).
         surfaceViews = surfaceViews.filter { $0.key.workspace != id }
+        clearDockBadges(for: workspaces[idx].panes.keys.map { WorkspacePaneKey(workspace: id, pane: $0) })
         // And their scrollback snapshots.
         for paneID in workspaces[idx].panes.keys {
             ScrollbackArchive.delete(
@@ -1812,6 +1890,7 @@ final class WorkspaceStore: ObservableObject {
         // hold onto GPU/IOSurface memory. The Pane / SplitNode / scrollback
         // archive stay on disk so unarchive can rehydrate them.
         surfaceViews = surfaceViews.filter { $0.key.workspace != id }
+        clearDockBadges(for: workspaces[idx].panes.keys.map { WorkspacePaneKey(workspace: id, pane: $0) })
         paneAgentState = paneAgentState.filter { $0.key.workspace != id }
         paneProcesses = paneProcesses.filter { $0.key.workspace != id }
 

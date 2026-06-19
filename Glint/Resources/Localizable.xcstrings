@@ -453,6 +453,28 @@
         }
       }
     },
+    "Count background panes that need approval, just finished, or failed." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "统计需要批准、刚完成或失败的后台面板。"
+          }
+        }
+      }
+    },
+    "Dock badges and chimes only update for background workspaces — the one you're looking at stays quiet." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dock 角标和提示音只在后台工作区更新,你正在查看的工作区保持安静。"
+          }
+        }
+      }
+    },
     "Claude Code" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2017,6 +2039,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "上下文溢出时,在工作区卡片上显示压缩状态。"
+          }
+        }
+      }
+    },
+    "Show Dock badge for agent attention" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 需要关注时显示 Dock 角标"
           }
         }
       }

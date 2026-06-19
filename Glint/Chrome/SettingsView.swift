@@ -805,7 +805,13 @@ private struct AgentsPane: View {
         }
 
         SettingsCard("Notifications",
-                     footer: "Chimes only fire for background workspaces — the one you're looking at stays quiet.") {
+                     footer: "Dock badges and chimes only update for background workspaces — the one you're looking at stays quiet.") {
+            SettingsRow("Show Dock badge for agent attention",
+                        subtitle: "Count background panes that need approval, just finished, or failed.") {
+                Toggle("", isOn: $store.dockBadgeOnAgentAttention)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
             SettingsRow("Sound on permission request",
                         subtitle: "Play a chime when an agent is waiting for your approval in a background workspace.") {
                 HStack(spacing: 10) {
