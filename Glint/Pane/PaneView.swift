@@ -7,6 +7,9 @@ struct PaneView: View {
     /// (stale evaluation of the outgoing tree during a workspace switch).
     let workspaceID: UUID?
     let paneID: PaneID
+    private var terminalBacking: Color {
+        store.terminalUseGhosttyConfig ? .clear : Theme.bgPane
+    }
 
     var body: some View {
         // Resolve a surface only for a (workspace, pane) pair that exists in
@@ -21,7 +24,7 @@ struct PaneView: View {
                      focusedPane: ws.selectedTab?.focusedPane ?? paneID,
                      cwd: pane.workingDirectory)
         } else {
-            Theme.bgPane
+            terminalBacking
         }
     }
 
@@ -33,13 +36,13 @@ struct PaneView: View {
         }
         let isFocused = focusedPane == paneID
         return ZStack {
-            Theme.bgPane
+            terminalBacking
             PaneSurfaceRepresentable(
                 surfaceView: store.surfaceView(workspaceID: workspaceID, paneID: paneID, cwd: cwd),
                 focused: isFocused
             )
             if !isFocused {
-                Theme.bgPane.opacity(0.45)
+                Color.black.opacity(store.terminalUseGhosttyConfig ? 0.18 : 0.45)
                     .allowsHitTesting(false)
             }
         }

@@ -83,6 +83,15 @@ final class GhosttyManager {
         ghostty_app_set_color_scheme(app, scheme)
     }
 
+    func applyWindowEffects() {
+        guard let app else { return }
+        guard usesGhosttyAppearanceConfig else { return }
+        guard currentBackgroundOpacity < 1 else { return }
+        for window in NSApp.windows {
+            ghostty_set_window_background_blur(app, Unmanaged.passUnretained(window).toOpaque())
+        }
+    }
+
     private func tickSoon() {
         DispatchQueue.main.async { [weak self] in
             guard let app = self?.app else { return }
@@ -98,9 +107,8 @@ final class GhosttyManager {
     // MARK: clipboard / close stubs
 
     /// Inline overrides so ghostty's surface matches our chrome. User-tweakable
-    /// fields (font family/size, cursor style/blink, scrollback) are read out
-    /// of `UserDefaults` so we don't need a Combine subscription on the store
-    /// inside this lower layer.
+    /// fields are read out of `UserDefaults` so we don't need a Combine
+    /// subscription on the store inside this lower layer.
     private func applyGlintTheme(_ cfg: ghostty_config_t) {
         let defaults = UserDefaults.standard
         let family = defaults.string(forKey: "glint.terminalFontFamily") ?? "SF Mono"
@@ -116,29 +124,39 @@ final class GhosttyManager {
             return v == 0 ? 10_000 : v
         }()
 
+        var lines: [String] = []
+        if !usesGhosttyAppearanceConfig {
+            lines.append(contentsOf: [
+                "background = 0B0A14",
+                "foreground = ECEDF2",
+                "cursor-color = \(accentHex)",
+                "cursor-style = \(cursorStyle)",
+                "cursor-style-blink = \(cursorBlink)",
+                "selection-background = \(accentHex)",
+                "selection-foreground = ECEDF2",
+                "font-family = \(family)",
+                "font-family = Menlo",
+                "font-size = \(size)",
+                "scrollback-limit = \(scrollback)",
+            ])
+        }
+
+        // Keep embedding/layout settings under Glint's control. They prevent
+        // the floating chrome and embedded macOS shell from fighting the
+        // user's Ghostty appearance config.
         // Note: the per-surface `viewport-top-offset` reserves an inset above
         // the grid that the renderer paints scrollback rows up into (instead
         // of the dead-padding behavior of `window-padding-y`). It's set in
         // GhosttySurfaceView.createSurface, not here, because only the
         // top-aligned pane needs the inset; split children don't.
-        let overrides = """
-        background = 0B0A14
-        foreground = ECEDF2
-        cursor-color = \(accentHex)
-        cursor-style = \(cursorStyle)
-        cursor-style-blink = \(cursorBlink)
-        selection-background = \(accentHex)
-        selection-foreground = ECEDF2
-        font-family = \(family)
-        font-family = Menlo
-        font-size = \(size)
-        scrollback-limit = \(scrollback)
-        window-padding-x = 14
-        window-padding-y = 12
-        window-padding-balance = true
-        adjust-cell-height = 10%
-        macos-titlebar-style = hidden
-        """
+        lines.append(contentsOf: [
+            "window-padding-x = 14",
+            "window-padding-y = 12",
+            "window-padding-balance = true",
+            "adjust-cell-height = 10%",
+            "macos-titlebar-style = hidden",
+        ])
+        let overrides = lines.joined(separator: "\n")
         let source = "glint-inline"
         overrides.withCString { ovr in
             source.withCString { src in
@@ -195,6 +213,21 @@ final class GhosttyManager {
         // extra config objects accumulated over a session are bounded by how
         // often a user changes settings (~tens of bytes per knob).
         self.config = newCfg
+        DispatchQueue.main.async { [weak self] in
+            self?.applyWindowEffects()
+        }
+    }
+
+    var usesGhosttyAppearanceConfig: Bool {
+        (UserDefaults.standard.object(forKey: "glint.terminalUseGhosttyConfig") as? Bool) ?? false
+    }
+
+    var currentBackgroundOpacity: Double {
+        guard usesGhosttyAppearanceConfig, let config else { return 1 }
+        var value: Double = 1
+        let key = "background-opacity"
+        _ = key.withCString { ghostty_config_get(config, &value, $0, UInt(strlen($0))) }
+        return min(max(value, 0), 1)
     }
 
     private static let writeClipboard: ghostty_runtime_write_clipboard_cb = { _, _, contentPtr, count, _ in

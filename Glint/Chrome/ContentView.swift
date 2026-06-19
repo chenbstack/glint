@@ -9,19 +9,19 @@ struct ContentView: View {
     /// On macOS 26+ the islands use real Liquid Glass; pre-26 they use the
     /// in-house `GlassCapsuleFallback`. Glass off → stacked band layout.
     private var floatingHeader: Bool { store.glassEffect }
+    private var terminalBacking: Color {
+        store.terminalUseGhosttyConfig ? .clear : Theme.bgPane
+    }
 
     var body: some View {
         HStack(spacing: 0) {
             if !store.sidebarCollapsed {
-                // Exactly the pane area's color: ghostty paints an opaque
-                // `background = 0B0A14` (= Theme.bgPane), so a flat fill
-                // makes the two surfaces read as one, split only by the
-                // hairline. (A Tahoe floating glass sidebar was tried and
-                // rejected: with nothing but flat near-black behind it,
-                // glass has nothing to refract and reads as a gray slab.)
+                // Match the pane backing. When Ghostty config owns terminal
+                // transparency this stays clear so background-opacity can show
+                // the desktop/window blur behind the surface.
                 SidebarView()
                     .frame(width: 244)
-                    .background(Theme.bgPane)
+                    .background(terminalBacking)
                     .overlay(alignment: .trailing) {
                         Rectangle().fill(Color.white.opacity(0.045)).frame(width: 1)
                     }
@@ -39,9 +39,9 @@ struct ContentView: View {
                     // islands by the padded shell launcher (see
                     // GhosttyManager.paddedShellLauncherPath), not by
                     // insetting the layout.
-                    .background(Theme.bgPane)
+                    .background(terminalBacking)
             }
-            .background(Theme.bgPane)
+            .background(terminalBacking)
             // Floating mode: the terminal owns the full height and the
             // toolbar's glass islands ride on top of it. The strip itself
             // is an invisible window-drag handle (see ToolbarHeader).
@@ -52,7 +52,7 @@ struct ContentView: View {
             }
         }
         .ignoresSafeArea()
-        .background(Theme.bgWindow)
+        .background(store.terminalUseGhosttyConfig ? Color.clear : Theme.bgWindow)
         .animation(.easeOut(duration: 0.18), value: store.sidebarCollapsed)
         .overlay {
             if store.commandPaletteOpen {

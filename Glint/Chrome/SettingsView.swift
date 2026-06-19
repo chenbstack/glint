@@ -550,6 +550,26 @@ private struct TerminalPane: View {
     private let scrollbackChoices: [Int] = [1_000, 5_000, 10_000, 50_000, 100_000]
 
     var body: some View {
+        SettingsCard("Ghostty config",
+                     footer: "When enabled, Glint uses your Ghostty config for terminal colors, font, cursor, scrollback, transparency, and blur. Glint still keeps layout settings required by its floating chrome.") {
+            SettingsRow("Use Ghostty config",
+                        subtitle: store.terminalUseGhosttyConfig
+                        ? "Terminal appearance is loaded from Ghostty's config files."
+                        : "Use Glint's terminal appearance controls below.") {
+                Toggle("", isOn: $store.terminalUseGhosttyConfig)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Reload Ghostty config",
+                        subtitle: "Re-read Ghostty config files from disk after editing them.") {
+                Button("Reload") {
+                    store.reloadTerminalConfig()
+                }
+                    .controlSize(.small)
+                    .tint(store.accent)
+            }
+        }
+
         SettingsCard("Font") {
             SettingsRow("Family", subtitle: "Used for all panes. Falls back to Menlo if missing.") {
                 GlintDropdown(selection: $store.terminalFontFamily,
@@ -568,6 +588,8 @@ private struct TerminalPane: View {
                 }
             }
         }
+        .disabled(store.terminalUseGhosttyConfig)
+        .opacity(store.terminalUseGhosttyConfig ? 0.55 : 1)
 
         SettingsCard("Cursor") {
             SettingsRow("Style", subtitle: nil) {
@@ -583,6 +605,8 @@ private struct TerminalPane: View {
                     .toggleStyle(.switch).labelsHidden()
             }
         }
+        .disabled(store.terminalUseGhosttyConfig)
+        .opacity(store.terminalUseGhosttyConfig ? 0.55 : 1)
 
         SettingsCard("Buffer", footer: "Scrollback is kept per-pane. Increasing this raises memory usage.") {
             SettingsRow("Scrollback", subtitle: "Lines retained per pane.") {
@@ -591,6 +615,8 @@ private struct TerminalPane: View {
                               listWidth: 150)
             }
         }
+        .disabled(store.terminalUseGhosttyConfig)
+        .opacity(store.terminalUseGhosttyConfig ? 0.55 : 1)
 
         SettingsCard("Paste") {
             SettingsRow("Warn before pasting multi-line text",

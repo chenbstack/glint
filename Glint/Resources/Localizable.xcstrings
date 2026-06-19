@@ -2563,6 +2563,94 @@
         }
       }
     },
+    "Ghostty config" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 配置"
+          }
+        }
+      }
+    },
+    "When enabled, Glint uses your Ghostty config for terminal colors, font, cursor, scrollback, transparency, and blur. Glint still keeps layout settings required by its floating chrome." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启后，Glint 会使用你的 Ghostty 配置来设置终端颜色、字体、光标、滚动记录、透明度和模糊。Glint 仍会保留浮动窗口栏所需的布局设置。"
+          }
+        }
+      }
+    },
+    "Use Ghostty config" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Ghostty 配置"
+          }
+        }
+      }
+    },
+    "Terminal appearance is loaded from Ghostty's config files." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端外观已从 Ghostty 配置文件加载。"
+          }
+        }
+      }
+    },
+    "Use Glint's terminal appearance controls below." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用下方的 Glint 终端外观控制项。"
+          }
+        }
+      }
+    },
+    "Reload Ghostty config" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新加载 Ghostty 配置"
+          }
+        }
+      }
+    },
+    "Re-read Ghostty config files from disk after editing them." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑后从磁盘重新读取 Ghostty 配置文件。"
+          }
+        }
+      }
+    },
+    "Reload" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新加载"
+          }
+        }
+      }
+    },
     "WORKSPACES" : {
       "localizations" : {
         "zh-Hans" : {

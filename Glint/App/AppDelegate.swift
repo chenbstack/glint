@@ -97,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titlebarSeparatorStyle = .none
         // Sidebar inset to nothing — we draw chrome ourselves
         window.toolbar = nil
+        GhosttyManager.shared.applyWindowEffects()
 
         // Intercept the close button so closing the (only) window — which
         // terminates the app — gets the same "work is still running"

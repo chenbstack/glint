@@ -14,6 +14,8 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> NoDragContainerView {
         let container = NoDragContainerView()
         container.wantsLayer = true
+        container.layer?.isOpaque = false
+        container.layer?.backgroundColor = NSColor.clear.cgColor
         attach(surfaceView, to: container)
         return container
     }
@@ -64,6 +66,7 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
         /// the pair (container, surface) is what's being verified).
         weak var expectedSurface: GhosttySurfaceView?
 
+        override var isOpaque: Bool { false }
         override var mouseDownCanMoveWindow: Bool { false }
 
         override func setFrameOrigin(_ newOrigin: NSPoint) {

@@ -415,6 +415,12 @@ final class WorkspaceStore: ObservableObject {
     /// Terminal appearance settings. Each is persisted to UserDefaults and
     /// fed into ghostty via `GhosttyManager.reloadConfig()` whenever it
     /// changes. The `didSet` hooks both persist and trigger live reload.
+    @Published var terminalUseGhosttyConfig: Bool = (UserDefaults.standard.object(forKey: "glint.terminalUseGhosttyConfig") as? Bool) ?? false {
+        didSet {
+            UserDefaults.standard.set(terminalUseGhosttyConfig, forKey: "glint.terminalUseGhosttyConfig")
+            GhosttyManager.shared.reloadConfig()
+        }
+    }
     @Published var terminalFontFamily: String = UserDefaults.standard.string(forKey: "glint.terminalFontFamily") ?? "SF Mono" {
         didSet {
             UserDefaults.standard.set(terminalFontFamily, forKey: "glint.terminalFontFamily")
@@ -490,9 +496,9 @@ final class WorkspaceStore: ObservableObject {
     }
 
     /// UI accent color. Drives focus/selection highlights across the chrome,
-    /// plus the terminal cursor and selection highlight. Values: "indigo" |
-    /// "cyan" | "pink" | "orange" | "green". Default "indigo". Persists
-    /// across launches.
+    /// plus the terminal cursor and selection highlight when Glint owns the
+    /// terminal appearance. Values: "indigo" | "cyan" | "pink" | "orange" |
+    /// "green". Default "indigo". Persists across launches.
     @Published var accentName: String = UserDefaults.standard.string(forKey: "glint.accentName") ?? "indigo" {
         didSet {
             UserDefaults.standard.set(accentName, forKey: "glint.accentName")
@@ -501,6 +507,10 @@ final class WorkspaceStore: ObservableObject {
     }
 
     var accent: Color { Theme.accent(named: accentName) }
+
+    func reloadTerminalConfig() {
+        GhosttyManager.shared.reloadConfig()
+    }
 
     /// Dock icon the user picked. `.default` keeps the bundle's `.icon`
     /// asset (Liquid Glass on macOS 26); every other case overrides the
