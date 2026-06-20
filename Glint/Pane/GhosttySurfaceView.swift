@@ -81,7 +81,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
     override var isFlipped: Bool { false }
-    override var isOpaque: Bool { false }
+    override var isOpaque: Bool { !GhosttyManager.shared.usesGhosttyAppearanceConfig }
     override var wantsUpdateLayer: Bool { true }
     /// NSView's default in borderless windows is YES — that lets the terminal
     /// area drag the whole window. Force NO so clicks here only go to ghostty.
@@ -110,12 +110,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         self.initialInput = initialInput
         super.init(frame: frame)
         wantsLayer = true
-        layer?.isOpaque = false
         // Placeholder until ghostty installs its IOSurfaceLayer — matches the
         // terminal background so new panes don't flash white pre-first-frame.
-        layer?.backgroundColor = GhosttyManager.shared.usesGhosttyAppearanceConfig
-            ? NSColor.clear.cgColor
-            : NSColor(red: 0.043, green: 0.039, blue: 0.078, alpha: 1.0).cgColor
+        refreshAppearanceBacking()
         // Accept file drops from Finder; on drop we paste the shell-quoted
         // path so users can `cd <drop>` without typing it.
         registerForDraggedTypes([.fileURL])
@@ -138,6 +135,14 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// build with `GLINT_LOG_VISIBLE=1` to see attach / forced-redraw events.
     private let logVisible = ProcessInfo.processInfo.environment["GLINT_LOG_VISIBLE"] != nil
     var debugKey: String { paneKey ?? "?" }
+
+    func refreshAppearanceBacking() {
+        let usesGhosttyAppearanceConfig = GhosttyManager.shared.usesGhosttyAppearanceConfig
+        layer?.isOpaque = !usesGhosttyAppearanceConfig
+        layer?.backgroundColor = usesGhosttyAppearanceConfig
+            ? NSColor.clear.cgColor
+            : NSColor(red: 0.043, green: 0.039, blue: 0.078, alpha: 1.0).cgColor
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -340,7 +345,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             return
         }
         self.surface = s
-        layer?.isOpaque = false
+        refreshAppearanceBacking()
         removeSurfaceCreationError()
 
         // Terminal history restore: echo last session's saved colored

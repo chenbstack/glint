@@ -6,6 +6,7 @@ import AppKit
 /// the surface itself outlives that and just re-parents.
 struct PaneSurfaceRepresentable: NSViewRepresentable {
     let surfaceView: GhosttySurfaceView
+    let usesGhosttyConfig: Bool
     /// Plain value, not a Binding: focus only flows store → AppKit here.
     /// The reverse direction (clicks) goes through store.focus(_:), so a
     /// writable binding would just be a lie about the data flow.
@@ -14,13 +15,15 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> NoDragContainerView {
         let container = NoDragContainerView()
         container.wantsLayer = true
-        container.layer?.isOpaque = false
-        container.layer?.backgroundColor = NSColor.clear.cgColor
+        Self.updateContainerBacking(container, usesGhosttyConfig: usesGhosttyConfig)
+        surfaceView.refreshAppearanceBacking()
         attach(surfaceView, to: container)
         return container
     }
 
     func updateNSView(_ nsView: NoDragContainerView, context: Context) {
+        Self.updateContainerBacking(nsView, usesGhosttyConfig: usesGhosttyConfig)
+        surfaceView.refreshAppearanceBacking()
         if surfaceView.superview !== nsView {
             attach(surfaceView, to: nsView)
         }
@@ -66,7 +69,6 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
         /// the pair (container, surface) is what's being verified).
         weak var expectedSurface: GhosttySurfaceView?
 
-        override var isOpaque: Bool { false }
         override var mouseDownCanMoveWindow: Bool { false }
 
         override func setFrameOrigin(_ newOrigin: NSPoint) {
@@ -109,6 +111,13 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
                   container.expectedSurface === surface else { return }
             Self.pin(surface, in: container)
         }
+    }
+
+    private static func updateContainerBacking(_ container: NoDragContainerView, usesGhosttyConfig: Bool) {
+        container.layer?.isOpaque = !usesGhosttyConfig
+        container.layer?.backgroundColor = usesGhosttyConfig
+            ? NSColor.clear.cgColor
+            : NSColor(red: 0.043, green: 0.039, blue: 0.078, alpha: 1.0).cgColor
     }
 
     private static func pin(_ surface: GhosttySurfaceView, in container: NSView) {

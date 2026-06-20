@@ -39,10 +39,11 @@ struct PaneView: View {
             terminalBacking
             PaneSurfaceRepresentable(
                 surfaceView: store.surfaceView(workspaceID: workspaceID, paneID: paneID, cwd: cwd),
+                usesGhosttyConfig: store.terminalUseGhosttyConfig,
                 focused: isFocused
             )
             if !isFocused {
-                Color.black.opacity(store.terminalUseGhosttyConfig ? 0.18 : 0.45)
+                (store.terminalUseGhosttyConfig ? Color.black.opacity(0.18) : Theme.bgPane.opacity(0.45))
                     .allowsHitTesting(false)
             }
         }
