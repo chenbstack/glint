@@ -477,6 +477,9 @@ final class WorkspaceStore: ObservableObject {
     /// Whether Glint's OpenCode plugin is installed in `~/.config/opencode/plugins`.
     @Published var opencodeHooksInstalled: Bool = false
 
+    /// Whether Glint's Devin hook entries are registered in `~/.config/devin/config.json`.
+    @Published var devinHooksInstalled: Bool = false
+
     /// Whether Glint's modified-Enter shell keybindings are present in the
     /// user's shell rc (~/.zshrc / ~/.bashrc). Opt-in, default off.
     @Published var shellKeybindsInstalled: Bool = false
@@ -625,6 +628,11 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreOpenCodeSession, forKey: "glint.restoreOpenCodeSession") }
     }
 
+    /// Same as `restoreClaudeSession` but for Devin — feeds `devin --continue`.
+    @Published var restoreDevinSession: Bool = (UserDefaults.standard.object(forKey: "glint.restoreDevinSession") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(restoreDevinSession, forKey: "glint.restoreDevinSession") }
+    }
+
     /// Master switch for the external control socket (control.sock). Off by
     /// default — the socket lets any local process holding the 0600 token
     /// inject keystrokes into your terminals, so it's opt-in. The didSet
@@ -771,10 +779,21 @@ final class WorkspaceStore: ObservableObject {
                 isInstalled: OpenCodeHookInstaller.isInstalled,
                 install: { OpenCodeHookInstaller.installIfNeeded(socketPath: socketPath) }
             ),
+            AgentHookSpec(
+                handledKey: "glint.devinHooksAutoInstalled",
+                displayName: "Devin",
+                isPresent: DevinHookInstaller.isAgentPresent,
+                isInstalled: DevinHookInstaller.isInstalled,
+                install: { DevinHookInstaller.installIfNeeded(socketPath: socketPath) }
+            ),
         ]
     }
 
     private static func autoInstallAgentHooksOnFirstLaunch(socketPath: String) {
+        // Skip the modal dialog when running under XCTest — the alert blocks
+        // the test runner and there's no user to click the button.
+        if ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil { return }
+
         let defaults = UserDefaults.standard
         let specs = agentHookSpecs(socketPath: socketPath)
 
@@ -813,6 +832,7 @@ final class WorkspaceStore: ObservableObject {
             WorkspaceStore.current?.claudeHooksInstalled = AgentHookInstaller.isInstalled()
             WorkspaceStore.current?.codexHooksInstalled = CodexHookInstaller.isInstalled()
             WorkspaceStore.current?.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
+            WorkspaceStore.current?.devinHooksInstalled = DevinHookInstaller.isInstalled()
         }
     }
 
@@ -849,6 +869,16 @@ final class WorkspaceStore: ObservableObject {
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
     }
 
+    func installDevinHooks() {
+        DevinHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
+        self.devinHooksInstalled = DevinHookInstaller.isInstalled()
+    }
+
+    func uninstallDevinHooks() {
+        DevinHookInstaller.uninstall()
+        self.devinHooksInstalled = DevinHookInstaller.isInstalled()
+    }
+
     func installShellKeybinds() {
         ShellKeybindInstaller.install()
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
@@ -865,6 +895,7 @@ final class WorkspaceStore: ObservableObject {
     var claudeDetected: Bool { AgentHookInstaller.isAgentPresent() }
     var codexDetected: Bool { CodexHookInstaller.isAgentPresent() }
     var opencodeDetected: Bool { OpenCodeHookInstaller.isAgentPresent() }
+    var devinDetected: Bool { DevinHookInstaller.isAgentPresent() }
 
     /// Locale to inject into the SwiftUI environment. Driven by
     /// `preferredLanguage`. On macOS 14+, SwiftUI re-resolves
@@ -1007,6 +1038,7 @@ final class WorkspaceStore: ObservableObject {
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
+        self.devinHooksInstalled = DevinHookInstaller.isInstalled()
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
         updateDockBadge()
         observerTokens.append(NotificationCenter.default.addObserver(
@@ -1077,6 +1109,7 @@ final class WorkspaceStore: ObservableObject {
             case "claude"   where restoreClaudeSession:   return "claude --continue\n"
             case "codex"    where restoreCodexSession:    return "codex resume --last\n"
             case "opencode" where restoreOpenCodeSession: return "opencode --continue\n"
+            case "devin"    where restoreDevinSession:    return "devin --continue\n"
             default: return nil
             }
         }()
@@ -1520,11 +1553,12 @@ final class WorkspaceStore: ObservableObject {
     /// close-confirmation check and the workspace icon picker.
     static let benignShells: Set<String> = ["zsh", "bash", "fish", "sh", "dash", "ksh", "login", "tmux"]
 
-    private static func agentToken(forProcessName name: String) -> String? {
+    static func agentToken(forProcessName name: String) -> String? {
         switch agentKind(named: name) {
         case .claude: return "claude"
         case .codex: return "codex"
         case .opencode: return "opencode"
+        case .devin: return "devin"
         case nil: return nil
         }
     }
@@ -1532,11 +1566,12 @@ final class WorkspaceStore: ObservableObject {
     /// Classify a foreground-process name or a hook's agent token into an
     /// agent kind. Both are matched identically (by substring), so there is
     /// one resolver rather than separate process-name / token variants.
-    private static func agentKind(named name: String) -> PaneAgentKind? {
+    static func agentKind(named name: String) -> PaneAgentKind? {
         let lower = name.lowercased()
         if lower.contains("claude") { return .claude }
         if lower.contains("codex") { return .codex }
         if lower.contains("opencode") { return .opencode }
+        if lower.contains("devin") { return .devin }
         return nil
     }
 
@@ -2081,6 +2116,7 @@ enum WorkspaceIconKind {
     case claude
     case codex
     case opencode
+    case devin
     case ssh
     case vim
     case python
@@ -2097,7 +2133,7 @@ enum WorkspaceIconKind {
         case .python: return "chevron.left.forwardslash.chevron.right"
         case .node:   return "hexagon.fill"
         case .git:    return "arrow.triangle.branch"
-        case .claude, .codex, .opencode, .other:
+        case .claude, .codex, .opencode, .devin, .other:
             return nil
         }
     }
@@ -2108,6 +2144,7 @@ enum WorkspaceIconKind {
         case .claude: return "✦"
         case .codex:  return "λ"
         case .opencode: return "O"
+        case .devin:  return "D"
         case .other(let s):
             return s.first.map { String($0).uppercased() } ?? "?"
         default:
@@ -2316,7 +2353,7 @@ extension WorkspaceStore {
     /// workspace (all panes) and a single tab (just that tab's leaves).
     private func liveIconKind(paneIDs: [PaneID], workspaceID: UUID) -> WorkspaceIconKind {
         // Agent push-state wins over pid polling — if any pane reported a
-        // claude/codex/opencode hook, surface that. With several agent panes (e.g.
+        // claude/codex/opencode/devin hook, surface that. With several agent panes (e.g.
         // claude + codex side by side) the busy one wins; when all are equally
         // busy/idle, the most recently active wins. `paneIDs` may come from a
         // Dictionary's keys, so without this ordering the icon would be
@@ -2336,6 +2373,7 @@ extension WorkspaceStore {
             case .claude: return .claude
             case .codex: return .codex
             case .opencode: return .opencode
+            case .devin: return .devin
             }
         }
 
@@ -2348,6 +2386,7 @@ extension WorkspaceStore {
         if names.contains(where: { $0.contains("claude") })        { return .claude }
         if names.contains(where: { $0 == "codex" || $0.contains("codex") }) { return .codex }
         if names.contains(where: { $0 == "opencode" || $0.contains("opencode") }) { return .opencode }
+        if names.contains(where: { $0 == "devin" || $0.contains("devin") }) { return .devin }
         if names.contains(where: { $0 == "vim" || $0 == "nvim" || $0 == "vi" }) { return .vim }
         if names.contains(where: { $0 == "python" || $0 == "python3" || $0 == "ipython" }) { return .python }
         if names.contains(where: { $0 == "node" || $0 == "deno" || $0 == "bun" }) { return .node }

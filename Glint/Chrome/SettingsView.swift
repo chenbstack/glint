@@ -1033,6 +1033,7 @@ private struct AgentsPane: View {
     @State private var claudeInstallFailed = false
     @State private var codexInstallFailed = false
     @State private var opencodeInstallFailed = false
+    @State private var devinInstallFailed = false
 
     var body: some View {
         SettingsCard("Claude Code",
@@ -1180,6 +1181,53 @@ private struct AgentsPane: View {
             SettingsRow("Plugin file",
                         subtitle: "Loaded by OpenCode automatically on startup; it only reports when Glint's pane environment variables are present.") {
                 Text("~/.config/opencode/plugins/glint-agent-bridge.js")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.text3)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+        }
+
+        SettingsCard("Devin",
+                     footer: "Glint merges its hook entries into ~/.config/devin/config.json so Devin CLI sessions surface the same status as Claude.") {
+            SettingsRow("Status", subtitle: devinInstallFailed
+                        ? "Install failed — check Console for [glint] logs."
+                        : (store.devinHooksInstalled
+                           ? "Hooks merged into your Devin config."
+                           : (store.devinDetected
+                              ? "Devin detected — install the reporter to show its status."
+                              : "Devin not detected on this Mac."))) {
+                HStack(spacing: 8) {
+                    StatusPill(
+                        label: store.devinHooksInstalled ? "Installed" : (store.devinDetected ? "Not installed" : "Not detected"),
+                        tone: store.devinHooksInstalled ? .ok : .neutral
+                    )
+                    if store.devinHooksInstalled {
+                        Button("Uninstall") {
+                            store.uninstallDevinHooks()
+                            devinInstallFailed = false
+                        }
+                            .controlSize(.small)
+                    } else {
+                        Button("Install") {
+                            store.installDevinHooks()
+                            devinInstallFailed = !store.devinHooksInstalled
+                        }
+                            .controlSize(.small)
+                            .tint(store.accent)
+                    }
+                }
+            }
+            SettingsDivider()
+            SettingsRow("Resume session on launch",
+                        subtitle: "When Glint reopens, run `devin --continue` in any pane that was running Devin at last quit.") {
+                Toggle("", isOn: $store.restoreDevinSession)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Hook config",
+                        subtitle: "Hooks are stored in Devin's native user config alongside your existing settings.") {
+                Text("~/.config/devin/config.json")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.text3)
                     .lineLimit(1)
