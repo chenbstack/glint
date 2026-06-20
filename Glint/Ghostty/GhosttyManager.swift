@@ -201,7 +201,13 @@ final class GhosttyManager {
         guard let contentPtr, count > 0 else { return }
         let content = contentPtr.pointee
         guard let cstr = content.data else { return }
-        let s = String(cString: cstr)
+        // Honor `count`, not a NUL terminator: ghostty hands us a byte buffer
+        // + length (not guaranteed NUL-terminated). String(cString:) would
+        // truncate at an embedded NUL, and a reused buffer could leak a prior
+        // clipboard's tail. Mirrors the OPEN_URL handler below.
+        let s = cstr.withMemoryRebound(to: UInt8.self, capacity: Int(count)) { bytes in
+            String(decoding: UnsafeBufferPointer(start: bytes, count: Int(count)), as: UTF8.self)
+        }
         DispatchQueue.main.async {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(s, forType: .string)
