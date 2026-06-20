@@ -6,16 +6,19 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.23-beta.3</title>
-      <sparkle:version>202606201109</sparkle:version>
-      <sparkle:shortVersionString>0.1.23-beta.3</sparkle:shortVersionString>
+      <title>Glint 0.1.23-beta.4</title>
+      <sparkle:version>202606201133</sparkle:version>
+      <sparkle:shortVersionString>0.1.23-beta.4</sparkle:shortVersionString>
       <sparkle:channel>beta</sparkle:channel>
-      <pubDate>Sat, 20 Jun 2026 11:10:20 +0000</pubDate>
+      <pubDate>Sat, 20 Jun 2026 11:34:58 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.23-beta.3</h3><ul>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.23-beta.4</h3><ul>
+    <li><strong>fix(clipboard): 写系统剪贴板时不再把内容截断成 1 个字符</strong><br><span style="color:#666">修复从终端写系统剪贴板时内容被截断成单个字符的问题(OSC 52 等</span></li>
+    <li>release: appcast for v0.1.23-beta.3</li>
+  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.23-beta.3</h3><ul>
     <li><strong>feat(theme): 502 套主题目录 + 终端/界面透明度 + 浅色模式兼容</strong><br><span style="color:#666">新增 502 套主题(可搜索浏览器+实时预览)、终端/界面透明度+背景模糊、</span></li>
     <li>release: appcast for v0.1.23-beta.2</li>
-  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.23-beta.2</h3><ul>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.23-beta.2</h3><ul>
     <li><strong>feat(agent): Dock badge for background agent attention (#24)</strong><br><span style="color:#666">后台 agent 需关注时显示 Dock 角标计数(需批准/刚完成/失败),默认开、不含敏感内容</span></li>
     <li>release: appcast for v0.1.23-beta.1</li>
   </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.23-beta.1</h3><ul>
@@ -87,13 +90,98 @@
     <li>release: appcast for v0.1.21-beta.2</li>
     <li>release: appcast for v0.1.21-beta.1</li>
     <li>release: appcast for v0.1.20</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.6</h3><ul>
-    <li><strong>feat(chrome): double-click the header to zoom the window</strong><br><span style="color:#666">窗口: 双击 header(玻璃浮岛/band 以及侧边栏顶部标题栏条)最大化窗口,和原生标题栏一致。原来靠 mouseDownCanMoveWindow 自动拖窗导致视图收不到 mouseDown,改为单击手动 performDrag、双击 window.zoom(nil)。</span></li>
-    <li><strong>fix(sidebar): keep workspace card height constant across agent status</strong><br><span style="color:#666">侧边栏: 修复 workspace 卡片在 agent 运行中比空闲时矮约 1.5pt 的问题——次要行在「空闲(metadata 胶囊徽章)」和「运行中(纯状态文字)」之间切换,胶囊更高;给该行固定 minHeight(取较高的空闲态)使两种状态高度一致。</span></li>
-    <li><strong>fix(assets): commit OpenCode icon set so it ships in release builds</strong><br><span style="color:#666">资源: 补提交 OpenCode 图标资源(吉祥物各状态 + mark),之前只提交了引用它们的代码、asset 文件本身没被跟踪,导致发布版缺图标、OpenCode 窗格图标空白(本地 dev 因有未跟踪文件而正常,掩盖了问题)。</span></li>
-    <li>release: appcast for v0.1.21-beta.5</li>
-    <li>release: appcast for v0.1.21-beta.4</li>
   </ul></div>]]></description>
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.23-beta.4/Glint-0.1.23-beta.4.dmg" length="18266118" type="application/octet-stream" sparkle:edSignature="qKokNQktsWXuynj8YVJLWEizRE7JVhLbIpdsPC0/SuYDse71DvYwzgBZXfZjIndcIazCji9ch17HB35j228mDQ==" />
+    </item>
+    <item>
+      <title>Glint 0.1.23-beta.3</title>
+      <sparkle:version>202606201109</sparkle:version>
+      <sparkle:shortVersionString>0.1.23-beta.3</sparkle:shortVersionString>
+      <sparkle:channel>beta</sparkle:channel>
+      <pubDate>Sat, 20 Jun 2026 11:10:20 +0000</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description>&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.23-beta.3&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(theme): 502 套主题目录 + 终端/界面透明度 + 浅色模式兼容&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增 502 套主题(可搜索浏览器+实时预览)、终端/界面透明度+背景模糊、&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.23-beta.2&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;!--GLINT_HISTORY_BELOW--&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3 style="color:#666;"&gt;历史版本 · Previous releases&lt;/h3&gt;&lt;/div&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.23-beta.2&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(agent): Dock badge for background agent attention (#24)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;后台 agent 需关注时显示 Dock 角标计数(需批准/刚完成/失败),默认开、不含敏感内容&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.23-beta.1&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.23-beta.1&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(app): crash-loop guard that auto-rolls-back a launch-crashing setting&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增设置崩溃自愈：某项设置导致启动崩溃时,下次启动自动回滚最近一次改动,无需用户手动清理(#15);通知驱动,零维护自动覆盖所有现有及新增设置。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(persistence): route stripBadPanes serialization through SafeJSON&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;stripBadPanes 的两处裸 JSON 序列化改走 SafeJSON,消除 try? 接不住 NSException 的隐患,与全仓约定一致&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(persistence): tolerate a single bad pane; never overwrite an unmovable file (#21)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;state.json 单个坏 pane 不再拖垮全部工作区;移不动的损坏文件拒绝覆盖&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(app): harden crash-loop guard against self-defeating edge cases&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;加固设置崩溃自愈:拒绝非有限数值防日志失效、连续两次崩溃才回滚(避免一次性强退误撤设置)、markHealthy 只祝福冷启动条目。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(usage): SIGABRT-safe JSON serialization (#15 sibling crash)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增 SafeJSON 安全序列化(校验后返回 nil 而非 abort),替换全部裸 JSONSerialization 调用,修复 Codex 额度读取在启动时崩溃(#15 同族)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(usage): harden quota readout against non-finite values (#15)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;加固额度条渲染，过滤 NaN/Inf 等非有限数值，修复开启额度显示后每次启动必崩(#15)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(pane): don&amp;#x27;t flip agent state on Esc/Return consumed by an IME (#22)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;IME 组合态下 Esc/Return 不再误翻 agent 状态&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(pane): use UTF-8 length when injecting control-channel text (#20)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;外部控制注入按 UTF-8 字节长度,避免 NUL 截断&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(ghostty): honor byte length when writing clipboard (#19)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;写剪贴板按字节长度解码,避免 NUL 截断/缓冲泄漏&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.22&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.22&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(site): 官网中英双语 + 历史稳定版趋势/榜单 + 趋势悬浮&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;官网升级:新增中英双语切换、历史稳定版下载趋势图(峰值高亮+发布日期)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(site): GitHub Pages 官网 · 实时 star/下载量统计&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增 GitHub Pages 官网:实时展示 star、累计下载、最新稳定版下载与 beta&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(agent): per-pane agent status summary for split/multi-tab workspaces&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;分屏/多 tab 下汇总每个 agent pane 的状态：状态点簇(封顶 3、按注意力排序)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(icon): Icon Composer .icon + 应用内图标切换&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;改用 Icon Composer .icon 让 macOS 26 显示 Liquid Glass、旧系统自动生成带留白图标(修复 15 上图标过大);新增应用内 Dock 图标切换(设置→外观→应用图标,9 种配色+默认,持久化并启动恢复);header 与关于页 logo 跟随配色切换;清理无用的 AppIcon-Dev 与 GlintLogo 资源。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(control): external pane control bridge with opt-in toggle&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增「外部控制」功能——本机其它程序可经 ~/.glint/run 下的 socket 聚焦 pane、&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;refactor(workspace): single-source the accent palette; drop dead icon-hint state&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;清理：accent 配色统一到 Theme.accent(named:) 单一来源（消除三处会漂移的映射，终端光标色由同一 Theme 颜色派生）；删除已失效的 iconHint 持久化链路（字段/Codable/syncIconHints/persistToken，去掉每次 agent 启停的无用磁盘写）；cwd→label 两个格式化函数的公共前导去重。无行为变化。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(agent): keep pane agent state on unknown foreground; restore agent fallback&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 agent 状态对账：前台未知（后台 tab/瞬时空 pid）不再被当成退回 shell 而误清活跃会话；nil 前台不再清空 --continue 恢复线索；hook 无法解析 kind 时回退 claude 而非丢弃。附带：单击选 tab 去掉双击延迟、IME 输入中跳过 ⌘K 清屏。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(agent): keep live/unread agent state when pane shells out&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 #11 的回退:agent 跑 shell 工具调用或报错退回 shell 时,只有 .idle 才清理 pane 状态,避免清掉进行中会话(图标闪烁)和未读的完成/失败红点。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;fix(agent): clear stale icons after session exit (#11)&lt;/li&gt;
+    &lt;li&gt;fix(ui): apply accent to terminal cursor and selection (#13)&lt;/li&gt;
+    &lt;li&gt;fix(shortcuts): free command k for terminal clear (#10)&lt;/li&gt;
+    &lt;li&gt;fix(tabs): compact labels with full path help (#12)&lt;/li&gt;
+    &lt;li&gt;fix(agent): use /usr/bin/nc so hook reports survive a Homebrew netcat shadow (#5)&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.22-beta.4&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.22-beta.3&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.22-beta.2&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;chore(docs): stop tracking docs/*.md drafts, keep local copies&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;不再跟踪 docs 下的 md 草稿(本地保留),并加入 .gitignore;历史与已发布 tag 仍含该文件,仅从 main 顶端移除。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.22-beta.1&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.22-beta.4&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(agent): per-pane agent status summary for split/multi-tab workspaces&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;分屏/多 tab 下汇总每个 agent pane 的状态：状态点簇(封顶 3、按注意力排序)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.22-beta.3&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.22-beta.3&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(icon): Icon Composer .icon + 应用内图标切换&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;改用 Icon Composer .icon 让 macOS 26 显示 Liquid Glass、旧系统自动生成带留白图标(修复 15 上图标过大);新增应用内 Dock 图标切换(设置→外观→应用图标,9 种配色+默认,持久化并启动恢复);header 与关于页 logo 跟随配色切换;清理无用的 AppIcon-Dev 与 GlintLogo 资源。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.22-beta.2&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.22-beta.2&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;refactor(workspace): single-source the accent palette; drop dead icon-hint state&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;清理：accent 配色统一到 Theme.accent(named:) 单一来源（消除三处会漂移的映射，终端光标色由同一 Theme 颜色派生）；删除已失效的 iconHint 持久化链路（字段/Codable/syncIconHints/persistToken，去掉每次 agent 启停的无用磁盘写）；cwd→label 两个格式化函数的公共前导去重。无行为变化。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(agent): keep pane agent state on unknown foreground; restore agent fallback&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 agent 状态对账：前台未知（后台 tab/瞬时空 pid）不再被当成退回 shell 而误清活跃会话；nil 前台不再清空 --continue 恢复线索；hook 无法解析 kind 时回退 claude 而非丢弃。附带：单击选 tab 去掉双击延迟、IME 输入中跳过 ⌘K 清屏。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(agent): keep live/unread agent state when pane shells out&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 #11 的回退:agent 跑 shell 工具调用或报错退回 shell 时,只有 .idle 才清理 pane 状态,避免清掉进行中会话(图标闪烁)和未读的完成/失败红点。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;fix(agent): clear stale icons after session exit (#11)&lt;/li&gt;
+    &lt;li&gt;fix(ui): apply accent to terminal cursor and selection (#13)&lt;/li&gt;
+    &lt;li&gt;fix(shortcuts): free command k for terminal clear (#10)&lt;/li&gt;
+    &lt;li&gt;fix(tabs): compact labels with full path help (#12)&lt;/li&gt;
+    &lt;li&gt;fix(agent): use /usr/bin/nc so hook reports survive a Homebrew netcat shadow (#5)&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;chore(docs): stop tracking docs/*.md drafts, keep local copies&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;不再跟踪 docs 下的 md 草稿(本地保留),并加入 .gitignore;历史与已发布 tag 仍含该文件,仅从 main 顶端移除。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.22-beta.1&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.22-beta.1&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(control): external pane control bridge with opt-in toggle&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增「外部控制」功能——本机其它程序可经 ~/.glint/run 下的 socket 聚焦 pane、&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.21&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(chrome): double-click the header to zoom the window&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;窗口: 双击 header(玻璃浮岛/band 以及侧边栏顶部标题栏条)最大化窗口,和原生标题栏一致。原来靠 mouseDownCanMoveWindow 自动拖窗导致视图收不到 mouseDown,改为单击手动 performDrag、双击 window.zoom(nil)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(terminal): opt-in shell keybindings to normalize modified keys&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;终端: 新增可选的 Shell 按键绑定(设置 → 终端,默认关),规整 ghostty 发出但裸 zsh/bash 不认识的带修饰键转义,避免在提示符下泄漏(Shift+Enter → ;2;13~、Shift+Right → 1;2C)或失效。覆盖带修饰 Enter/方向键/Home/End/Delete。绑定写到 ~/.config/glint/ 独立文件,rc 里只加一行 source 引用;卸载时删除引用并移除文件。不影响 Claude/Codex 窗格(它们自己要用这些转义)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(agent): gate hook auto-install on agent presence + OpenCode icons &amp;amp; resume&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;智能体: hook 自动安装改为先检测本机是否装了对应 agent,只为真正存在的 agent 弹安装提示(不再无脑写三家配置);未安装的 agent 不标记已处理,以后装了还会再提示。设置页按 agent 显示&amp;quot;未检测到&amp;quot;状态。新增 OpenCode&amp;quot;启动时恢复会话&amp;quot;开关(opencode --continue)。并入 OpenCode 图标/吉祥物组。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(agent): add OpenCode status support (#4)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增 OpenCode 一等公民支持——独立身份/图标、hook 插件驱动状态、设置页安装开关,不再被识别成 Claude。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(terminal): paste Finder files as paths &amp;amp; ⌘-click to open files&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;⌘V 粘贴 Finder 文件改为粘贴文件完整路径;⌘点击终端里的文件路径可直接打开(相对路径按 cwd 解析;可执行文件/应用改为在 Finder 中显示,防止执行不可信内容)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(tabs): inline rename for tab chips&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;顶部标签条支持重命名 —— 右键 &amp;quot;Rename&amp;quot; 把标签切成 TextField，&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;polish(sidebar): move archived marker to top-right corner&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;工作区&amp;quot;已归档&amp;quot;徽标从二行胶囊移到卡片右上角，卡片主体跟普通卡片&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(sidebar): keep workspace card height constant across agent status&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;侧边栏: 修复 workspace 卡片在 agent 运行中比空闲时矮约 1.5pt 的问题——次要行在「空闲(metadata 胶囊徽章)」和「运行中(纯状态文字)」之间切换,胶囊更高;给该行固定 minHeight(取较高的空闲态)使两种状态高度一致。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(assets): commit OpenCode icon set so it ships in release builds&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;资源: 补提交 OpenCode 图标资源(吉祥物各状态 + mark),之前只提交了引用它们的代码、asset 文件本身没被跟踪,导致发布版缺图标、OpenCode 窗格图标空白(本地 dev 因有未跟踪文件而正常,掩盖了问题)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(input): handle Shift+Enter (and modified keys) with Chinese IMEs&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;输入法: 修复中文输入法激活时 Shift+Enter 被输入法的 Shift 切换吃掉、传不到终端的问题。改为先用带文本累加器的 interpretKeyEvents 让输入法旁观这个组合键而不产生副作用,再由我们把按键发给 surface,surface 没处理才回退。flagsChanged 重写为按左右修饰键分别判定按下/抬起,且组字期间不触发。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.6&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.5&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.4&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.3&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.2&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.1&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.20&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.21-beta.6&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(chrome): double-click the header to zoom the window&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;窗口: 双击 header(玻璃浮岛/band 以及侧边栏顶部标题栏条)最大化窗口,和原生标题栏一致。原来靠 mouseDownCanMoveWindow 自动拖窗导致视图收不到 mouseDown,改为单击手动 performDrag、双击 window.zoom(nil)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(sidebar): keep workspace card height constant across agent status&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;侧边栏: 修复 workspace 卡片在 agent 运行中比空闲时矮约 1.5pt 的问题——次要行在「空闲(metadata 胶囊徽章)」和「运行中(纯状态文字)」之间切换,胶囊更高;给该行固定 minHeight(取较高的空闲态)使两种状态高度一致。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(assets): commit OpenCode icon set so it ships in release builds&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;资源: 补提交 OpenCode 图标资源(吉祥物各状态 + mark),之前只提交了引用它们的代码、asset 文件本身没被跟踪,导致发布版缺图标、OpenCode 窗格图标空白(本地 dev 因有未跟踪文件而正常,掩盖了问题)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.5&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.21-beta.4&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;</description>
       <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.23-beta.3/Glint-0.1.23-beta.3.dmg" length="18265708" type="application/octet-stream" sparkle:edSignature="pVTQQi+zprpFuXFzAz1BHe83XHCu9xR9re4KeLHMBvzCde72K5KfAg1Z4LYMJ1NYIjdUTnngyDcdEqZDIUZEAA==" />
     </item>
     <item>
