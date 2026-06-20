@@ -303,10 +303,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
         // Env vars for CLI-agent hooks (Claude Code etc.) — same strdup
         // discipline; ghostty copies the array during surface_new.
+        var mergedEnvironment = extraEnvironment
+        if let pk = paneKey { mergedEnvironment["GLINT_PANE_ID"] = pk }
+        if let sock = agentSocketPath { mergedEnvironment["GLINT_AGENT_SOCK"] = sock }
         var envPairs: [(UnsafeMutablePointer<CChar>, UnsafeMutablePointer<CChar>)] = []
-        if let pk = paneKey { envPairs.append((strdup("GLINT_PANE_ID"), strdup(pk))) }
-        if let sock = agentSocketPath { envPairs.append((strdup("GLINT_AGENT_SOCK"), strdup(sock))) }
-        for (key, value) in extraEnvironment {
+        for key in mergedEnvironment.keys.sorted() {
+            guard let value = mergedEnvironment[key] else { continue }
             envPairs.append((strdup(key), strdup(value)))
         }
         defer { envPairs.forEach { free($0.0); free($0.1) } }

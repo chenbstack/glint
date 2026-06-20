@@ -731,6 +731,8 @@ final class WorkspaceStore: ObservableObject {
     /// Persistent NSView per global pane identity. Surfaces are keyed by
     /// (workspaceID, paneID) so switching workspaces doesn't destroy them.
     private var surfaceViews: [WorkspacePaneKey: GhosttySurfaceView] = [:]
+    /// O(1) routing from stable managed-session IDs to their attached viewer pane.
+    private var agentSessionPaneIndex: [String: WorkspacePaneKey] = [:]
 
     private var saveCancellable: AnyCancellable?
     private var cwdTimer: Timer?
@@ -763,6 +765,7 @@ final class WorkspaceStore: ObservableObject {
         self.sidebarCollapsed = loaded.sidebarCollapsed
         self.detachedAgentSessions = loaded.detachedAgentSessions
         Self.current = self
+        rebuildAgentSessionPaneIndex()
 
         // Debounced autosave: any @Published change → save 0.5s later.
         saveCancellable = objectWillChange
@@ -892,6 +895,28 @@ final class WorkspaceStore: ObservableObject {
     struct WorkspacePaneKey: Hashable {
         let workspace: UUID
         let pane: PaneID
+    }
+
+    private func rebuildAgentSessionPaneIndex() {
+        var index: [String: WorkspacePaneKey] = [:]
+        for ws in workspaces {
+            for pane in ws.panes.values {
+                if let session = pane.agentSession {
+                    index[session.id] = WorkspacePaneKey(workspace: ws.id, pane: pane.id)
+                }
+            }
+        }
+        agentSessionPaneIndex = index
+    }
+
+    private func rememberAgentSession(_ session: AgentSession?, workspaceID: UUID, paneID: PaneID) {
+        guard let session else { return }
+        agentSessionPaneIndex[session.id] = WorkspacePaneKey(workspace: workspaceID, pane: paneID)
+    }
+
+    private func forgetAgentSession(_ session: AgentSession?) {
+        guard let session else { return }
+        agentSessionPaneIndex.removeValue(forKey: session.id)
     }
 
     func surfaceView(workspaceID: UUID, paneID: PaneID, cwd: String?) -> GhosttySurfaceView {
@@ -1087,14 +1112,7 @@ final class WorkspaceStore: ObservableObject {
         guard let info,
               let hook = info["hook"] as? String else { return }
         let sessionID = info["session"] as? String
-        let sessionKey: WorkspacePaneKey? = sessionID.flatMap { id in
-            for ws in workspaces {
-                if let pane = ws.panes.first(where: { $0.value.agentSession?.id == id })?.key {
-                    return WorkspacePaneKey(workspace: ws.id, pane: pane)
-                }
-            }
-            return nil
-        }
+        let sessionKey = sessionID.flatMap { agentSessionPaneIndex[$0] }
         let paneKey = (info["pane"] as? String).flatMap(Self.parsePaneKey)
         guard let key = sessionKey ?? paneKey else { return }
 
@@ -1184,7 +1202,7 @@ final class WorkspaceStore: ObservableObject {
             if agentTransportState[sessionID] != .local {
                 agentTransportState[sessionID] = .connected
             }
-            if kind == .codex, let key = sessionKey,
+            if kind == .codex, sessionID != nil,
                let wi = workspaces.firstIndex(where: { $0.id == key.workspace }),
                var session = workspaces[wi].panes[key.pane]?.agentSession,
                session.needsHookTrust {
@@ -1454,6 +1472,8 @@ final class WorkspaceStore: ObservableObject {
                 let oldKey = WorkspacePaneKey(workspace: workspaces[i].id, pane: target)
                 detachManagedSession(session)
                 surfaceViews.removeValue(forKey: oldKey)
+                ScrollbackArchive.delete(
+                    id: ScrollbackArchive.fileID(forPaneKey: "\(workspaces[i].id.uuidString):\(target.value)"))
                 paneAgentState.removeValue(forKey: oldKey)
                 paneProcesses.removeValue(forKey: oldKey)
                 let replacement = PaneID(value: workspaces[i].nextPaneSeq)
@@ -1671,6 +1691,7 @@ final class WorkspaceStore: ObservableObject {
         workspace.tabs[0].root = .leaf(pane)
         workspace.tabs[0].focusedPane = pane
         workspaces.append(workspace)
+        rememberAgentSession(session, workspaceID: workspace.id, paneID: pane)
         selectedWorkspaceID = workspace.id
     }
 
@@ -1689,6 +1710,9 @@ final class WorkspaceStore: ObservableObject {
         do {
             try AgentSessionManager.shared.kill(session)
             detachedAgentSessions.remove(at: i)
+            agentSessionState.removeValue(forKey: session.id)
+            agentTransportState.removeValue(forKey: session.id)
+            agentSessionPaneIndex.removeValue(forKey: session.id)
         } catch {
             NSLog("[glint] failed to kill detached session \(session.id): \(error)")
         }
@@ -1700,6 +1724,7 @@ final class WorkspaceStore: ObservableObject {
         workspaces[i].panes[paneID] = Pane(id: paneID, title: session.agent.displayName,
                                           workingDirectory: session.workingDirectory,
                                           agentSession: session)
+        rememberAgentSession(session, workspaceID: workspaces[i].id, paneID: paneID)
         let tab = WorkspaceTab(id: TabID(value: workspaces[i].nextTabSeq), name: nil,
                                root: .leaf(paneID), focusedPane: paneID)
         workspaces[i].nextTabSeq += 1
@@ -1708,7 +1733,9 @@ final class WorkspaceStore: ObservableObject {
     }
 
     private func detachManagedSession(_ session: AgentSession?) {
-        guard var session, !detachedAgentSessions.contains(where: { $0.id == session.id }) else { return }
+        guard var session else { return }
+        forgetAgentSession(session)
+        guard !detachedAgentSessions.contains(where: { $0.id == session.id }) else { return }
         session.lastAttachedPane = nil
         detachedAgentSessions.append(session)
         agentTransportState[session.id] = .detached
@@ -1843,6 +1870,7 @@ final class WorkspaceStore: ObservableObject {
         for pane in workspaces[idx].panes.values {
             detachManagedSession(pane.agentSession)
         }
+        agentSessionPaneIndex = agentSessionPaneIndex.filter { $0.value.workspace != id }
         // Drop every surface tied to this workspace (their ghostty surfaces
         // get freed in GhosttySurfaceView.deinit when the dict releases them).
         surfaceViews = surfaceViews.filter { $0.key.workspace != id }

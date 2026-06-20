@@ -243,7 +243,7 @@ final class AgentSessionManager {
         let ssh = """
         #!/bin/sh
         set -e
-        remote_home_output=$(ssh \(target) \(homeProbe)) || exit $?
+        remote_home_output=`ssh \(target) \(homeProbe)` || exit $?
         GLINT_REMOTE_HOME=$(printf '%s\\n' "$remote_home_output" | awk 'NF { last=$0 } END { print last }')
         [ -n "$GLINT_REMOTE_HOME" ] || { printf 'Glint: unable to resolve remote home.\\n' >&2; exit 1; }
         ssh \(target) \(shellQuote(prepareForwardSocket))
