@@ -166,11 +166,9 @@ struct CommandPalette: View {
         let ordered = store.workspaces.filter { $0.id == currentID }
             + store.workspaces.filter { $0.id != currentID }
         for ws in ordered {
-            let n = ws.panes.count
-            let unit = String(localized: n == 1 ? "pane" : "panes")
             items.append(.workspace(
                 title: ws.displayName,
-                subtitle: "\(n) \(unit)",
+                subtitle: ws.detailLine,
                 accent: ws.accent,
                 isCurrent: ws.id == currentID,
                 action: { store.selectWorkspace(ws.id) }
@@ -178,12 +176,21 @@ struct CommandPalette: View {
         }
 
         items.append(.action(
+            title: "New Agent Session",
+            subtitle: "Launch in the current workspace",
+            symbol: "sparkles.rectangle.stack",
+            shortcut: "",
+            tint: actionTint,
+            action: { store.newAgentSessionOpen = true }
+        ))
+
+        items.append(.action(
             title: "New Workspace",
-            subtitle: "Create a fresh workspace",
+            subtitle: "Choose agent, device, and profile",
             symbol: "plus.square",
             shortcut: "",
             tint: actionTint,
-            action: { store.addWorkspace() }
+            action: { store.newWorkspaceSessionOpen = true }
         ))
 
         items.append(.action(

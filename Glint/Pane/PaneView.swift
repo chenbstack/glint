@@ -19,7 +19,8 @@ struct PaneView: View {
            let pane = ws.panes[paneID] {
             paneBody(workspaceID: wsID,
                      focusedPane: ws.selectedTab?.focusedPane ?? paneID,
-                     cwd: pane.workingDirectory)
+                     cwd: pane.workingDirectory,
+                     session: pane.agentSession)
         } else {
             Theme.bgPane
         }
@@ -27,7 +28,8 @@ struct PaneView: View {
 
     private func paneBody(workspaceID: UUID,
                           focusedPane: PaneID,
-                          cwd: String?) -> some View {
+                          cwd: String?,
+                          session: AgentSession?) -> some View {
         if ProcessInfo.processInfo.environment["GLINT_LOG_VISIBLE"] != nil {
             NSLog("[glint.visible] PaneView.body pane=\(paneID.value) ws=\(workspaceID.uuidString.prefix(8))")
         }
@@ -40,6 +42,16 @@ struct PaneView: View {
             )
             if !isFocused {
                 Theme.bgPane.opacity(0.45)
+                    .allowsHitTesting(false)
+            }
+            if session?.needsHookTrust == true {
+                Label("Run /hooks to trust Glint status hooks", systemImage: "checkmark.shield")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.orange)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .padding(12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .allowsHitTesting(false)
             }
         }

@@ -144,7 +144,8 @@ final class AgentBridge {
     }
 
     private struct HookEnvelope: Decodable {
-        let pane: String
+        let session: String?
+        let pane: String?
         let hook: String
         let agent: String?
     }
@@ -155,10 +156,9 @@ final class AgentBridge {
             return
         }
         DispatchQueue.main.async {
-            var userInfo: [String: Any] = [
-                "pane": env.pane,
-                "hook": env.hook,
-            ]
+            var userInfo: [String: Any] = ["hook": env.hook]
+            if let session = env.session, !session.isEmpty { userInfo["session"] = session }
+            if let pane = env.pane, !pane.isEmpty { userInfo["pane"] = pane }
             if let agent = env.agent, !agent.isEmpty {
                 userInfo["agent"] = agent
             }

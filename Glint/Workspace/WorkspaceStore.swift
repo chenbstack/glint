@@ -78,16 +78,21 @@ struct Pane: Identifiable, Codable {
     /// `restoreClaudeSession` / `restoreCodexSession`. Reflects the CURRENT
     /// state, not sticky: an agent that quit back to the shell clears it.
     var lastAgent: String?
+    /// Stable managed runtime identity. The tmux process outlives the viewer
+    /// surface, so closing/reopening Glint reattaches instead of restarting it.
+    var agentSession: AgentSession?
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, workingDirectory, lastAgent
+        case id, title, workingDirectory, lastAgent, agentSession
     }
 
-    init(id: PaneID, title: String, workingDirectory: String? = nil, lastAgent: String? = nil) {
+    init(id: PaneID, title: String, workingDirectory: String? = nil, lastAgent: String? = nil,
+         agentSession: AgentSession? = nil) {
         self.id = id
         self.title = title
         self.workingDirectory = workingDirectory
         self.lastAgent = lastAgent
+        self.agentSession = agentSession
     }
 
     init(from decoder: Decoder) throws {
@@ -96,6 +101,7 @@ struct Pane: Identifiable, Codable {
         self.title = try c.decode(String.self, forKey: .title)
         self.workingDirectory = try c.decodeIfPresent(String.self, forKey: .workingDirectory)
         self.lastAgent = try c.decodeIfPresent(String.self, forKey: .lastAgent)
+        self.agentSession = try c.decodeIfPresent(AgentSession.self, forKey: .agentSession)
     }
 }
 
@@ -233,16 +239,19 @@ struct PersistedState: Codable {
     var workspaces: [Workspace]
     var selectedWorkspaceID: UUID?
     var sidebarCollapsed: Bool
+    var detachedAgentSessions: [AgentSession]
 
-    init(workspaces: [Workspace], selectedWorkspaceID: UUID?, sidebarCollapsed: Bool) {
+    init(workspaces: [Workspace], selectedWorkspaceID: UUID?, sidebarCollapsed: Bool,
+         detachedAgentSessions: [AgentSession] = []) {
         self.version = Self.currentVersion
         self.workspaces = workspaces
         self.selectedWorkspaceID = selectedWorkspaceID
         self.sidebarCollapsed = sidebarCollapsed
+        self.detachedAgentSessions = detachedAgentSessions
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, workspaces, selectedWorkspaceID, sidebarCollapsed
+        case version, workspaces, selectedWorkspaceID, sidebarCollapsed, detachedAgentSessions
     }
 
     init(from decoder: Decoder) throws {
@@ -253,6 +262,7 @@ struct PersistedState: Codable {
         self.workspaces = try c.decode([Workspace].self, forKey: .workspaces)
         self.selectedWorkspaceID = try c.decodeIfPresent(UUID.self, forKey: .selectedWorkspaceID)
         self.sidebarCollapsed = try c.decodeIfPresent(Bool.self, forKey: .sidebarCollapsed) ?? false
+        self.detachedAgentSessions = try c.decodeIfPresent([AgentSession].self, forKey: .detachedAgentSessions) ?? []
     }
 
     static var fresh: PersistedState {
@@ -316,6 +326,19 @@ extension Workspace {
         return "\(display)\n\(cwd)"
     }
 
+    /// Compact metadata for workspace rows. Panes are workspace-global, while
+    /// tabs each own their own tree, so multi-tab workspaces show the selected
+    /// tab's pane count over the workspace total to keep the two concepts
+    /// visually distinct.
+    var detailLine: String {
+        let selectedPaneCount = selectedTab?.root.leaves.count ?? panes.count
+        let paneUnit = String(localized: selectedPaneCount == 1 ? "pane" : "panes")
+        guard tabs.count > 1 else { return "\(selectedPaneCount) \(paneUnit)" }
+        let tabUnit = String(localized: "tabs")
+        let totalPaneUnit = String(localized: "panes")
+        return "\(tabs.count) \(tabUnit) · \(selectedPaneCount)/\(panes.count) \(totalPaneUnit)"
+    }
+
     private func tabCwd(_ tab: WorkspaceTab) -> String? {
         panes[tab.focusedPane]?.workingDirectory
             ?? tab.root.leaves.compactMap { panes[$0]?.workingDirectory }.first
@@ -372,6 +395,9 @@ final class WorkspaceStore: ObservableObject {
     @Published var workspaces: [Workspace]
     @Published var selectedWorkspaceID: UUID?
     @Published var sidebarCollapsed: Bool
+    /// Managed tmux sessions with no current viewer pane. They remain alive
+    /// and can be reattached or explicitly killed by the user.
+    @Published var detachedAgentSessions: [AgentSession]
     /// Latest foreground-process name per (workspace, pane). Polled every
     /// few seconds; drives the workspace card icon. Non-persistent.
     @Published var paneProcesses: [WorkspacePaneKey: String] = [:]
@@ -380,6 +406,10 @@ final class WorkspaceStore: ObservableObject {
     /// status (thinking/permission/…) the 1s name poll can't know.
     /// Non-persistent.
     @Published var paneAgentState: [WorkspacePaneKey: PaneAgentState] = [:]
+    /// Authoritative state keyed by stable managed-session identity. Pane
+    /// state above is the current viewer projection kept for existing UI.
+    @Published var agentSessionState: [String: PaneAgentState] = [:]
+    @Published var agentTransportState: [String: AgentTransportState] = [:]
 
     /// Drives the command-palette overlay. Toggled by the toolbar's ⌘
     /// button and the ⌘⇧P global shortcut.
@@ -390,6 +420,8 @@ final class WorkspaceStore: ObservableObject {
     /// inherits the workspace context and feels of-the-app rather than
     /// of-the-OS.
     @Published var settingsOpen: Bool = false
+    @Published var newAgentSessionOpen: Bool = false
+    @Published var newWorkspaceSessionOpen: Bool = false
 
     /// Tick incremented whenever the global ⌘F is fired. `SidebarView`
     /// observes this and pulls focus into its search field. Using a tick
@@ -466,15 +498,12 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
-    /// Whether Glint's Claude Code hook script is currently registered in
-    /// `~/.claude/settings.json`. Mirrors `AgentHookInstaller.isInstalled()`
-    /// so the Settings UI can react without polling.
+    /// Legacy global integrations are detected only so Settings can remove
+    /// them. Managed sessions never install or refresh these entries.
     @Published var claudeHooksInstalled: Bool = false
 
-    /// Whether Glint's Codex hook script is registered in `~/.codex/hooks.json`.
     @Published var codexHooksInstalled: Bool = false
 
-    /// Whether Glint's OpenCode plugin is installed in `~/.config/opencode/plugins`.
     @Published var opencodeHooksInstalled: Bool = false
 
     /// Whether Glint's modified-Enter shell keybindings are present in the
@@ -652,118 +681,16 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(!warnBeforeUnsafePaste, forKey: "glint.skipUnsafePasteConfirmation") }
     }
 
-    /// Offer to install both agents' hooks on the very first launch so
-    /// status tracking works out of the box — but ask first (these write
-    /// into another tool's config files), and ask exactly once. "Not Now"
-    /// never re-prompts and launches never silently re-add the entries;
-    /// the Settings → Install button is the only way back in.
-    ///
-    /// For agents that remain installed, Glint-owned hook entries are
-    /// refreshed every launch — script-body and event-list updates shipped
-    /// with new Glint versions must propagate even though the prompt is
-    /// skipped.
-    private struct AgentHookSpec {
-        let handledKey: String
-        let displayName: String
-        let isPresent: () -> Bool
-        let isInstalled: () -> Bool
-        let install: () -> Void
-    }
-
-    private static func agentHookSpecs(socketPath: String) -> [AgentHookSpec] {
-        [
-            AgentHookSpec(
-                handledKey: "glint.claudeHooksAutoInstalled",
-                displayName: "Claude Code",
-                isPresent: AgentHookInstaller.isAgentPresent,
-                isInstalled: AgentHookInstaller.isInstalled,
-                install: { AgentHookInstaller.installIfNeeded(socketPath: socketPath) }
-            ),
-            AgentHookSpec(
-                handledKey: "glint.codexHooksAutoInstalled",
-                displayName: "Codex",
-                isPresent: CodexHookInstaller.isAgentPresent,
-                isInstalled: CodexHookInstaller.isInstalled,
-                install: { CodexHookInstaller.installIfNeeded(socketPath: socketPath) }
-            ),
-            AgentHookSpec(
-                handledKey: "glint.opencodeHooksAutoInstalled",
-                displayName: "OpenCode",
-                isPresent: OpenCodeHookInstaller.isAgentPresent,
-                isInstalled: OpenCodeHookInstaller.isInstalled,
-                install: { OpenCodeHookInstaller.installIfNeeded(socketPath: socketPath) }
-            ),
-        ]
-    }
-
-    private static func autoInstallAgentHooksOnFirstLaunch(socketPath: String) {
-        let defaults = UserDefaults.standard
-        let specs = agentHookSpecs(socketPath: socketPath)
-
-        // Refresh hooks we already manage so script-body / event-list changes
-        // shipped with a new Glint version propagate even when the prompt is
-        // skipped.
-        for spec in specs where defaults.bool(forKey: spec.handledKey) && spec.isInstalled() {
-            spec.install()
-        }
-
-        // Only offer to install for agents the user actually has on this Mac
-        // AND we haven't asked about yet. Absent agents are deliberately NOT
-        // marked handled, so if one is installed later we'll offer hooks for
-        // it on a future launch instead of blindly writing config for tools
-        // that aren't there.
-        let pending = specs.filter { !defaults.bool(forKey: $0.handledKey) && $0.isPresent() }
-        guard !pending.isEmpty else { return }
-
-        // Defer past launch so the alert doesn't pop before the main window.
-        Task { @MainActor in
-            let names = pending.map(\.displayName)
-            let list = ListFormatter.localizedString(byJoining: names)
-            let alert = NSAlert()
-            alert.messageText = String(localized: "Show agent status in the sidebar?")
-            alert.informativeText = String(
-                format: String(localized: "Glint can register status hooks with %@ that report when an agent is thinking, finished, or waiting for approval. They only send events to Glint on this Mac. You can uninstall them anytime in Settings → Agents."),
-                list
-            )
-            alert.addButton(withTitle: String(localized: "Install Hooks"))
-            alert.addButton(withTitle: String(localized: "Not Now"))
-            let install = alert.runModal() == .alertFirstButtonReturn
-            for spec in pending {
-                if install { spec.install() }
-                defaults.set(true, forKey: spec.handledKey)
-            }
-            WorkspaceStore.current?.claudeHooksInstalled = AgentHookInstaller.isInstalled()
-            WorkspaceStore.current?.codexHooksInstalled = CodexHookInstaller.isInstalled()
-            WorkspaceStore.current?.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
-        }
-    }
-
-    /// Re-run the hook installer and refresh `claudeHooksInstalled`.
-    func installClaudeHooks() {
-        AgentHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
-        self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
-    }
-
     /// Remove Glint's hook entries from Claude's settings and delete the
-    /// script. Idempotent.
+    /// legacy script. Idempotent.
     func uninstallClaudeHooks() {
         AgentHookInstaller.uninstall()
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
     }
 
-    func installCodexHooks() {
-        CodexHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
-        self.codexHooksInstalled = CodexHookInstaller.isInstalled()
-    }
-
     func uninstallCodexHooks() {
         CodexHookInstaller.uninstall()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
-    }
-
-    func installOpenCodeHooks() {
-        OpenCodeHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
-        self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
     }
 
     func uninstallOpenCodeHooks() {
@@ -834,6 +761,7 @@ final class WorkspaceStore: ObservableObject {
             self.selectedWorkspaceID = restored
         }
         self.sidebarCollapsed = loaded.sidebarCollapsed
+        self.detachedAgentSessions = loaded.detachedAgentSessions
         Self.current = self
 
         // Debounced autosave: any @Published change → save 0.5s later.
@@ -923,7 +851,8 @@ final class WorkspaceStore: ObservableObject {
         // docs/external-pane-control.md. Toggling it later is live.
         if externalControlEnabled { ControlBridge.shared.start() }
         else { ControlBridge.shared.reapStale() }
-        Self.autoInstallAgentHooksOnFirstLaunch(socketPath: AgentBridge.shared.socketPath)
+        // Claude/Codex hooks are now session-scoped and generated when a pane
+        // launches. Never auto-write either tool's global configuration.
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
@@ -973,6 +902,26 @@ final class WorkspaceStore: ObservableObject {
             NSLog("[glint.visible] MINT surface ws=\(workspaceID.uuidString.prefix(8)) pane=\(paneID.value) inModel=\(known)")
         }
         let paneKey = "\(workspaceID.uuidString):\(paneID.value)"
+        let session = workspaces.first(where: { $0.id == workspaceID })?.panes[paneID]?.agentSession
+        let launch: ManagedSessionLaunch? = {
+            guard let session else { return nil }
+            do {
+                let prepared = try AgentSessionManager.shared.prepare(
+                    session, paneKey: paneKey, bridgeSocket: AgentBridge.shared.socketPath
+                )
+                agentTransportState[session.id] = {
+                    switch session.host { case .local: return .local; case .ssh: return .reconnecting }
+                }()
+                return prepared
+            } catch {
+                agentTransportState[session.id] = .unreachable
+                NSLog("[glint] managed session \(session.id) preparation failed: \(error)")
+                return ManagedSessionLaunch(
+                    environment: [:],
+                    initialInput: "printf '\\nGlint failed to prepare this managed session. Check Console for details.\\n' >&2\n"
+                )
+            }
+        }()
         // Only top-edge panes need the padded launcher (clear + blank rows
         // to escape the floating header). A pane sitting below a vertical
         // split divider already starts mid-window, so padding leaves empty
@@ -999,13 +948,18 @@ final class WorkspaceStore: ObservableObject {
             default: return nil
             }
         }()
+        let initialInput = launch?.initialInput ?? restoreCommand
         let v = GhosttySurfaceView(
             frame: .zero,
             initialCwd: cwd,
             paneKey: paneKey,
-            agentSocketPath: AgentBridge.shared.socketPath,
+            // Hook routing is a managed-session concern. Plain panes receive
+            // no socket, so a globally configured third-party hook cannot
+            // accidentally report ordinary CLI use into Glint.
+            agentSocketPath: nil,
+            extraEnvironment: launch?.environment ?? [:],
             topAligned: topAligned,
-            initialInput: restoreCommand
+            initialInput: initialInput
         )
         surfaceViews[key] = v
         return v
@@ -1131,9 +1085,18 @@ final class WorkspaceStore: ObservableObject {
     /// once we wire `data` through.
     func handleAgentEvent(_ info: [AnyHashable: Any]?) {
         guard let info,
-              let paneStr = info["pane"] as? String,
-              let hook = info["hook"] as? String,
-              let key = Self.parsePaneKey(paneStr) else { return }
+              let hook = info["hook"] as? String else { return }
+        let sessionID = info["session"] as? String
+        let sessionKey: WorkspacePaneKey? = sessionID.flatMap { id in
+            for ws in workspaces {
+                if let pane = ws.panes.first(where: { $0.value.agentSession?.id == id })?.key {
+                    return WorkspacePaneKey(workspace: ws.id, pane: pane)
+                }
+            }
+            return nil
+        }
+        let paneKey = (info["pane"] as? String).flatMap(Self.parsePaneKey)
+        guard let key = sessionKey ?? paneKey else { return }
 
         let explicitKind = (info["agent"] as? String).flatMap(Self.agentKind(named:))
         let foregroundKind = surfaceViews[key]?.foregroundProcessName()
@@ -1144,7 +1107,8 @@ final class WorkspaceStore: ObservableObject {
         // empty token), so an unresolvable kind means "a hook fired for a pane
         // we can't otherwise classify" — better to show an agent than to drop
         // the event and leave the pane looking like a bare shell.
-        let kind = explicitKind ?? paneAgentState[key]?.kind ?? foregroundKind ?? polledKind ?? .claude
+        let kind = explicitKind ?? sessionID.flatMap { agentSessionState[$0]?.kind }
+            ?? paneAgentState[key]?.kind ?? foregroundKind ?? polledKind ?? .claude
 
         // Note: we deliberately do NOT force-write paneProcesses here. The
         // 1s poller owns that dictionary and replaces it wholesale, so any
@@ -1152,7 +1116,7 @@ final class WorkspaceStore: ObservableObject {
         // already prefer paneAgentState (set below), which this event keeps
         // authoritative.
 
-        var state = paneAgentState[key]
+        var state = sessionID.flatMap { agentSessionState[$0] } ?? paneAgentState[key]
             ?? PaneAgentState(kind: kind, status: .idle, detail: nil, updatedAt: Date())
         state.kind = kind
         let oldStatus = state.status
@@ -1215,6 +1179,19 @@ final class WorkspaceStore: ObservableObject {
         }
         state.updatedAt = now
         paneAgentState[key] = state
+        if let sessionID {
+            agentSessionState[sessionID] = state
+            if agentTransportState[sessionID] != .local {
+                agentTransportState[sessionID] = .connected
+            }
+            if kind == .codex, let key = sessionKey,
+               let wi = workspaces.firstIndex(where: { $0.id == key.workspace }),
+               var session = workspaces[wi].panes[key.pane]?.agentSession,
+               session.needsHookTrust {
+                session.needsHookTrust = false
+                workspaces[wi].panes[key.pane]?.agentSession = session
+            }
+        }
 
         // Audio cues fire whenever the user is NOT actively watching this
         // pane — that means Glint isn't the frontmost app, or the user is on
@@ -1313,7 +1290,8 @@ final class WorkspaceStore: ObservableObject {
         let state = PersistedState(
             workspaces: workspaces,
             selectedWorkspaceID: selectedWorkspaceID,
-            sidebarCollapsed: sidebarCollapsed
+            sidebarCollapsed: sidebarCollapsed,
+            detachedAgentSessions: detachedAgentSessions
         )
         Persistence.save(state)
     }
@@ -1406,6 +1384,11 @@ final class WorkspaceStore: ObservableObject {
     /// with a live session (even an idle one — closing kills the session),
     /// or any non-shell foreground process (vim, ssh, a build, …).
     func paneNeedsCloseConfirmation(_ key: WorkspacePaneKey) -> Bool {
+        // A managed pane is only a tmux viewer. Dropping its surface detaches
+        // the client and cannot terminate the process running in tmux.
+        if workspaces.first(where: { $0.id == key.workspace })?.panes[key.pane]?.agentSession != nil {
+            return false
+        }
         if paneAgentState[key] != nil,
            let name = paneProcesses[key]?.lowercased(),
            Self.agentKind(named: name) != nil {
@@ -1462,6 +1445,26 @@ final class WorkspaceStore: ObservableObject {
         // Last pane in this tab → close the whole tab instead (which itself
         // beeps when it's also the workspace's last tab).
         guard workspaces[i].tabs[t].root.leaves.count > 1 else {
+            let target = workspaces[i].tabs[t].focusedPane
+            if workspaces[i].tabs.count == 1,
+               let session = workspaces[i].panes[target]?.agentSession {
+                // A workspace must retain one pane. Detach the managed viewer
+                // and replace it with a fresh plain shell instead of refusing
+                // the close or killing the tmux session.
+                let oldKey = WorkspacePaneKey(workspace: workspaces[i].id, pane: target)
+                detachManagedSession(session)
+                surfaceViews.removeValue(forKey: oldKey)
+                paneAgentState.removeValue(forKey: oldKey)
+                paneProcesses.removeValue(forKey: oldKey)
+                let replacement = PaneID(value: workspaces[i].nextPaneSeq)
+                workspaces[i].nextPaneSeq += 1
+                workspaces[i].panes.removeValue(forKey: target)
+                workspaces[i].panes[replacement] = Pane(id: replacement, title: "zsh",
+                                                        workingDirectory: session.workingDirectory)
+                workspaces[i].tabs[t].root = .leaf(replacement)
+                workspaces[i].tabs[t].focusedPane = replacement
+                return
+            }
             closeTab(workspaces[i].tabs[t].id)
             return
         }
@@ -1478,6 +1481,7 @@ final class WorkspaceStore: ObservableObject {
         }
         let (newRoot, survivor) = Self.removeLeaf(workspaces[i].tabs[t].root, target: target)
         if let newRoot { workspaces[i].tabs[t].root = newRoot }
+        detachManagedSession(workspaces[i].panes[target]?.agentSession)
         workspaces[i].panes.removeValue(forKey: target)
         surfaceViews.removeValue(forKey: key)
         // The pane is gone for good — drop its scrollback snapshot too.
@@ -1640,6 +1644,76 @@ final class WorkspaceStore: ObservableObject {
         workspaces[i].selectedTabID = tab.id
     }
 
+    func createManagedSession(agent: AgentKind, host: HostTarget, profile: AgentProfile,
+                              workingDirectory: String) {
+        guard let i = currentIndex else { return }
+        AgentProfileStore.save(profile)
+        let pane = PaneID(value: workspaces[i].nextPaneSeq)
+        let paneKey = "\(workspaces[i].id.uuidString):\(pane.value)"
+        let session = AgentSession.create(agent: agent, host: host, profile: profile,
+                                          workingDirectory: workingDirectory, pane: paneKey)
+        openSessionInNewTab(session, in: i, paneID: pane)
+    }
+
+    func createManagedSessionInNewWorkspace(agent: AgentKind, host: HostTarget,
+                                            profile: AgentProfile,
+                                            workingDirectory: String) {
+        AgentProfileStore.save(profile)
+        let pick = nextWorkspacePalettePick()
+        var workspace = Workspace.fresh(name: "New workspace", accentHex: pick.0, symbol: pick.1)
+        let pane = PaneID(value: 0)
+        let paneKey = "\(workspace.id.uuidString):\(pane.value)"
+        let session = AgentSession.create(agent: agent, host: host, profile: profile,
+                                          workingDirectory: workingDirectory, pane: paneKey)
+        workspace.panes[pane] = Pane(id: pane, title: session.agent.displayName,
+                                     workingDirectory: session.workingDirectory,
+                                     agentSession: session)
+        workspace.tabs[0].root = .leaf(pane)
+        workspace.tabs[0].focusedPane = pane
+        workspaces.append(workspace)
+        selectedWorkspaceID = workspace.id
+    }
+
+    func reattachSession(_ sessionID: String) {
+        guard let sessionIndex = detachedAgentSessions.firstIndex(where: { $0.id == sessionID }),
+              let i = currentIndex else { return }
+        var session = detachedAgentSessions.remove(at: sessionIndex)
+        let pane = PaneID(value: workspaces[i].nextPaneSeq)
+        session.lastAttachedPane = "\(workspaces[i].id.uuidString):\(pane.value)"
+        openSessionInNewTab(session, in: i, paneID: pane)
+    }
+
+    func killDetachedSession(_ sessionID: String) {
+        guard let i = detachedAgentSessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let session = detachedAgentSessions[i]
+        do {
+            try AgentSessionManager.shared.kill(session)
+            detachedAgentSessions.remove(at: i)
+        } catch {
+            NSLog("[glint] failed to kill detached session \(session.id): \(error)")
+        }
+    }
+
+    private func openSessionInNewTab(_ session: AgentSession, in workspaceIndex: Int, paneID: PaneID) {
+        let i = workspaceIndex
+        workspaces[i].nextPaneSeq = max(workspaces[i].nextPaneSeq, paneID.value + 1)
+        workspaces[i].panes[paneID] = Pane(id: paneID, title: session.agent.displayName,
+                                          workingDirectory: session.workingDirectory,
+                                          agentSession: session)
+        let tab = WorkspaceTab(id: TabID(value: workspaces[i].nextTabSeq), name: nil,
+                               root: .leaf(paneID), focusedPane: paneID)
+        workspaces[i].nextTabSeq += 1
+        workspaces[i].tabs.append(tab)
+        workspaces[i].selectedTabID = tab.id
+    }
+
+    private func detachManagedSession(_ session: AgentSession?) {
+        guard var session, !detachedAgentSessions.contains(where: { $0.id == session.id }) else { return }
+        session.lastAttachedPane = nil
+        detachedAgentSessions.append(session)
+        agentTransportState[session.id] = .detached
+    }
+
     /// Close a tab and every pane it holds, cleaning up each pane's surface,
     /// scrollback snapshot, and live side-state. Confirms once if any pane is
     /// running something. The workspace's last tab can't be closed — beep
@@ -1668,6 +1742,7 @@ final class WorkspaceStore: ObservableObject {
         let wasSelected = workspaces[i].selectedTabID == tabID
         for pane in panes {
             let key = WorkspacePaneKey(workspace: wsID, pane: pane)
+            detachManagedSession(workspaces[i].panes[pane]?.agentSession)
             workspaces[i].panes.removeValue(forKey: pane)
             surfaceViews.removeValue(forKey: key)
             ScrollbackArchive.delete(
@@ -1765,6 +1840,9 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
+        for pane in workspaces[idx].panes.values {
+            detachManagedSession(pane.agentSession)
+        }
         // Drop every surface tied to this workspace (their ghostty surfaces
         // get freed in GhosttySurfaceView.deinit when the dict releases them).
         surfaceViews = surfaceViews.filter { $0.key.workspace != id }
@@ -1862,15 +1940,19 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func addWorkspace() {
-        let palette = [
-            ("5E5CE6", "•"), ("FF6582", "•"), ("30D158", "•"),
-            ("FF9F0A", "•"), ("64D2FF", "•"), ("BF5AF2", "•"),
-        ]
-        let pick = palette[workspaces.count % palette.count]
+        let pick = nextWorkspacePalettePick()
         // Auto-named: fallback label is "New workspace" until the shell reports a cwd.
         let ws = Workspace.fresh(name: "New workspace", accentHex: pick.0, symbol: pick.1)
         workspaces.append(ws)
         selectedWorkspaceID = ws.id
+    }
+
+    private func nextWorkspacePalettePick() -> (String, String) {
+        let palette = [
+            ("5E5CE6", "•"), ("FF6582", "•"), ("30D158", "•"),
+            ("FF9F0A", "•"), ("64D2FF", "•"), ("BF5AF2", "•"),
+        ]
+        return palette[workspaces.count % palette.count]
     }
 
     // MARK: tree ops

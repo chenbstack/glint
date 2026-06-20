@@ -125,6 +125,7 @@ struct GlintSettingsView: View {
                     case .general:    GeneralPane()
                     case .appearance: AppearancePane()
                     case .terminal:   TerminalPane()
+                    case .profiles:   ProfilesPane()
                     case .agents:     AgentsPane()
                     case .shortcuts:  ShortcutsPane()
                     case .about:      AboutPane()
@@ -148,7 +149,7 @@ struct GlintSettingsView: View {
 // MARK: - Category model
 
 enum SettingsCategory: String, CaseIterable, Identifiable {
-    case general, appearance, terminal, agents, shortcuts, about
+    case general, appearance, terminal, profiles, agents, shortcuts, about
     var id: String { rawValue }
 
     var title: String {
@@ -156,6 +157,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .general:    return "General"
         case .appearance: return "Appearance"
         case .terminal:   return "Terminal"
+        case .profiles:   return "Profiles"
         case .agents:     return "Agents"
         case .shortcuts:  return "Shortcuts"
         case .about:      return "About"
@@ -166,6 +168,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .general:    return "Startup, layout, updates"
         case .appearance: return "Theme, accent, glass"
         case .terminal:   return "Font, cursor, scrollback"
+        case .profiles:   return "Agent, device, command"
         case .agents:     return "Claude Code, Codex, hook routing"
         case .shortcuts:  return "Keyboard reference"
         case .about:      return nil
@@ -176,6 +179,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .general:    return "gearshape"
         case .appearance: return "paintbrush"
         case .terminal:   return "terminal"
+        case .profiles:   return "person.crop.square"
         case .agents:     return "sparkle"
         case .shortcuts:  return "command"
         case .about:      return "info.circle"
@@ -644,48 +648,145 @@ private struct TerminalPane: View {
     }
 }
 
+private struct ProfilesPane: View {
+    @EnvironmentObject var store: WorkspaceStore
+    @State private var profiles: [AgentProfile] = []
+    @State private var editorSeed = AgentProfile.defaultProfile(for: .codex)
+    @State private var editingID: String?
+    @State private var editorOpen = false
+
+    var body: some View {
+        SettingsCard("Profiles",
+                     footer: "A profile owns the agent, device, command, config folder, environment file, arguments, and hook policy. New workspaces only choose a profile and a working directory.") {
+            SettingsRow("New profile",
+                        subtitle: "Create a reusable launch profile for this Mac or an SSH device.") {
+                Button("New") {
+                    editorSeed = AgentProfile.defaultProfile(for: .codex)
+                    editingID = nil
+                    editorOpen = true
+                }
+                .controlSize(.small)
+                .tint(store.accent)
+            }
+
+            if !profiles.isEmpty {
+                SettingsDivider()
+            }
+
+            ForEach(Array(profiles.enumerated()), id: \.element.id) { index, profile in
+                SettingsRow(profile.displayLabel,
+                            subtitle: profile.summaryLine) {
+                    HStack(spacing: 8) {
+                        if AgentProfileStore.isBuiltInDefault(profile) {
+                            StatusPill(label: "Default", tone: .neutral)
+                        }
+                        Button("Edit") {
+                            editorSeed = profile
+                            editingID = profile.id
+                            editorOpen = true
+                        }
+                        .controlSize(.small)
+                        Button("Duplicate") {
+                            editorSeed = duplicateSeed(from: profile)
+                            editingID = nil
+                            editorOpen = true
+                        }
+                        .controlSize(.small)
+                        Button("Delete", role: .destructive) {
+                            delete(profile)
+                        }
+                        .controlSize(.small)
+                        .disabled(AgentProfileStore.isBuiltInDefault(profile))
+                    }
+                }
+                if index < profiles.count - 1 { SettingsDivider() }
+            }
+        }
+        .onAppear(perform: refresh)
+        .sheet(isPresented: $editorOpen) {
+            AgentProfileEditorView(
+                initialProfile: editorSeed,
+                editingID: editingID,
+                saveTitle: editingID == nil ? "Save Profile" : "Save Changes"
+            ) { profile in
+                AgentProfileStore.save(profile)
+                refresh()
+            }
+            .environmentObject(store)
+        }
+    }
+
+    private func refresh() {
+        profiles = AgentProfileStore.profiles.sorted(by: profileSort)
+    }
+
+    private func duplicateSeed(from profile: AgentProfile) -> AgentProfile {
+        var copy = profile
+        copy.id = AgentProfileStore.newProfileID(for: profile.agent)
+        copy.label = "\(profile.label) Copy"
+        return copy
+    }
+
+    private func delete(_ profile: AgentProfile) {
+        guard !AgentProfileStore.isBuiltInDefault(profile) else { return }
+        AgentProfileStore.delete(profile)
+        refresh()
+    }
+
+    private func profileSort(_ lhs: AgentProfile, _ rhs: AgentProfile) -> Bool {
+        let l = "\(lhs.hostScope ?? "")|\(lhs.agent.rawValue)|\(lhs.label)"
+        let r = "\(rhs.hostScope ?? "")|\(rhs.agent.rawValue)|\(rhs.label)"
+        return l.localizedCaseInsensitiveCompare(r) == .orderedAscending
+    }
+}
+
 private struct AgentsPane: View {
     @EnvironmentObject var store: WorkspaceStore
     @EnvironmentObject var usage: UsageStore
-    @State private var claudeInstallFailed = false
-    @State private var codexInstallFailed = false
-    @State private var opencodeInstallFailed = false
 
     var body: some View {
+        if !store.detachedAgentSessions.isEmpty {
+            SettingsCard("Detached sessions",
+                         footer: "Closing a pane detaches its viewer. The tmux session continues until explicitly killed.") {
+                ForEach(Array(store.detachedAgentSessions.enumerated()), id: \.element.id) { index, session in
+                    SettingsRow(session.tmuxSessionName,
+                                subtitle: session.needsHookTrust
+                                ? "Codex hooks need review: reattach and run /hooks."
+                                : session.workingDirectory) {
+                        HStack(spacing: 8) {
+                            Button("Reattach") { store.reattachSession(session.id) }
+                                .controlSize(.small)
+                            Button("Kill", role: .destructive) { store.killDetachedSession(session.id) }
+                                .controlSize(.small)
+                        }
+                    }
+                    if index < store.detachedAgentSessions.count - 1 { SettingsDivider() }
+                }
+            }
+        }
+
         SettingsCard("Claude Code",
-                     footer: "Glint offers to install a reporter into ~/.claude/settings.json on first launch. Existing hooks are preserved.") {
-            SettingsRow("Status", subtitle: claudeInstallFailed
-                        ? "Install failed — check Console for [glint] logs (often a malformed settings.json)."
-                        : (store.claudeHooksInstalled
-                           ? "Hooks merged into your Claude settings."
-                           : (store.claudeDetected
-                              ? "Claude Code detected — install the reporter to show its status."
-                              : "Claude Code not detected on this Mac."))) {
+                     footer: "Each managed session uses its own temporary settings and wrapper. Glint does not modify ~/.claude/settings.json.") {
+            SettingsRow("Status", subtitle: store.claudeDetected
+                        ? "Temporary hooks are enabled inside Glint managed sessions."
+                        : "Claude Code not detected on this Mac.") {
                 HStack(spacing: 8) {
                     StatusPill(
-                        label: store.claudeHooksInstalled ? "Installed" : (store.claudeDetected ? "Not installed" : "Not detected"),
-                        tone: store.claudeHooksInstalled ? .ok : .neutral
+                        label: store.claudeDetected ? "Per-session" : "Not detected",
+                        tone: store.claudeDetected ? .ok : .neutral
                     )
                     if store.claudeHooksInstalled {
-                        Button("Uninstall") {
+                        Button("Remove legacy hooks") {
                             store.uninstallClaudeHooks()
-                            claudeInstallFailed = false
                         }
-                            .controlSize(.small)
-                    } else {
-                        Button("Install") {
-                            store.installClaudeHooks()
-                            claudeInstallFailed = !store.claudeHooksInstalled
-                        }
-                            .controlSize(.small)
-                            .tint(store.accent)
+                        .controlSize(.small)
                     }
                 }
             }
             SettingsDivider()
             SettingsRow("Hook script",
                         subtitle: "Path of the bash reporter that posts to Glint's local socket.") {
-                Text("~/.glint/hooks/glint-report.sh")
+                Text("~/.cache/glint/sessions/<session-id>/hooks/glint-report.sh")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.text3)
                     .lineLimit(1)
@@ -714,32 +815,20 @@ private struct AgentsPane: View {
         }
 
         SettingsCard("Codex",
-                     footer: "Glint writes its hook entries into ~/.codex/hooks.json so Codex sessions surface the same status as Claude.") {
-            SettingsRow("Status", subtitle: codexInstallFailed
-                        ? "Install failed — check Console for [glint] logs (often a malformed hooks.json)."
-                        : (store.codexHooksInstalled
-                           ? "Hooks merged into your Codex config."
-                           : (store.codexDetected
-                              ? "Codex detected — install the reporter to show its status."
-                              : "Codex not detected on this Mac."))) {
+                     footer: "Managed sessions inject lifecycle hooks with one-run -c overrides. CODEX_HOME and config.toml are left untouched.") {
+            SettingsRow("Status", subtitle: store.codexDetected
+                        ? "Per-session hooks supported. Review them once with /hooks when Codex asks."
+                        : "Codex not detected on this Mac.") {
                 HStack(spacing: 8) {
                     StatusPill(
-                        label: store.codexHooksInstalled ? "Installed" : (store.codexDetected ? "Not installed" : "Not detected"),
-                        tone: store.codexHooksInstalled ? .ok : .neutral
+                        label: store.codexDetected ? "Per-session" : "Not detected",
+                        tone: store.codexDetected ? .ok : .neutral
                     )
                     if store.codexHooksInstalled {
-                        Button("Uninstall") {
+                        Button("Remove legacy hooks") {
                             store.uninstallCodexHooks()
-                            codexInstallFailed = false
                         }
-                            .controlSize(.small)
-                    } else {
-                        Button("Install") {
-                            store.installCodexHooks()
-                            codexInstallFailed = !store.codexHooksInstalled
-                        }
-                            .controlSize(.small)
-                            .tint(store.accent)
+                        .controlSize(.small)
                     }
                 }
             }
@@ -758,32 +847,20 @@ private struct AgentsPane: View {
         }
 
         SettingsCard("OpenCode",
-                     footer: "Glint installs a global OpenCode plugin at ~/.config/opencode/plugins/glint-agent-bridge.js so OpenCode sessions can report status without being shown as Claude.") {
-            SettingsRow("Status", subtitle: opencodeInstallFailed
-                        ? "Install failed — check Console for [glint] logs."
-                        : (store.opencodeHooksInstalled
-                           ? "Plugin installed into your OpenCode plugins directory."
-                           : (store.opencodeDetected
-                              ? "OpenCode detected — install the plugin to show its status."
-                              : "OpenCode not detected on this Mac."))) {
+                     footer: "OpenCode managed sessions currently use terminal-only fallback. Glint does not install a global plugin.") {
+            SettingsRow("Status", subtitle: store.opencodeDetected
+                        ? "Available as a managed terminal session; status hooks are not enabled yet."
+                        : "OpenCode not detected on this Mac.") {
                 HStack(spacing: 8) {
                     StatusPill(
-                        label: store.opencodeHooksInstalled ? "Installed" : (store.opencodeDetected ? "Not installed" : "Not detected"),
-                        tone: store.opencodeHooksInstalled ? .ok : .neutral
+                        label: store.opencodeDetected ? "Terminal only" : "Not detected",
+                        tone: .neutral
                     )
                     if store.opencodeHooksInstalled {
-                        Button("Uninstall") {
+                        Button("Remove legacy plugin") {
                             store.uninstallOpenCodeHooks()
-                            opencodeInstallFailed = false
                         }
-                            .controlSize(.small)
-                    } else {
-                        Button("Install") {
-                            store.installOpenCodeHooks()
-                            opencodeInstallFailed = !store.opencodeHooksInstalled
-                        }
-                            .controlSize(.small)
-                            .tint(store.accent)
+                        .controlSize(.small)
                     }
                 }
             }
@@ -792,15 +869,6 @@ private struct AgentsPane: View {
                         subtitle: "When Glint reopens, run `opencode --continue` in any pane that was running OpenCode at last quit.") {
                 Toggle("", isOn: $store.restoreOpenCodeSession)
                     .toggleStyle(.switch).labelsHidden()
-            }
-            SettingsDivider()
-            SettingsRow("Plugin file",
-                        subtitle: "Loaded by OpenCode automatically on startup; it only reports when Glint's pane environment variables are present.") {
-                Text("~/.config/opencode/plugins/glint-agent-bridge.js")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Theme.text3)
-                    .lineLimit(1)
-                    .truncationMode(.head)
             }
         }
 

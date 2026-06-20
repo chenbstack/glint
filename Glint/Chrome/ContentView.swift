@@ -77,6 +77,12 @@ struct ContentView: View {
             GlintSettingsView()
                 .environmentObject(store)
         }
+        .sheet(isPresented: $store.newAgentSessionOpen) {
+            NewAgentSessionView().environmentObject(store)
+        }
+        .sheet(isPresented: $store.newWorkspaceSessionOpen) {
+            NewAgentSessionView(destination: .newWorkspace).environmentObject(store)
+        }
     }
 }
 
@@ -140,6 +146,10 @@ struct ToolbarHeader: View {
             TabBar()
                 .padding(.horizontal, 12)
             HStack(spacing: 4) {
+                ToolbarIconButton(symbol: "sparkles.rectangle.stack",
+                                  help: "New Agent Session in Current Workspace") {
+                    store.newAgentSessionOpen = true
+                }
                 ToolbarIconButton(symbol: "command", help: "Command Palette (⌘⇧P)") {
                     store.commandPaletteOpen = true
                 }
@@ -1357,7 +1367,7 @@ private struct WorkspaceSwitcherPopover: View {
 
     private var newWorkspaceRow: some View {
         Button {
-            store.addWorkspace()
+            store.newWorkspaceSessionOpen = true
             dismiss()
         } label: {
             HStack(spacing: 10) {
@@ -1477,13 +1487,7 @@ private struct WorkspaceSwitcherRow: View {
             case .idle:            break
             }
         }
-        let n = ws.panes.count
-        let unit = String(localized: n == 1 ? "pane" : "panes")
-        let tabN = ws.tabs.count
-        if tabN > 1 {
-            return "\(tabN) \(String(localized: "tabs")) · \(n) \(unit)"
-        }
-        return "\(n) \(unit)"
+        return ws.detailLine
     }
 
     private func secondaryColor(_ s: PaneAgentStatus) -> Color? {

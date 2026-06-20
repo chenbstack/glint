@@ -34,6 +34,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// starts at the divider, not 3 blank rows below it.
     private let topAligned: Bool
     private let agentSocketPath: String?
+    private let extraEnvironment: [String: String]
     /// Optional text fed into the PTY as if typed by the user at the start of
     /// the session — ghostty handles the timing (waits until the shell is
     /// ready). Used to auto-resume `claude --continue` / `codex resume --last`
@@ -100,11 +101,13 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
          initialCwd: String? = nil,
          paneKey: String? = nil,
          agentSocketPath: String? = nil,
+         extraEnvironment: [String: String] = [:],
          topAligned: Bool = true,
          initialInput: String? = nil) {
         self.initialCwd = initialCwd
         self.paneKey = paneKey
         self.agentSocketPath = agentSocketPath
+        self.extraEnvironment = extraEnvironment
         self.topAligned = topAligned
         self.initialInput = initialInput
         super.init(frame: frame)
@@ -303,6 +306,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         var envPairs: [(UnsafeMutablePointer<CChar>, UnsafeMutablePointer<CChar>)] = []
         if let pk = paneKey { envPairs.append((strdup("GLINT_PANE_ID"), strdup(pk))) }
         if let sock = agentSocketPath { envPairs.append((strdup("GLINT_AGENT_SOCK"), strdup(sock))) }
+        for (key, value) in extraEnvironment {
+            envPairs.append((strdup(key), strdup(value)))
+        }
         defer { envPairs.forEach { free($0.0); free($0.1) } }
 
         // Reserve a top inset for the floating-island header when this pane

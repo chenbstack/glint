@@ -196,7 +196,7 @@ struct SidebarView: View {
 
     private var newWorkspaceCard: some View {
         Button {
-            store.addWorkspace()
+            store.newWorkspaceSessionOpen = true
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "plus")
@@ -697,7 +697,7 @@ private struct WorkspaceCard: View {
                 }
             } else {
                 Button("Rename") { startEditing() }
-                Button("New Workspace") { store.addWorkspace() }
+                Button("New Workspace") { store.newWorkspaceSessionOpen = true }
                 Divider()
                 Button("Archive") { store.archiveWorkspace(ws.id) }
                 Button("Delete Workspace", role: .destructive) {
@@ -871,12 +871,23 @@ private struct WorkspaceCard: View {
 
     private func workspaceMetadataRow(active: Bool) -> some View {
         HStack(spacing: 5) {
-            if let tabs = tabCountText {
-                metadataBadge(tabs, active: active)
+            ForEach(workspaceMetadataBadges, id: \.self) { badge in
+                metadataBadge(badge, active: active)
             }
-            metadataBadge(paneCountText, active: active)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var workspaceMetadataBadges: [String] {
+        let selectedPaneCount = ws.selectedTab?.root.leaves.count ?? ws.panes.count
+        if ws.tabs.count > 1 {
+            return [
+                "\(ws.tabs.count) \(String(localized: "tabs"))",
+                "\(selectedPaneCount)/\(ws.panes.count) \(String(localized: "panes"))",
+            ]
+        }
+        let unit = String(localized: selectedPaneCount == 1 ? "pane" : "panes")
+        return ["\(selectedPaneCount) \(unit)"]
     }
 
     private func metadataBadge(_ text: String, active: Bool) -> some View {
@@ -1017,25 +1028,7 @@ private struct WorkspaceCard: View {
     }
 
     private var cwdLine: String {
-        // Surface the tab count only once it's meaningful (>1), so single-tab
-        // workspaces read exactly as before.
-        if let tabs = tabCountText {
-            return "\(tabs) · \(paneCountText)"
-        }
-        return paneCountText
-    }
-
-    private var paneCountText: String {
-        let n = ws.panes.count
-        let unit = String(localized: n == 1 ? "pane" : "panes")
-        return "\(n) \(unit)"
-    }
-
-    private var tabCountText: String? {
-        let n = ws.tabs.count
-        guard n > 1 else { return nil }
-        let unit = String(localized: "tabs")
-        return "\(n) \(unit)"
+        ws.detailLine
     }
 
     /// Spoken description for VoiceOver: the agent-status text the card
