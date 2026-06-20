@@ -49,29 +49,57 @@ enum Persistence {
         SupportDir.url?.appendingPathComponent(fileName, isDirectory: false)
     }
 
+    /// Path of a corrupt state.json that we could NOT move aside (disk full,
+    /// permissions). save() refuses to write over it so the only copy of the
+    /// user's data is never clobbered. Session-scoped: cleared on next launch.
+    private static var corruptUnmovablePath: String?
+
     /// Returns nil both for "no saved state" (fresh install) and "state was
     /// unreadable" — but the two paths differ in side effects: an unreadable
     /// file is moved aside (never deleted or overwritten) so a decode bug or
-    /// half-written file can't silently destroy the user's workspaces. The
-    /// caller falls back to `PersistedState.fresh` and the very next autosave
-    /// would otherwise clobber the original.
+    /// half-written file can't silently destroy the user's workspaces. Before
+    /// quarantining we try to surgically strip a single bad pane entry so it
+    /// costs only that pane, not every workspace.
     static func load() -> PersistedState? {
         guard let url = fileURL else { return nil }
         guard let data = try? Data(contentsOf: url) else { return nil }
         do {
             return try JSONDecoder().decode(PersistedState.self, from: data)
         } catch {
+            // A single undecodable pane entry would otherwise quarantine the
+            // whole file and lose every workspace. PaneID isn't a String/Int
+            // key, so [PaneID: Pane] serializes as a flat alternating
+            // [key, value, ...] array; stripBadPanes drops just the bad pair.
+            if let repaired = Self.stripBadPanes(from: data),
+               let state = try? JSONDecoder().decode(PersistedState.self, from: repaired) {
+                NSLog("[glint] decoded \(fileName) after stripping undecodable pane(s); persisting the repaired copy")
+                try? repaired.write(to: url, options: [.atomic])
+                return state
+            }
+
             let stamp = Int(Date().timeIntervalSince1970)
             let backup = url.deletingLastPathComponent()
                 .appendingPathComponent("\(fileName).corrupt-\(stamp)")
-            try? FileManager.default.moveItem(at: url, to: backup)
-            NSLog("[glint] failed to decode \(fileName): \(error); moved it aside to \(backup.lastPathComponent) and starting fresh")
+            do {
+                try FileManager.default.moveItem(at: url, to: backup)
+                NSLog("[glint] failed to decode \(fileName): \(error); moved it aside to \(backup.lastPathComponent) and starting fresh")
+            } catch {
+                // Couldn't move it aside either — remember the path so save()
+                // won't overwrite the only copy. The original stays put for
+                // the user to recover manually; we start fresh in memory.
+                corruptUnmovablePath = url.path
+                NSLog("[glint] \(fileName) couldn't be moved aside to \(backup.lastPathComponent); refusing to overwrite — original kept at \(url.path), starting fresh")
+            }
             return nil
         }
     }
 
     static func save(_ state: PersistedState) {
         guard let url = fileURL else { return }
+        if corruptUnmovablePath == url.path {
+            NSLog("[glint] skipping save: \(fileName) is the corrupt file we couldn't move aside; not overwriting the user's data")
+            return
+        }
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         do {
@@ -82,5 +110,38 @@ enum Persistence {
             // at least leave a trail in the console.
             NSLog("[glint] failed to save \(fileName): \(error)")
         }
+    }
+
+    /// Walk each workspace's `panes` — `[PaneID: Pane]` serializes as a flat
+    /// alternating [key, value, key, value, ...] array because PaneID isn't a
+    /// String/Int key — and drop any pair whose value half won't decode as a
+    /// `Pane`. Returns re-serialized JSON if a bad pane was removed, nil if
+    /// nothing changed or the structure is unrecognizable (so the caller only
+    /// retries when there's something to retry with). Lets one bad pane cost
+    /// only that pane instead of the whole file.
+    private static func stripBadPanes(from data: Data) -> Data? {
+        guard var root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              var workspaces = root["workspaces"] as? [[String: Any]] else { return nil }
+        let pdecoder = JSONDecoder()
+        var changed = false
+        for i in workspaces.indices {
+            guard let panes = workspaces[i]["panes"] as? [Any] else { continue }
+            var kept: [Any] = []
+            var j = 0
+            while j + 1 < panes.count {
+                let value = panes[j + 1]
+                let blob = (try? JSONSerialization.data(withJSONObject: value)) ?? Data()
+                if (try? pdecoder.decode(Pane.self, from: blob)) != nil {
+                    kept.append(panes[j]); kept.append(value)
+                } else {
+                    changed = true
+                }
+                j += 2
+            }
+            if kept.count != panes.count { workspaces[i]["panes"] = kept }
+        }
+        guard changed else { return nil }
+        root["workspaces"] = workspaces
+        return try? JSONSerialization.data(withJSONObject: root)
     }
 }
