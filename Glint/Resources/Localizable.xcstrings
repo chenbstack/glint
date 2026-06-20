@@ -2574,13 +2574,13 @@
         }
       }
     },
-    "When enabled, Glint uses your Ghostty config for terminal colors, font, cursor, scrollback, transparency, and blur. Glint still keeps layout settings required by its floating chrome." : {
+    "When enabled, Glint uses your Ghostty config for terminal colors, font, cursor, and scrollback. Transparency stays off unless enabled separately, so Glint chrome remains stable." : {
       "extractionState" : "manual",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开启后，Glint 会使用你的 Ghostty 配置来设置终端颜色、字体、光标、滚动记录、透明度和模糊。Glint 仍会保留浮动窗口栏所需的布局设置。"
+            "value" : "开启后，Glint 会使用你的 Ghostty 配置来设置终端颜色、字体、光标和滚动记录。透明度需要单独开启，所以 Glint 窗口栏保持稳定。"
           }
         }
       }
@@ -2614,6 +2614,105 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用下方的 Glint 终端外观控制项。"
+          }
+        }
+      }
+    },
+    "Terminal theme source controls whether Glint uses its built-in terminal styling or Ghostty's resolved colors, font, cursor, and scrollback. Transparency stays opt-in." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端主题来源决定 Glint 使用内置终端样式，还是使用 Ghostty 解析后的颜色、字体、光标和滚动记录。透明度保持单独开启。"
+          }
+        }
+      }
+    },
+    "Terminal theme source" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端主题来源"
+          }
+        }
+      }
+    },
+    "Terminal colors, font, cursor, and scrollback come from Ghostty." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端颜色、字体、光标和滚动记录来自 Ghostty。"
+          }
+        }
+      }
+    },
+    "Use Glint's built-in terminal theme controls." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Glint 内置终端主题控制项。"
+          }
+        }
+      }
+    },
+    "Use Ghostty transparency" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Ghostty 透明度"
+          }
+        }
+      }
+    },
+    "Honor background-opacity and background-blur for the terminal pane only." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只在终端面板里遵循 background-opacity 和 background-blur。"
+          }
+        }
+      }
+    },
+    "Apply background-opacity and background-blur while keeping Glint chrome on the same Ghostty background." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用 background-opacity 和 background-blur，同时让 Glint 窗口栏保持同一个 Ghostty 背景。"
+          }
+        }
+      }
+    },
+    "Requires Use Ghostty config." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要先开启使用 Ghostty 配置。"
+          }
+        }
+      }
+    },
+    "Requires Ghostty config as the terminal theme source." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要先把终端主题来源设为 Ghostty 配置。"
           }
         }
       }

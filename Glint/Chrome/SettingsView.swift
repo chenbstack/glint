@@ -463,8 +463,25 @@ private struct UpdatesCard: View {
 private struct AppearancePane: View {
     @EnvironmentObject var store: WorkspaceStore
 
+    private var terminalThemeSource: Binding<String> {
+        Binding(get: {
+            store.terminalUseGhosttyConfig ? "ghostty" : "glint"
+        }, set: { value in
+            store.terminalUseGhosttyConfig = (value == "ghostty")
+        })
+    }
+
+    private var ghosttyTransparency: Binding<Bool> {
+        Binding(get: {
+            store.terminalUseGhosttyConfig && store.terminalUseGhosttyTransparency
+        }, set: { value in
+            store.terminalUseGhosttyTransparency = value
+        })
+    }
+
     var body: some View {
-        SettingsCard("Theme") {
+        SettingsCard("Theme",
+                     footer: "Terminal theme source controls whether Glint uses its built-in terminal styling or Ghostty's resolved colors, font, cursor, and scrollback. Transparency stays opt-in.") {
             SettingsRow("Color scheme",
                         subtitle: "Glint is dark-mode only for now.") {
                 StatusPill(label: "Dark", tone: .neutral)
@@ -489,6 +506,34 @@ private struct AppearancePane: View {
                             .onTapGesture { store.accentName = opt.rawValue }
                     }
                 }
+            }
+            SettingsDivider()
+            SettingsRow("Terminal theme source",
+                        subtitle: store.terminalUseGhosttyConfig
+                        ? "Terminal colors, font, cursor, and scrollback come from Ghostty."
+                        : "Use Glint's built-in terminal theme controls.") {
+                GlintDropdown(selection: terminalThemeSource, items: [
+                    (value: "glint", label: "Glint"),
+                    (value: "ghostty", label: "Ghostty config"),
+                ], listWidth: 170)
+            }
+            SettingsDivider()
+            SettingsRow("Use Ghostty transparency",
+                        subtitle: store.terminalUseGhosttyConfig
+                        ? "Apply background-opacity and background-blur while keeping Glint chrome on the same Ghostty background."
+                        : "Requires Ghostty config as the terminal theme source.") {
+                Toggle("", isOn: ghosttyTransparency)
+                    .toggleStyle(.switch).labelsHidden()
+                    .disabled(!store.terminalUseGhosttyConfig)
+            }
+            SettingsDivider()
+            SettingsRow("Reload Ghostty config",
+                        subtitle: "Re-read Ghostty config files from disk after editing them.") {
+                Button("Reload") {
+                    store.reloadTerminalConfig()
+                }
+                    .controlSize(.small)
+                    .tint(store.accent)
             }
         }
 
@@ -550,26 +595,6 @@ private struct TerminalPane: View {
     private let scrollbackChoices: [Int] = [1_000, 5_000, 10_000, 50_000, 100_000]
 
     var body: some View {
-        SettingsCard("Ghostty config",
-                     footer: "When enabled, Glint uses your Ghostty config for terminal colors, font, cursor, scrollback, transparency, and blur. Glint still keeps layout settings required by its floating chrome.") {
-            SettingsRow("Use Ghostty config",
-                        subtitle: store.terminalUseGhosttyConfig
-                        ? "Terminal appearance is loaded from Ghostty's config files."
-                        : "Use Glint's terminal appearance controls below.") {
-                Toggle("", isOn: $store.terminalUseGhosttyConfig)
-                    .toggleStyle(.switch).labelsHidden()
-            }
-            SettingsDivider()
-            SettingsRow("Reload Ghostty config",
-                        subtitle: "Re-read Ghostty config files from disk after editing them.") {
-                Button("Reload") {
-                    store.reloadTerminalConfig()
-                }
-                    .controlSize(.small)
-                    .tint(store.accent)
-            }
-        }
-
         SettingsCard("Font") {
             SettingsRow("Family", subtitle: "Used for all panes. Falls back to Menlo if missing.") {
                 GlintDropdown(selection: $store.terminalFontFamily,

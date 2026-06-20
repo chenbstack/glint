@@ -9,19 +9,15 @@ struct ContentView: View {
     /// On macOS 26+ the islands use real Liquid Glass; pre-26 they use the
     /// in-house `GlassCapsuleFallback`. Glass off → stacked band layout.
     private var floatingHeader: Bool { store.glassEffect }
-    private var terminalBacking: Color {
-        store.terminalUseGhosttyConfig ? .clear : Theme.bgPane
-    }
 
     var body: some View {
         HStack(spacing: 0) {
             if !store.sidebarCollapsed {
-                // Match the pane backing. When Ghostty config owns terminal
-                // transparency this stays clear so background-opacity can show
-                // the desktop/window blur behind the surface.
+                // Sidebar is Glint chrome, but its base fill should follow
+                // the terminal background when Ghostty owns appearance.
                 SidebarView()
                     .frame(width: 244)
-                    .background(terminalBacking)
+                    .background(store.terminalChromeBacking)
                     .overlay(alignment: .trailing) {
                         Rectangle().fill(Color.white.opacity(0.045)).frame(width: 1)
                     }
@@ -39,9 +35,9 @@ struct ContentView: View {
                     // islands by the padded shell launcher (see
                     // GhosttyManager.paddedShellLauncherPath), not by
                     // insetting the layout.
-                    .background(terminalBacking)
+                    .background(store.terminalPaneBacking)
             }
-            .background(terminalBacking)
+            .background(store.terminalPaneBacking)
             // Floating mode: the terminal owns the full height and the
             // toolbar's glass islands ride on top of it. The strip itself
             // is an invisible window-drag handle (see ToolbarHeader).
@@ -52,7 +48,7 @@ struct ContentView: View {
             }
         }
         .ignoresSafeArea()
-        .background(store.terminalUseGhosttyConfig ? Color.clear : Theme.bgWindow)
+        .background(store.terminalWindowBacking)
         .animation(.easeOut(duration: 0.18), value: store.sidebarCollapsed)
         .overlay {
             if store.commandPaletteOpen {

@@ -7,8 +7,11 @@ struct PaneView: View {
     /// (stale evaluation of the outgoing tree during a workspace switch).
     let workspaceID: UUID?
     let paneID: PaneID
+    private var terminalUsesTransparency: Bool {
+        store.terminalUseGhosttyConfig && store.terminalUseGhosttyTransparency
+    }
     private var terminalBacking: Color {
-        store.terminalUseGhosttyConfig ? .clear : Theme.bgPane
+        store.terminalPaneBacking
     }
 
     var body: some View {
@@ -39,11 +42,11 @@ struct PaneView: View {
             terminalBacking
             PaneSurfaceRepresentable(
                 surfaceView: store.surfaceView(workspaceID: workspaceID, paneID: paneID, cwd: cwd),
-                usesGhosttyConfig: store.terminalUseGhosttyConfig,
+                usesTransparentBacking: terminalUsesTransparency,
                 focused: isFocused
             )
             if !isFocused {
-                (store.terminalUseGhosttyConfig ? Color.black.opacity(0.18) : Theme.bgPane.opacity(0.45))
+                (terminalUsesTransparency ? Color.black.opacity(0.18) : Theme.bgPane.opacity(0.45))
                     .allowsHitTesting(false)
             }
         }

@@ -6,7 +6,7 @@ import AppKit
 /// the surface itself outlives that and just re-parents.
 struct PaneSurfaceRepresentable: NSViewRepresentable {
     let surfaceView: GhosttySurfaceView
-    let usesGhosttyConfig: Bool
+    let usesTransparentBacking: Bool
     /// Plain value, not a Binding: focus only flows store → AppKit here.
     /// The reverse direction (clicks) goes through store.focus(_:), so a
     /// writable binding would just be a lie about the data flow.
@@ -15,14 +15,14 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> NoDragContainerView {
         let container = NoDragContainerView()
         container.wantsLayer = true
-        Self.updateContainerBacking(container, usesGhosttyConfig: usesGhosttyConfig)
+        Self.updateContainerBacking(container, usesTransparentBacking: usesTransparentBacking)
         surfaceView.refreshAppearanceBacking()
         attach(surfaceView, to: container)
         return container
     }
 
     func updateNSView(_ nsView: NoDragContainerView, context: Context) {
-        Self.updateContainerBacking(nsView, usesGhosttyConfig: usesGhosttyConfig)
+        Self.updateContainerBacking(nsView, usesTransparentBacking: usesTransparentBacking)
         surfaceView.refreshAppearanceBacking()
         if surfaceView.superview !== nsView {
             attach(surfaceView, to: nsView)
@@ -113,11 +113,11 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
         }
     }
 
-    private static func updateContainerBacking(_ container: NoDragContainerView, usesGhosttyConfig: Bool) {
-        container.layer?.isOpaque = !usesGhosttyConfig
-        container.layer?.backgroundColor = usesGhosttyConfig
+    private static func updateContainerBacking(_ container: NoDragContainerView, usesTransparentBacking: Bool) {
+        container.layer?.isOpaque = !usesTransparentBacking
+        container.layer?.backgroundColor = usesTransparentBacking
             ? NSColor.clear.cgColor
-            : NSColor(red: 0.043, green: 0.039, blue: 0.078, alpha: 1.0).cgColor
+            : GhosttyManager.shared.currentBackgroundColor.cgColor
     }
 
     private static func pin(_ surface: GhosttySurfaceView, in container: NSView) {

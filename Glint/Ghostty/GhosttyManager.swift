@@ -13,6 +13,7 @@ import GhosttyKit
 ///   keyDown dispatch.
 final class GhosttyManager {
     static let shared = GhosttyManager()
+    static let glintPaneBackground = NSColor(red: 0.043, green: 0.039, blue: 0.078, alpha: 1.0)
 
     private(set) var app: ghostty_app_t?
     private var config: ghostty_config_t?
@@ -85,7 +86,7 @@ final class GhosttyManager {
 
     func applyWindowEffects() {
         guard let app else { return }
-        guard usesGhosttyAppearanceConfig else { return }
+        guard usesGhosttyTransparency else { return }
         guard currentBackgroundOpacity < 1 else { return }
         for window in NSApp.windows {
             ghostty_set_window_background_blur(app, Unmanaged.passUnretained(window).toOpaque())
@@ -138,6 +139,11 @@ final class GhosttyManager {
                 "font-family = Menlo",
                 "font-size = \(size)",
                 "scrollback-limit = \(scrollback)",
+            ])
+        } else if !usesGhosttyTransparency {
+            lines.append(contentsOf: [
+                "background-opacity = 1",
+                "background-blur = false",
             ])
         }
 
@@ -222,25 +228,56 @@ final class GhosttyManager {
         (UserDefaults.standard.object(forKey: "glint.terminalUseGhosttyConfig") as? Bool) ?? false
     }
 
+    var usesGhosttyTransparency: Bool {
+        guard usesGhosttyAppearanceConfig else { return false }
+        return (UserDefaults.standard.object(forKey: "glint.terminalUseGhosttyTransparency") as? Bool) ?? false
+    }
+
     var currentBackgroundOpacity: Double {
-        guard usesGhosttyAppearanceConfig, let config else { return 1 }
+        guard usesGhosttyTransparency, let config else { return 1 }
         var value: Double = 1
         let key = "background-opacity"
         _ = key.withCString { ghostty_config_get(config, &value, $0, UInt(strlen($0))) }
         return min(max(value, 0), 1)
     }
 
-    private static let writeClipboard: ghostty_runtime_write_clipboard_cb = { _, _, contentPtr, count, _ in
-        guard let contentPtr, count > 0 else { return }
-        let content = contentPtr.pointee
-        guard let cstr = content.data else { return }
-        // Honor `count`, not a NUL terminator: ghostty hands us a byte buffer
-        // + length (not guaranteed NUL-terminated). String(cString:) would
-        // truncate at an embedded NUL, and a reused buffer could leak a prior
-        // clipboard's tail. Mirrors the OPEN_URL handler below.
-        let s = cstr.withMemoryRebound(to: UInt8.self, capacity: Int(count)) { bytes in
-            String(decoding: UnsafeBufferPointer(start: bytes, count: Int(count)), as: UTF8.self)
+    var currentBackgroundColor: NSColor {
+        guard usesGhosttyAppearanceConfig, let config else {
+            return Self.glintPaneBackground
         }
+
+        var value = ghostty_config_color_s(r: 0, g: 0, b: 0)
+        let key = "background"
+        let ok = key.withCString { ghostty_config_get(config, &value, $0, UInt(strlen($0))) }
+        guard ok else { return Self.glintPaneBackground }
+        return NSColor(
+            srgbRed: CGFloat(value.r) / 255.0,
+            green: CGFloat(value.g) / 255.0,
+            blue: CGFloat(value.b) / 255.0,
+            alpha: 1.0
+        )
+    }
+
+    private static let writeClipboard: ghostty_runtime_write_clipboard_cb = { _, _, contentPtr, contentCount, _ in
+        guard let contentPtr, contentCount > 0 else { return }
+
+        // `contentCount` is the number of clipboard content entries, not the
+        // byte length of `data`. Prefer text/plain and fall back to the first
+        // usable string payload, matching Ghostty's own macOS app semantics.
+        var fallback: String?
+        var plainText: String?
+        for i in 0..<Int(contentCount) {
+            let item = contentPtr[i]
+            guard let mimePtr = item.mime,
+                  let dataPtr = item.data else { continue }
+            let data = String(cString: dataPtr)
+            if fallback == nil { fallback = data }
+            if String(cString: mimePtr) == "text/plain" {
+                plainText = data
+                break
+            }
+        }
+        guard let s = plainText ?? fallback else { return }
         DispatchQueue.main.async {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(s, forType: .string)

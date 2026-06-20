@@ -81,7 +81,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
     override var isFlipped: Bool { false }
-    override var isOpaque: Bool { !GhosttyManager.shared.usesGhosttyAppearanceConfig }
+    override var isOpaque: Bool { !GhosttyManager.shared.usesGhosttyTransparency }
     override var wantsUpdateLayer: Bool { true }
     /// NSView's default in borderless windows is YES — that lets the terminal
     /// area drag the whole window. Force NO so clicks here only go to ghostty.
@@ -137,11 +137,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     var debugKey: String { paneKey ?? "?" }
 
     func refreshAppearanceBacking() {
-        let usesGhosttyAppearanceConfig = GhosttyManager.shared.usesGhosttyAppearanceConfig
-        layer?.isOpaque = !usesGhosttyAppearanceConfig
-        layer?.backgroundColor = usesGhosttyAppearanceConfig
+        let usesGhosttyTransparency = GhosttyManager.shared.usesGhosttyTransparency
+        layer?.isOpaque = !usesGhosttyTransparency
+        layer?.backgroundColor = usesGhosttyTransparency
             ? NSColor.clear.cgColor
-            : NSColor(red: 0.043, green: 0.039, blue: 0.078, alpha: 1.0).cgColor
+            : GhosttyManager.shared.currentBackgroundColor.cgColor
     }
 
     override func viewDidMoveToWindow() {

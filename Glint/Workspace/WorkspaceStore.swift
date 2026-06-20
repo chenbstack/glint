@@ -421,6 +421,12 @@ final class WorkspaceStore: ObservableObject {
             GhosttyManager.shared.reloadConfig()
         }
     }
+    @Published var terminalUseGhosttyTransparency: Bool = (UserDefaults.standard.object(forKey: "glint.terminalUseGhosttyTransparency") as? Bool) ?? false {
+        didSet {
+            UserDefaults.standard.set(terminalUseGhosttyTransparency, forKey: "glint.terminalUseGhosttyTransparency")
+            GhosttyManager.shared.reloadConfig()
+        }
+    }
     @Published var terminalFontFamily: String = UserDefaults.standard.string(forKey: "glint.terminalFontFamily") ?? "SF Mono" {
         didSet {
             UserDefaults.standard.set(terminalFontFamily, forKey: "glint.terminalFontFamily")
@@ -507,9 +513,23 @@ final class WorkspaceStore: ObservableObject {
     }
 
     var accent: Color { Theme.accent(named: accentName) }
+    var terminalChromeBacking: Color {
+        let color = Color(nsColor: GhosttyManager.shared.currentBackgroundColor)
+        guard terminalUseGhosttyConfig && terminalUseGhosttyTransparency else {
+            return color
+        }
+        return color.opacity(GhosttyManager.shared.currentBackgroundOpacity)
+    }
+    var terminalPaneBacking: Color {
+        terminalUseGhosttyConfig && terminalUseGhosttyTransparency ? .clear : terminalChromeBacking
+    }
+    var terminalWindowBacking: Color {
+        terminalUseGhosttyConfig && terminalUseGhosttyTransparency ? .clear : terminalChromeBacking
+    }
 
     func reloadTerminalConfig() {
         GhosttyManager.shared.reloadConfig()
+        objectWillChange.send()
     }
 
     /// Dock icon the user picked. `.default` keeps the bundle's `.icon`
