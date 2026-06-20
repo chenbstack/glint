@@ -971,14 +971,20 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // pane's agent state back to idle. If the agent wasn't actually
         // interrupted, its next hook event restores the busy status. The
         // event still flows through to ghostty below.
+        // Skip while an IME composition is active: plain Esc / Return then
+        // cancel or confirm the candidate, not the agent — posting would
+        // optimistically flip agent state for a key the agent never received.
+        // Same guard the ⌘K and Shift+Return paths already use.
         if event.keyCode == 53,
            mods.intersection([.command, .option, .control, .shift]).isEmpty,
+           !hasMarkedText(),
            let pk = paneKey {
             NotificationCenter.default.post(
                 name: .glintPaneEscPressed, object: nil, userInfo: ["pane": pk])
         }
         if (event.keyCode == 36 || event.keyCode == 76),
            mods.intersection([.command, .option, .control, .shift]).isEmpty,
+           !hasMarkedText(),
            let pk = paneKey {
             NotificationCenter.default.post(
                 name: .glintPaneReturnPressed, object: nil, userInfo: ["pane": pk])
