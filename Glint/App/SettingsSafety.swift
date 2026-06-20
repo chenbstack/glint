@@ -20,16 +20,21 @@ import Foundation
 ///  - A **launch marker** (`launch.marker`) is written at the very start of
 ///    launch and deleted once the app has been alive and on-screen for a few
 ///    seconds (`markHealthy`). If it's still there next launch, the previous
-///    launch crashed before proving itself healthy.
+///    launch ended before proving itself healthy. The marker carries a running
+///    count of consecutive such launches: a clean quit or a non-graceful kill
+///    (SIGKILL / Force Quit / power loss) within the first seconds both leave a
+///    marker, so we require **two consecutive** un-cleared launches before
+///    rolling anything back — a one-off kill never reverts a user's setting.
 ///
 /// On a detected crash we pop the single most-recent journal entry and restore
-/// that value, then let launch continue. A `healthyMark` high-water line —
-/// advanced only by `markHealthy`, never by a clean quit — bounds rollback to
-/// changes made *after* the last launch that actually ran stably, so a crash
-/// unrelated to settings (or one whose cause predates the last healthy launch)
-/// never silently rewrites the user's preferences. Each further crash peels
-/// back one more recent change; once nothing past the mark remains, the crash
-/// isn't ours to fix and we stop.
+/// that value, then let launch continue. A `healthyMark` high-water line bounds
+/// rollback to changes that haven't yet survived a stable *cold* launch:
+/// `markHealthy` blesses only the entries this launch applied from cold (not
+/// changes made later in the same session), and a clean quit never advances it.
+/// So a crash unrelated to settings (or one whose cause predates the last
+/// healthy launch) never silently rewrites the user's preferences. Each further
+/// crash peels back one more recent change; once nothing past the mark remains,
+/// the crash isn't ours to fix and we stop.
 ///
 /// Not annotated `@MainActor`: `beginLaunch()` runs synchronously from
 /// `GlintApp.init` (before any setting is read) and the notification handler
@@ -82,7 +87,17 @@ final class SettingsSafety {
                 if CFGetTypeID(number) == CFBooleanGetTypeID() {
                     self = .bool(number.boolValue)
                 } else if CFNumberIsFloatType(number as CFNumber) {
-                    self = .double(number.doubleValue)
+                    // Refuse non-finite Doubles (NaN/±Inf — the issue-#15 class
+                    // of bad value). JSONEncoder's default strategy THROWS on
+                    // them, so a single one would make `saveFileLocked`'s `try?`
+                    // silently drop the whole journal — disabling the guard
+                    // exactly when it's needed. Skipping it is also correct: a
+                    // finite→NaN change then reads as the key going away, so a
+                    // rollback restores the prior good value, and we never try
+                    // to "restore" a NaN (which would just re-crash).
+                    let d = number.doubleValue
+                    guard d.isFinite else { return nil }
+                    self = .double(d)
                 } else {
                     self = .int(number.intValue)
                 }
@@ -101,6 +116,13 @@ final class SettingsSafety {
     private var snapshot: [String: ScalarValue] = [:]
     private var file = JournalFile(healthyMark: 0, entries: [])
     private var started = false
+    /// Number of journal entries already on disk when this launch started —
+    /// i.e. the changes this launch applied from a *cold* start. Only these
+    /// become "proven healthy" at `markHealthy`; changes journaled later this
+    /// session haven't survived a cold launch yet, so they stay rollback-
+    /// eligible until a future cold launch reaches `markHealthy` with them
+    /// applied. Kept in sync with the ring-buffer trim in `defaultsChanged`.
+    private var coldStartEntryCount = 0
 
     private init() {}
 
@@ -116,10 +138,21 @@ final class SettingsSafety {
         started = true
 
         file = loadFile()
-        if markerExists() {
+        // A surviving marker means the previous launch armed it and never
+        // cleared it — a crash, OR a non-graceful kill (SIGKILL / Force Quit /
+        // power loss) before `markHealthy`. To avoid reverting a user's setting
+        // on a one-off kill, only roll back once we've seen TWO consecutive
+        // un-cleared launches; the marker file carries that running count.
+        let crashStreak = markerExists() ? priorCrashStreak() + 1 : 0
+        if crashStreak >= 2 {
             recoverFromCrashLocked()
         }
-        writeMarker()
+        writeMarker(crashStreak: crashStreak)
+
+        // Entries on disk now are the ones this launch applies from cold; only
+        // these are blessing-eligible at markHealthy (see coldStartEntryCount).
+        // Captured AFTER any rollback above so the popped entry isn't counted.
+        coldStartEntryCount = file.entries.count
 
         // Baseline the diff AFTER any rollback, and register the observer only
         // now — so the rollback's own writes (above) are never re-journaled.
@@ -134,13 +167,16 @@ final class SettingsSafety {
 
     /// Call once the app is alive and on-screen (a few seconds in). Clears the
     /// marker — this launch is proven good — and advances the high-water mark
-    /// so only changes made *after* now are candidates for a future rollback.
+    /// to the entries this launch applied from a *cold* start. Changes made
+    /// later this session are deliberately NOT blessed: they were applied to an
+    /// already-running app, so surviving this session doesn't prove they're safe
+    /// on the next cold launch (they stay rollback-eligible until one is).
     func markHealthy() {
         lock.lock()
         defer { lock.unlock() }
         guard started else { return }
         removeMarker()
-        file.healthyMark = file.entries.count
+        file.healthyMark = min(coldStartEntryCount, file.entries.count)
         saveFileLocked()
     }
 
@@ -194,6 +230,7 @@ final class SettingsSafety {
             let drop = file.entries.count - Self.maxEntries
             file.entries.removeFirst(drop)
             file.healthyMark = max(0, file.healthyMark - drop)
+            coldStartEntryCount = max(0, coldStartEntryCount - drop)
         }
         saveFileLocked()
     }
@@ -233,9 +270,18 @@ final class SettingsSafety {
         guard let url = markerURL else { return false }
         return FileManager.default.fileExists(atPath: url.path)
     }
-    private func writeMarker() {
+    /// The consecutive-crash count stored in a surviving marker (0 if absent or
+    /// unreadable — an empty/legacy marker counts as the first un-cleared launch).
+    private func priorCrashStreak() -> Int {
+        guard let url = markerURL,
+              let text = try? String(contentsOf: url, encoding: .utf8),
+              let n = Int(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        else { return 0 }
+        return n
+    }
+    private func writeMarker(crashStreak: Int) {
         guard let url = markerURL else { return }
-        try? Data().write(to: url, options: .atomic)
+        try? Data("\(crashStreak)".utf8).write(to: url, options: .atomic)
     }
     private func removeMarker() {
         guard let url = markerURL else { return }
