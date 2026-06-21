@@ -1446,11 +1446,8 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // apps, bundles, installers, URL shortcuts, and anything carrying the
         // POSIX execute bit are revealed in Finder instead of opened with their
         // default handler. Plain documents (source, logs, images, PDFs) open.
-        if shouldRevealRatherThanOpen(url) {
-            NSWorkspace.shared.activateFileViewerSelecting([url])
-        } else {
-            NSWorkspace.shared.open(url)
-        }
+        // Shared with the OSC-8 OPEN_URL path via `openOrReveal`.
+        Self.openOrReveal(url)
         return true
     }
 
@@ -1464,9 +1461,24 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         "pkg", "mpkg", "dmg",
     ]
 
+    /// Open `url` with its default handler, or — when opening it could execute
+    /// code (apps, bundles, installers, URL shortcuts, anything with the POSIX
+    /// execute bit, packages, directories) — reveal it in Finder instead.
+    /// Shared trust boundary for both ⌘-click paths: a plain-text file token
+    /// (`openFileUnderPointer`) and an OSC-8 hyperlink whose URL is `file://`
+    /// (the OPEN_URL action). Terminal output is untrusted; a hostile program
+    /// can print any path or `file://` link and the user only has to click it.
+    static func openOrReveal(_ url: URL) {
+        if shouldRevealRatherThanOpen(url) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     /// True when a ⌘-clicked path should be revealed in Finder rather than
     /// opened, because opening it could execute code.
-    private func shouldRevealRatherThanOpen(_ url: URL) -> Bool {
+    private static func shouldRevealRatherThanOpen(_ url: URL) -> Bool {
         if Self.revealOnlyExtensions.contains(url.pathExtension.lowercased()) {
             return true
         }

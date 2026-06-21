@@ -353,7 +353,15 @@ final class GhosttyManager {
                 String(decoding: UnsafeBufferPointer(start: bytes, count: Int(info.len)), as: UTF8.self)
             }
             DispatchQueue.main.async {
-                if let u = URL(string: urlString) {
+                guard let u = URL(string: urlString) else { return }
+                // A `file://` URL points at local content — route it through
+                // the same open-or-reveal guard as a ⌘-clicked text path, so a
+                // hostile OSC-8 link (`file:///…/Evil.app`) can't launch code
+                // just because it arrived as a URL rather than printable text.
+                // Other schemes (http/https/mailto/…) open with their handler.
+                if u.isFileURL {
+                    GhosttySurfaceView.openOrReveal(u)
+                } else {
                     NSWorkspace.shared.open(u)
                 }
             }
