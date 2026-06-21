@@ -471,6 +471,15 @@ final class TreeNode {
     /// each level sorted case-insensitively.
     static func build(_ files: [GitFileChange]) -> [TreeNode] {
         let root = TreeNode(name: "", path: "", isDir: true)
+        // Index each node by its accumulated path so revisiting a directory (the
+        // common case — many files share a parent) is an O(1) lookup instead of a
+        // linear scan over siblings. Without this, a single flat directory with N
+        // files made build O(N²); this runs on the main actor inside reload(), so
+        // a large-diff repo would hitch. A path in git diff output is unambiguously
+        // a file (a reported change) or a directory (an implied parent) — never
+        // both — so keying by path alone is an exact match for the old
+        // `name == c && isDir == !isLeaf` test.
+        var byPath: [String: TreeNode] = [:]
         for f in files {
             let comps = f.path.split(separator: "/").map(String.init)
             guard !comps.isEmpty else { continue }
@@ -478,11 +487,12 @@ final class TreeNode {
             var acc = ""
             for (i, c) in comps.enumerated() {
                 acc = acc.isEmpty ? c : acc + "/" + c
-                let isLeaf = i == comps.count - 1
-                if let existing = cur.children.first(where: { $0.name == c && $0.isDir == !isLeaf }) {
+                if let existing = byPath[acc] {
                     cur = existing
                 } else {
+                    let isLeaf = i == comps.count - 1
                     let node = TreeNode(name: c, path: acc, isDir: !isLeaf, file: isLeaf ? f : nil)
+                    byPath[acc] = node
                     cur.children.append(node)
                     cur = node
                 }
