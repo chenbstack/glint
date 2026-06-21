@@ -10,6 +10,11 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     /// The reverse direction (clicks) goes through store.focus(_:), so a
     /// writable binding would just be a lie about the data flow.
     let focused: Bool
+    /// True while an in-window overlay (the command palette) is managing the
+    /// window's first responder. When set, this view must NOT touch focus:
+    /// updateNSView re-runs ~1/s, and re-grabbing the terminal surface here
+    /// races the palette's search field and yanks focus back off it.
+    let deferFocus: Bool
 
     func makeNSView(context: Context) -> NoDragContainerView {
         let container = NoDragContainerView()
@@ -38,12 +43,21 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
         // search box. resignFirstResponder already pushed ghostty into
         // the unfocused state; leave it alone until the responder dance
         // unwinds naturally.
+        //
+        // `deferFocus` covers the command palette: while it's open, skip
+        // the focus sync entirely so this ~1/s pass can't race the
+        // palette's search field for first responder.
+        guard !deferFocus else { return }
         let textEditorActive = surfaceView.window?.firstResponder is NSText
         if !textEditorActive {
             surfaceView.setGhosttyFocus(focused)
         }
         if focused, !textEditorActive, surfaceView.window?.firstResponder !== surfaceView {
             DispatchQueue.main.async {
+                // Re-check on the runloop: a text field (command palette,
+                // search box) may have claimed focus between this update and
+                // the dispatch. Stealing it back here is the very bug.
+                guard !(surfaceView.window?.firstResponder is NSText) else { return }
                 surfaceView.window?.makeFirstResponder(surfaceView)
             }
         } else if !focused, surfaceView.window?.firstResponder === surfaceView {

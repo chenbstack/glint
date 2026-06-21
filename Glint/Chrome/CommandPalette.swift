@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Centered modal overlay summoned by ⌘⇧P or the toolbar's ⌘ button.
 /// Type to fuzzy-filter; ↑↓ to move selection; ⏎ to execute; ⎋ to close.
@@ -60,7 +61,17 @@ struct CommandPalette: View {
             .shadow(color: Color.black.opacity(0.5), radius: 30, y: 12)
             .padding(.top, -80) // bias slightly above center
         }
-        .onAppear { queryFocused = true }
+        .onAppear {
+            // The terminal surface is the window's AppKit first responder.
+            // SwiftUI's @FocusState can't reliably pry it loose synchronously
+            // (the view host isn't wired yet at onAppear time), so resign it
+            // first, then claim the field on the next runloop once the
+            // responder bookkeeping has settled. PaneSurfaceRepresentable
+            // skips its own focus sync while the palette is open
+            // (`deferFocus`), so the ~1/s pass can't yank focus back here.
+            NSApp.keyWindow?.makeFirstResponder(nil)
+            DispatchQueue.main.async { queryFocused = true }
+        }
         .onChange(of: query) { _, _ in
             // Typing resets the selection to the top hit; treat it like
             // keyboard input so the list scrolls back up with it.
