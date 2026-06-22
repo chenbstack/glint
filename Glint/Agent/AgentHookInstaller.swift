@@ -514,7 +514,11 @@ enum CodexHookInstaller {
         let codexDir = codexHome.standardizedFileURL
         let url = codexDir.appendingPathComponent("hooks.json")
         do {
-            try FileManager.default.createDirectory(at: codexDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: codexDir,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
         } catch {
             throw CodexHookInstallerError.cannotCreateHome(error.localizedDescription)
         }

@@ -65,4 +65,17 @@ final class CodexHookInstallerTests: XCTestCase {
         let stop = (root?["hooks"] as? [String: Any])?["Stop"] as? [Any]
         XCTAssertEqual(stop?.count, 1)
     }
+
+    func testCreatingMissingHomeUsesPrivateDirectoryPermissions() throws {
+        let missingHome = home.appendingPathComponent("private-codex-home", isDirectory: true)
+
+        try CodexHookInstaller.mergeCodexHooks(
+            scriptPath: "/tmp/glint-report.sh",
+            codexHome: missingHome
+        )
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: missingHome.path)
+        let permissions = try XCTUnwrap(attributes[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(permissions.intValue & 0o777, 0o700)
+    }
 }
