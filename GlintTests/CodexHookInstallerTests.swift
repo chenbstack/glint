@@ -42,6 +42,16 @@ final class CodexHookInstallerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: hooksURL.appendingPathExtension("glint-backup").path))
     }
 
+    func testUninstallRefusesInvalidJSON() throws {
+        let hooksURL = home.appendingPathComponent("hooks.json")
+        try "not json".write(to: hooksURL, atomically: true, encoding: .utf8)
+
+        XCTAssertThrowsError(try CodexHookInstaller.uninstall(from: home)) { error in
+            XCTAssertEqual(error as? CodexHookInstallerError, .invalidHooksJSON)
+        }
+        XCTAssertEqual(try String(contentsOf: hooksURL), "not json")
+    }
+
     func testUninstallOnlyRemovesGlintHooks() throws {
         let hooksURL = home.appendingPathComponent("hooks.json")
         let existing = #"{"hooks":{"Stop":[{"matcher":"*","hooks":[{"type":"command","command":"user-hook"}]}]}}"#

@@ -452,45 +452,52 @@ enum CodexHookInstaller {
 
     static func uninstall(from codexHome: URL) throws {
         let url = codexHome.appendingPathComponent("hooks.json")
-        if let data = try? Data(contentsOf: url),
-           var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            var hooks = (root["hooks"] as? [String: Any]) ?? [:]
-            var touched = false
-            for (event, bucket) in hooks {
-                guard let arr = bucket as? [Any] else { continue }
-                let filtered = arr.filter { entry in
-                    guard let group = entry as? [String: Any],
-                          let inner = group["hooks"] as? [[String: Any]] else { return true }
-                    return !inner.contains { ($0["command"] as? String)?.contains("glint-report.sh") == true }
-                }
-                if filtered.count != arr.count {
-                    touched = true
-                    if filtered.isEmpty {
-                        hooks.removeValue(forKey: event)
-                    } else {
-                        hooks[event] = filtered
-                    }
-                }
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            throw CodexHookInstallerError.writeFailed(error.localizedDescription)
+        }
+        guard var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw CodexHookInstallerError.invalidHooksJSON
+        }
+        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+        var touched = false
+        for (event, bucket) in hooks {
+            guard let arr = bucket as? [Any] else { continue }
+            let filtered = arr.filter { entry in
+                guard let group = entry as? [String: Any],
+                      let inner = group["hooks"] as? [[String: Any]] else { return true }
+                return !inner.contains { ($0["command"] as? String)?.contains("glint-report.sh") == true }
             }
-            if touched {
-                if hooks.isEmpty {
-                    root.removeValue(forKey: "hooks")
+            if filtered.count != arr.count {
+                touched = true
+                if filtered.isEmpty {
+                    hooks.removeValue(forKey: event)
                 } else {
-                    root["hooks"] = hooks
+                    hooks[event] = filtered
                 }
-                if root.isEmpty {
-                    // Whole file was just our hooks → remove it cleanly.
-                    try FileManager.default.removeItem(at: url)
-                } else if let out = SafeJSON.data(
-                    root,
-                    options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-                ) {
-                    let mode = posixPermissions(atPath: url.path)
-                    try out.write(to: url, options: [.atomic])
-                    setPosixPermissions(mode, atPath: url.path)
-                }
-                NSLog("[glint] codex hooks removed from \(url.path)")
             }
+        }
+        if touched {
+            if hooks.isEmpty {
+                root.removeValue(forKey: "hooks")
+            } else {
+                root["hooks"] = hooks
+            }
+            if root.isEmpty {
+                // Whole file was just our hooks → remove it cleanly.
+                try FileManager.default.removeItem(at: url)
+            } else if let out = SafeJSON.data(
+                root,
+                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            ) {
+                let mode = posixPermissions(atPath: url.path)
+                try out.write(to: url, options: [.atomic])
+                setPosixPermissions(mode, atPath: url.path)
+            }
+            NSLog("[glint] codex hooks removed from \(url.path)")
         }
     }
 

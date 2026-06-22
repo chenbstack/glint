@@ -6,6 +6,7 @@ struct GlintApp: App {
     @StateObject private var workspaceStore = WorkspaceStore()
     @StateObject private var updater = UpdaterController()
     @StateObject private var usage = UsageStore()
+    @StateObject private var codexHomes = CodexHomeStore()
 
     init() {
         #if DEBUG
@@ -48,6 +49,7 @@ struct GlintApp: App {
                 .environmentObject(workspaceStore)
                 .environmentObject(updater)
                 .environmentObject(usage)
+                .environmentObject(codexHomes)
                 .frame(minWidth: 980, minHeight: 600)
                 .preferredColorScheme(.dark)
                 // Live language switching: AppleLanguages (set in init) only
