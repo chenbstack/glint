@@ -14,8 +14,10 @@ struct CodexHome: Codable, Identifiable, Hashable {
         self.isEnabled = isEnabled
     }
 
+    static let defaultID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+
     static var `default`: CodexHome {
-        CodexHome(label: "Default", path: "~/.codex")
+        CodexHome(id: defaultID, label: "Default", path: "~/.codex")
     }
 
     var resolvedURL: URL {

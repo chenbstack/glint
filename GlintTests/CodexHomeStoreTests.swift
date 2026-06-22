@@ -29,6 +29,11 @@ final class CodexHomeStoreTests: XCTestCase {
         XCTAssertNil(defaults.data(forKey: CodexHomeStore.storageKey))
     }
 
+    func testDefaultHomeHasStableIdentity() {
+        XCTAssertEqual(CodexHome.default.id, CodexHome.default.id)
+        XCTAssertEqual(CodexHome.default.id, CodexHome.defaultID)
+    }
+
     func testEquivalentPathsCannotBeAddedTwice() {
         let store = CodexHomeStore(defaults: defaults)
         let absoluteDefault = FileManager.default.homeDirectoryForCurrentUser
