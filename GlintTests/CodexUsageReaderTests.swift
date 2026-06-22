@@ -73,4 +73,22 @@ final class CodexUsageReaderTests: XCTestCase {
         XCTAssertEqual(items[0].name, "Subscription")
         XCTAssertEqual(items[0].quota, quota)
     }
+
+    func testSidebarHidesFallbackWhenEveryHomeIsDisabled() {
+        let cached = AgentQuota(
+            sessionPercent: 27,
+            weeklyPercent: 40,
+            sessionResetsAt: nil,
+            weeklyResetsAt: nil,
+            planType: "plus"
+        )
+
+        let items = CodexQuotaPresentation.sidebarItems(
+            from: [],
+            fallback: cached,
+            hasEnabledHomes: false
+        )
+
+        XCTAssertTrue(items.isEmpty)
+    }
 }

@@ -54,7 +54,8 @@ struct CodexSidebarQuota: Identifiable, Hashable {
 enum CodexQuotaPresentation {
     static func sidebarItems(
         from statuses: [CodexHomeStatus],
-        fallback: AgentQuota?
+        fallback: AgentQuota?,
+        hasEnabledHomes: Bool = true
     ) -> [CodexSidebarQuota] {
         let items = statuses.compactMap { status -> CodexSidebarQuota? in
             guard case .available(let quota) = status.quotaStatus,
@@ -66,7 +67,7 @@ enum CodexQuotaPresentation {
             )
         }
         if !items.isEmpty { return items }
-        guard let fallback = fallback?.sanitized() else { return [] }
+        guard hasEnabledHomes, let fallback = fallback?.sanitized() else { return [] }
         return [CodexSidebarQuota(id: CodexHome.default.id, name: "Codex", quota: fallback)]
     }
 }
@@ -101,7 +102,11 @@ final class UsageStore: ObservableObject {
     @Published private(set) var codexHomeStatuses: [CodexHomeStatus] = []
 
     var codexSidebarQuotas: [CodexSidebarQuota] {
-        CodexQuotaPresentation.sidebarItems(from: codexHomeStatuses, fallback: codex)
+        CodexQuotaPresentation.sidebarItems(
+            from: codexHomeStatuses,
+            fallback: codex,
+            hasEnabledHomes: Self.configuredCodexHomes().contains(where: \.isEnabled)
+        )
     }
 
     /// Per-agent switches, persisted, default off — opt-in, since Claude's
@@ -217,6 +222,11 @@ final class UsageStore: ObservableObject {
     private func applyCodex(_ statuses: [CodexHomeStatus]) {
         guard codexEnabled else { return }
         codexHomeStatuses = statuses
+        guard !statuses.isEmpty else {
+            codex = nil
+            Self.saveQuota(nil, agent: .codex)
+            return
+        }
         let quota = statuses.lazy.compactMap { status -> AgentQuota? in
             guard case .available(let quota) = status.quotaStatus else { return nil }
             return quota
