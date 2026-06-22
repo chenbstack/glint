@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		04E75EAD5165E8D96C1C5517 /* MascotAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 349714D49AE52D84995314FD /* MascotAssetTests.swift */; };
+		07817DC6A98F8ED2E236CFA1 /* CodexHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E3B385162995D0F1F5B72D /* CodexHome.swift */; };
 		1115F230E14FBE3C1FC754A2 /* GhosttySurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E298AD81B1615CBBFD69F48A /* GhosttySurfaceView.swift */; };
 		11AB712CD3F25FE8A034F205 /* GitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39F54835E4A44EC88236EFBE /* GitService.swift */; };
 		164C6F51683CE7942393E816 /* GitDiff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7039488F4C2F75498E461311 /* GitDiff.swift */; };
@@ -34,6 +35,7 @@
 		B1DE20B081ACC4536DBD2089 /* GitStatusPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54663E213FE879B96C0D80E7 /* GitStatusPopover.swift */; };
 		B70CAFEBB2416E25B0FFED97 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C48F9D3C512A0ABE8369D0F4 /* Sparkle */; };
 		C0E8D97C08BA3F0FA33F31E7 /* CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 235E2D958A2244483CAA0812 /* CommandPalette.swift */; };
+		C41119D04864077E5B554F59 /* CodexHomeStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AB338782EF6F22B7B381DA8 /* CodexHomeStoreTests.swift */; };
 		C48BD1224EA2C6D3C87B9120 /* AgentPaneSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829D894CF747D6BC08667239 /* AgentPaneSummary.swift */; };
 		C748DE21F23B49B2FFD73DC7 /* WorkspaceIconKindTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E4DF4C5180D50C381B4976 /* WorkspaceIconKindTests.swift */; };
 		CD30F5E1B78B3C46C9990FD6 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8C269A6E9AE87961C3356DC /* SidebarView.swift */; };
@@ -76,6 +78,7 @@
 		3023490E670A10EC38870B12 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		349714D49AE52D84995314FD /* MascotAssetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotAssetTests.swift; sourceTree = "<group>"; };
 		376568363043C189904E4E0A /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		38E3B385162995D0F1F5B72D /* CodexHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHome.swift; sourceTree = "<group>"; };
 		39F54835E4A44EC88236EFBE /* GitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitService.swift; sourceTree = "<group>"; };
 		3E2E78BBA22734DD486C760B /* Glint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glint.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		41DDB9C7B5A277B7924270A3 /* PaneAgentState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneAgentState.swift; sourceTree = "<group>"; };
@@ -85,6 +88,7 @@
 		54663E213FE879B96C0D80E7 /* GitStatusPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitStatusPopover.swift; sourceTree = "<group>"; };
 		5A8933F67B4B6EEA3FD4E603 /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStore.swift; sourceTree = "<group>"; };
 		6860F8F626EFDB9A289FC727 /* themes.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = themes.json; sourceTree = "<group>"; };
+		6AB338782EF6F22B7B381DA8 /* CodexHomeStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHomeStoreTests.swift; sourceTree = "<group>"; };
 		6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		7039488F4C2F75498E461311 /* GitDiff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitDiff.swift; sourceTree = "<group>"; };
 		7CB74659D174004C620D538A /* GlintApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintApp.swift; sourceTree = "<group>"; };
@@ -148,6 +152,7 @@
 			isa = PBXGroup;
 			children = (
 				4EEF00CBEF45A9D60423A207 /* AgentKindResolutionTests.swift */,
+				6AB338782EF6F22B7B381DA8 /* CodexHomeStoreTests.swift */,
 				0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */,
 				349714D49AE52D84995314FD /* MascotAssetTests.swift */,
 				EBCC04C19D745AA867D961FD /* PaneAgentKindTests.swift */,
@@ -195,6 +200,7 @@
 				05F2CA2243872C8111048EF2 /* AgentBridge.swift */,
 				265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */,
 				829D894CF747D6BC08667239 /* AgentPaneSummary.swift */,
+				38E3B385162995D0F1F5B72D /* CodexHome.swift */,
 				21868C7211897C87A6CAD7C3 /* ControlBridge.swift */,
 				41DDB9C7B5A277B7924270A3 /* PaneAgentState.swift */,
 				C9E2B9ADF809766CE4278047 /* SafeJSON.swift */,
@@ -374,6 +380,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				81532B36FEC3039B8EAD9CB1 /* AgentKindResolutionTests.swift in Sources */,
+				C41119D04864077E5B554F59 /* CodexHomeStoreTests.swift in Sources */,
 				34997DD4A4F9B64A754FE77F /* DevinHookInstallerTests.swift in Sources */,
 				04E75EAD5165E8D96C1C5517 /* MascotAssetTests.swift in Sources */,
 				ED46CD7A6E09551A775AD3B8 /* PaneAgentKindTests.swift in Sources */,
@@ -389,6 +396,7 @@
 				3932A4CFEFF6FB81AE283645 /* AgentHookInstaller.swift in Sources */,
 				C48BD1224EA2C6D3C87B9120 /* AgentPaneSummary.swift in Sources */,
 				5157C5439862F21202BCC44D /* AppDelegate.swift in Sources */,
+				07817DC6A98F8ED2E236CFA1 /* CodexHome.swift in Sources */,
 				C0E8D97C08BA3F0FA33F31E7 /* CommandPalette.swift in Sources */,
 				CD7908F096580864CB2992ED /* ContentView.swift in Sources */,
 				EF937781512647E835836F83 /* ControlBridge.swift in Sources */,

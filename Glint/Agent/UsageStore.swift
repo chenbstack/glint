@@ -5,7 +5,7 @@ import IOKit
 
 /// One agent's rate-limit snapshot. Percentages are 0–100 (fraction of the
 /// window already consumed); `nil` fields mean "not reported by this source".
-struct AgentQuota: Equatable, Codable {
+struct AgentQuota: Hashable, Codable {
     /// Rolling session window (Codex `primary`, ~5h). 0–100.
     var sessionPercent: Double
     /// Longer rolling window (Codex `secondary`, ~7d). nil when unknown.
