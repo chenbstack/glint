@@ -73,3 +73,17 @@ targets:
       - framework: Vendor/GhosttyKit.xcframework
         embed: false
       - package: Sparkle
+
+  GlintTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: GlintTests
+        excludes:
+          - "**/.DS_Store"
+    dependencies:
+      - target: Glint
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.glint.GlintTests
+        GENERATE_INFOPLIST_FILE: YES

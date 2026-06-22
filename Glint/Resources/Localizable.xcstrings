@@ -1084,6 +1084,17 @@
         }
       }
     },
+    "Hook config": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hook 配置"
+          }
+        }
+      }
+    },
     "Hook script": {
       "extractionState": "stale",
       "localizations": {
@@ -1293,7 +1304,17 @@
         }
       }
     },
-    "New Tab": {},
+    "New Tab": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建标签页"
+          }
+        }
+      }
+    },
     "New Workspace": {
       "localizations": {
         "zh-Hans": {
@@ -1953,6 +1974,67 @@
           "stringUnit": {
             "state": "translated",
             "value": "设置 (⌘,)"
+          }
+        }
+      }
+    },
+    "Glint merges its hook entries into ~/.config/devin/config.json so Devin CLI sessions surface the same status as Claude." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 会将钩子条目合并到 ~/.config/devin/config.json，使 Devin CLI 会话能像 Claude 一样显示状态。"
+          }
+        }
+      }
+    },
+    "Hooks merged into your Devin config." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钩子已合并到你的 Devin 配置中。"
+          }
+        }
+      }
+    },
+    "Devin detected — install the reporter to show its status." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已检测到 Devin —— 安装报告器即可显示其状态。"
+          }
+        }
+      }
+    },
+    "Devin not detected on this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本机未检测到 Devin。"
+          }
+        }
+      }
+    },
+    "When Glint reopens, run `devin --continue` in any pane that was running Devin at last quit." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 重新打开时，对上次退出前在跑 Devin 的窗格自动执行 `devin --continue`。"
+          }
+        }
+      }
+    },
+    "Hooks are stored in Devin's native user config alongside your existing settings." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钩子存储在 Devin 的原生用户配置中，与你现有的设置并列。"
           }
         }
       }
@@ -3449,6 +3531,545 @@
           "stringUnit": {
             "state": "translated",
             "value": "Git 状态"
+          }
+        }
+      }
+    },
+    "Pick a git repository first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先选择一个 git 仓库。"
+          }
+        }
+      }
+    },
+    "Enter a name for the new branch.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先填写新分支的名称。"
+          }
+        }
+      }
+    },
+    "That branch name isn’t a valid git ref.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分支名不是合法的 git 引用。"
+          }
+        }
+      }
+    },
+    "That branch already exists — choose another name.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该分支已存在 —— 请换一个名称。"
+          }
+        }
+      }
+    },
+    "Checking the branch name…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在校验分支名…"
+          }
+        }
+      }
+    },
+    "New Tab · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建标签页 · %@"
+          }
+        }
+      }
+    },
+    "Open a tab running %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开一个运行 %@ 的标签页"
+          }
+        }
+      }
+    },
+    "Split Right · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向右分屏 · %@"
+          }
+        }
+      }
+    },
+    "Open a pane running %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开一个运行 %@ 的窗格"
+          }
+        }
+      }
+    },
+    "Split pane": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分屏"
+          }
+        }
+      }
+    },
+    "New terminals": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建终端"
+          }
+        }
+      }
+    },
+    "Ask which agent to launch": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建时询问启动哪个 Agent"
+          }
+        }
+      }
+    },
+    "When on, ⌘T / ⌘D / ⌘N and the + button pop a chooser so a new tab, pane, or workspace can start in an agent. Off opens a plain shell.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启后,⌘T / ⌘D / ⌘N 和 + 按钮会弹出选择器,让新建的标签页、窗格或工作区直接在某个 Agent 中启动。关闭则打开普通终端。"
+          }
+        }
+      }
+    },
+    "Return to launch · Esc to cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回车启动 · Esc 取消"
+          }
+        }
+      }
+    },
+    "New Tab (⌘T)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建标签页(⌘T)"
+          }
+        }
+      }
+    },
+    "Advanced": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高级"
+          }
+        }
+      }
+    },
+    "Uncommitted changes in base: %lld.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "base 有 %lld 处未提交改动。"
+          }
+        }
+      }
+    },
+    "Bring these changes into the new worktree": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把这些改动一并带进新工作树"
+          }
+        }
+      }
+    },
+    "Copied in; your original checkout keeps them too.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已复制进去;原始检出里也照常保留。"
+          }
+        }
+      }
+    },
+    "Left in your original checkout; the worktree starts clean at base's HEAD.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "留在原始检出里;工作树从 base 的 HEAD 干净切出。"
+          }
+        }
+      }
+    },
+    "New Workspace · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建工作区 · %@"
+          }
+        }
+      }
+    },
+    "Open a workspace running %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开一个运行 %@ 的工作区"
+          }
+        }
+      }
+    },
+    "Worktree created without your changes": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作树已创建,但未带上你的改动"
+          }
+        }
+      }
+    },
+    "The new worktree is ready, but copying the uncommitted changes failed. They remain in your original checkout.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新工作树已就绪,但复制未提交改动失败。这些改动仍保留在你的原始检出里。"
+          }
+        }
+      }
+    },
+    "Codex Home Directories": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex Home 目录"
+          }
+        }
+      }
+    },
+    "Codex Home stores local auth, config, sessions, and hooks. Glint only installs its own hooks and reads status; Codex continues to manage authentication and configuration. The checkbox only controls monitoring and sidebar display — unchecking a Home keeps its installed hooks; use Remove Hook to uninstall.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex Home 存放本地认证、配置、会话和钩子。Glint 只安装自己的钩子并读取状态;认证与配置仍由 Codex 管理。复选框只控制监控和侧栏显示——取消勾选会保留已安装的钩子,如需卸载请用 Remove Hook。"
+          }
+        }
+      }
+    },
+    "Monitor this Home and show its usage in the sidebar. Unchecking stops monitoring but keeps any installed hooks.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "监控该 Home 并在侧栏显示其额度。取消勾选只停止监控,已安装的钩子会保留。"
+          }
+        }
+      }
+    },
+    "Directory does not exist. Installing the hook will create it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目录不存在。安装钩子时会创建它。"
+          }
+        }
+      }
+    },
+    "Label (optional)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标签(可选)"
+          }
+        }
+      }
+    },
+    "Add": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加"
+          }
+        }
+      }
+    },
+    "Display available enabled Codex Home usage in the sidebar.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在侧栏显示已启用 Codex Home 的可用额度。"
+          }
+        }
+      }
+    },
+    "Enter a Codex Home path.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请输入 Codex Home 路径。"
+          }
+        }
+      }
+    },
+    "Use an absolute path or a path starting with ~.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请使用绝对路径或以 ~ 开头的路径。"
+          }
+        }
+      }
+    },
+    "That directory is already configured.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该目录已配置。"
+          }
+        }
+      }
+    },
+    "Removed from Glint, but hook cleanup failed: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已从 Glint 移除,但钩子清理失败:%@"
+          }
+        }
+      }
+    },
+    "Default": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认"
+          }
+        }
+      }
+    },
+    "Open": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开"
+          }
+        }
+      }
+    },
+    "Remove Hook": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除钩子"
+          }
+        }
+      }
+    },
+    "Install Hook": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装钩子"
+          }
+        }
+      }
+    },
+    "Remove this Codex Home from Glint": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从 Glint 移除此 Codex Home"
+          }
+        }
+      }
+    },
+    "Hook": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "钩子"
+          }
+        }
+      }
+    },
+    "Auth": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "认证"
+          }
+        }
+      }
+    },
+    "Quota": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "额度"
+          }
+        }
+      }
+    },
+    "Found": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已找到"
+          }
+        }
+      }
+    },
+    "Missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缺失"
+          }
+        }
+      }
+    },
+    "%@ used": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已用 %@"
+          }
+        }
+      }
+    },
+    "Disabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已停用"
+          }
+        }
+      }
+    },
+    "Usage off": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未开启"
+          }
+        }
+      }
+    },
+    "Quota unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "额度不可用"
           }
         }
       }

@@ -6,6 +6,7 @@ struct GlintApp: App {
     @StateObject private var workspaceStore = WorkspaceStore()
     @StateObject private var updater = UpdaterController()
     @StateObject private var usage = UsageStore()
+    @StateObject private var codexHomes = CodexHomeStore()
 
     init() {
         #if DEBUG
@@ -48,6 +49,7 @@ struct GlintApp: App {
                 .environmentObject(workspaceStore)
                 .environmentObject(updater)
                 .environmentObject(usage)
+                .environmentObject(codexHomes)
                 .frame(minWidth: 980, minHeight: 600)
                 .preferredColorScheme(.dark)
                 // Live language switching: AppleLanguages (set in init) only
@@ -65,7 +67,7 @@ struct GlintApp: App {
             // events reach ghostty; workspace switching uses the tab-like
             // ⌘⇧[ / ⌘⇧] plus ⌘1…⌘9 direct jumps instead.
             CommandGroup(replacing: .newItem) {
-                Button("New Workspace") { workspaceStore.addWorkspace() }
+                Button("New Workspace") { workspaceStore.requestNewWorkspace() }
                     .keyboardShortcut("n", modifiers: .command)
                 Button("Next Workspace") { workspaceStore.selectNextWorkspace() }
                     .keyboardShortcut("]", modifiers: [.command, .shift])
@@ -79,9 +81,9 @@ struct GlintApp: App {
                 // Direction-explicit names; "horizontal/vertical" read
                 // opposite ways in different terminals and our own palette
                 // copy had it backwards. `.horizontal` = side by side.
-                Button("Split Right") { workspaceStore.splitFocused(.horizontal) }
+                Button("Split Right") { workspaceStore.requestSplit(.horizontal) }
                     .keyboardShortcut("d", modifiers: .command)
-                Button("Split Down") { workspaceStore.splitFocused(.vertical) }
+                Button("Split Down") { workspaceStore.requestSplit(.vertical) }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
                 Button("Close Pane") { workspaceStore.closeFocused() }
                     .keyboardShortcut("w", modifiers: .command)
@@ -94,7 +96,7 @@ struct GlintApp: App {
                 // ⌘⇧[ ]) so existing muscle memory is untouched: ⌘T opens,
                 // ⌘⇧W closes, and ⌃Tab / ⌃⇧Tab cycle (iTerm-compatible, and
                 // not a sequence the terminal itself needs).
-                Button("New Tab") { workspaceStore.newTab() }
+                Button("New Tab") { workspaceStore.requestNewTab() }
                     .keyboardShortcut("t", modifiers: .command)
                 Button("Close Tab") {
                     if let ws = workspaceStore.selectedWorkspace {

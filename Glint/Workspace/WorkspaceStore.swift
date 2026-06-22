@@ -447,8 +447,20 @@ final class WorkspaceStore: ObservableObject {
     @Published var paneAgentState: [WorkspacePaneKey: PaneAgentState] = [:]
 
     /// Drives the command-palette overlay. Toggled by the toolbar's ⌘
-    /// button and the ⌘⇧P global shortcut.
-    @Published var commandPaletteOpen: Bool = false
+    /// button and the ⌘⇧P global shortcut. Mutually exclusive with the agent
+    /// chooser — opening one dismisses the other so they can't stack.
+    @Published var commandPaletteOpen: Bool = false {
+        didSet { if commandPaletteOpen { agentChooserIntent = nil } }
+    }
+
+    /// The pending "new terminal" action awaiting an agent pick from the chooser
+    /// overlay — non-nil ⇒ the chooser is shown. Set by the `request*` helpers
+    /// when `promptAgentOnNew` is on; cleared by `resolveAgentChooser`. Pops the
+    /// command palette closed so the two overlays never appear at once (e.g. ⌘T
+    /// while the palette is open).
+    @Published var agentChooserIntent: NewTerminalIntent? {
+        didSet { if agentChooserIntent != nil { commandPaletteOpen = false } }
+    }
 
     /// Drives the Settings sheet attached to the main window. We host
     /// Settings inside the window (not as a separate scene) so it
@@ -456,10 +468,8 @@ final class WorkspaceStore: ObservableObject {
     /// of-the-OS.
     @Published var settingsOpen: Bool = false
 
-    /// Drives the New Workspace sheet (source picker: plain / repo / worktree).
+    /// Drives the New Worktree sheet (the worktree-creation window).
     @Published var newWorkspaceSheetOpen: Bool = false
-    /// Which source tab the sheet opens on ("plain" / "repo" / "worktree").
-    @Published var newWorkspaceSheetTab: String = "plain"
     /// Optional repo path to pre-fill the sheet with (e.g. "New Worktree from
     /// Here" on a specific card), overriding the current-workspace guess.
     @Published var newWorkspaceRepoHint: String? = nil
@@ -467,8 +477,11 @@ final class WorkspaceStore: ObservableObject {
     /// confirm dialog (hosted in ContentView) so every entry point — card menu,
     /// command palette — funnels through the same "this deletes files" gate.
     @Published var pendingWorktreeDelete: UUID? = nil
-    func openNewWorkspace(tab: String = "plain", repoHint: String? = nil) {
-        newWorkspaceSheetTab = tab
+    /// Set when a worktree was created but "bring uncommitted changes" failed to
+    /// copy them in. Drives a one-shot warning alert (hosted in ContentView) so
+    /// the failure isn't silent — the changes are untouched in the base checkout.
+    @Published var worktreeCarryFailed: Bool = false
+    func openNewWorkspace(repoHint: String? = nil) {
         newWorkspaceRepoHint = repoHint
         newWorkspaceSheetOpen = true
     }
@@ -583,6 +596,9 @@ final class WorkspaceStore: ObservableObject {
     /// Whether Glint's OpenCode plugin is installed in `~/.config/opencode/plugins`.
     @Published var opencodeHooksInstalled: Bool = false
 
+    /// Whether Glint's Devin hook entries are registered in `~/.config/devin/config.json`.
+    @Published var devinHooksInstalled: Bool = false
+
     /// Whether Glint's modified-Enter shell keybindings are present in the
     /// user's shell rc (~/.zshrc / ~/.bashrc). Opt-in, default off.
     @Published var shellKeybindsInstalled: Bool = false
@@ -593,6 +609,14 @@ final class WorkspaceStore: ObservableObject {
     /// noticeably flatter look. Defaults to on.
     @Published var glassEffect: Bool = (UserDefaults.standard.object(forKey: "glint.glassEffect") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(glassEffect, forKey: "glint.glassEffect") }
+    }
+
+    /// When on, every "instant" new-terminal action (⌘T / ⌘D / ⌘N and the tab
+    /// bar's "+") pops the agent chooser instead of opening a bare shell, so the
+    /// new tab / pane / workspace can start in Claude / Codex / … Default off —
+    /// the fast shell path stays the default. Persisted under glint.promptAgentOnNew.
+    @Published var promptAgentOnNew: Bool = (UserDefaults.standard.object(forKey: "glint.promptAgentOnNew") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(promptAgentOnNew, forKey: "glint.promptAgentOnNew") }
     }
 
     /// UI accent color. Drives focus/selection highlights across the chrome,
@@ -729,6 +753,11 @@ final class WorkspaceStore: ObservableObject {
     /// Same as `restoreClaudeSession` but for OpenCode — feeds `opencode --continue`.
     @Published var restoreOpenCodeSession: Bool = (UserDefaults.standard.object(forKey: "glint.restoreOpenCodeSession") as? Bool) ?? false {
         didSet { UserDefaults.standard.set(restoreOpenCodeSession, forKey: "glint.restoreOpenCodeSession") }
+    }
+
+    /// Same as `restoreClaudeSession` but for Devin — feeds `devin --continue`.
+    @Published var restoreDevinSession: Bool = (UserDefaults.standard.object(forKey: "glint.restoreDevinSession") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(restoreDevinSession, forKey: "glint.restoreDevinSession") }
     }
 
     /// Master switch for the external control socket (control.sock). Off by
@@ -877,10 +906,21 @@ final class WorkspaceStore: ObservableObject {
                 isInstalled: OpenCodeHookInstaller.isInstalled,
                 install: { OpenCodeHookInstaller.installIfNeeded(socketPath: socketPath) }
             ),
+            AgentHookSpec(
+                handledKey: "glint.devinHooksAutoInstalled",
+                displayName: "Devin",
+                isPresent: DevinHookInstaller.isAgentPresent,
+                isInstalled: { DevinHookInstaller.isInstalled() },
+                install: { DevinHookInstaller.installIfNeeded(socketPath: socketPath) }
+            ),
         ]
     }
 
     private static func autoInstallAgentHooksOnFirstLaunch(socketPath: String) {
+        // Skip the modal dialog when running under XCTest — the alert blocks
+        // the test runner and there's no user to click the button.
+        if ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil { return }
+
         let defaults = UserDefaults.standard
         let specs = agentHookSpecs(socketPath: socketPath)
 
@@ -919,6 +959,7 @@ final class WorkspaceStore: ObservableObject {
             WorkspaceStore.current?.claudeHooksInstalled = AgentHookInstaller.isInstalled()
             WorkspaceStore.current?.codexHooksInstalled = CodexHookInstaller.isInstalled()
             WorkspaceStore.current?.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
+            WorkspaceStore.current?.devinHooksInstalled = DevinHookInstaller.isInstalled()
         }
     }
 
@@ -955,6 +996,16 @@ final class WorkspaceStore: ObservableObject {
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
     }
 
+    func installDevinHooks() {
+        DevinHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
+        self.devinHooksInstalled = DevinHookInstaller.isInstalled()
+    }
+
+    func uninstallDevinHooks() {
+        DevinHookInstaller.uninstall()
+        self.devinHooksInstalled = DevinHookInstaller.isInstalled()
+    }
+
     func installShellKeybinds() {
         ShellKeybindInstaller.install()
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
@@ -971,6 +1022,7 @@ final class WorkspaceStore: ObservableObject {
     var claudeDetected: Bool { AgentHookInstaller.isAgentPresent() }
     var codexDetected: Bool { CodexHookInstaller.isAgentPresent() }
     var opencodeDetected: Bool { OpenCodeHookInstaller.isAgentPresent() }
+    var devinDetected: Bool { DevinHookInstaller.isAgentPresent() }
 
     /// Locale to inject into the SwiftUI environment. Driven by
     /// `preferredLanguage`. On macOS 14+, SwiftUI re-resolves
@@ -1122,6 +1174,7 @@ final class WorkspaceStore: ObservableObject {
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
+        self.devinHooksInstalled = DevinHookInstaller.isInstalled()
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
         updateDockBadge()
         observerTokens.append(NotificationCenter.default.addObserver(
@@ -1196,6 +1249,7 @@ final class WorkspaceStore: ObservableObject {
             case "claude"   where restoreClaudeSession:   return "claude --continue\n"
             case "codex"    where restoreCodexSession:    return "codex resume --last\n"
             case "opencode" where restoreOpenCodeSession: return "opencode --continue\n"
+            case "devin"    where restoreDevinSession:    return "devin --continue\n"
             default: return nil
             }
         }()
@@ -1620,7 +1674,53 @@ final class WorkspaceStore: ObservableObject {
 
     // MARK: pane operations on the current workspace
 
-    func splitFocused(_ direction: SplitDirection) {
+    /// Queue a command to run in a freshly created pane once its surface comes
+    /// up. Reuses the same one-shot channel as the worktree sheet
+    /// (`pendingInitialInput` → `GhosttySurfaceView.initialInput`); a nil/empty
+    /// command leaves the pane a bare shell. Call right after creating the pane,
+    /// before its surface is built, so the lookup finds the entry.
+    private func queueInitialInput(_ command: String?, workspace: UUID, pane: PaneID) {
+        guard let cmd = command, !cmd.isEmpty else { return }
+        let key = WorkspacePaneKey(workspace: workspace, pane: pane)
+        pendingInitialInput[key] = cmd.hasSuffix("\n") ? cmd : cmd + "\n"
+    }
+
+    // MARK: new-terminal entry points (honor the "ask which agent" setting)
+    //
+    // The menu / keyboard / "+" entry points call these instead of newTab /
+    // splitFocused / addWorkspace directly. With `promptAgentOnNew` off they run
+    // immediately (a bare shell, unchanged); with it on they stash the intent and
+    // raise the chooser overlay, which calls `resolveAgentChooser` on pick.
+
+    func requestNewTab() {
+        if promptAgentOnNew { agentChooserIntent = .tab } else { newTab() }
+    }
+
+    func requestSplit(_ direction: SplitDirection) {
+        guard promptAgentOnNew else { splitFocused(direction); return }
+        agentChooserIntent = (direction == .horizontal) ? .splitRight : .splitDown
+    }
+
+    func requestNewWorkspace() {
+        if promptAgentOnNew { agentChooserIntent = .workspace } else { addWorkspace() }
+    }
+
+    /// Resolve the chooser: nil = cancelled (no-op); otherwise run the pending
+    /// action seeded with the picked agent's command (`.shell` → bare shell).
+    func resolveAgentChooser(_ item: AgentLaunchItem?) {
+        guard let intent = agentChooserIntent else { return }
+        agentChooserIntent = nil
+        guard let item else { return }
+        let cmd = item.command
+        switch intent {
+        case .tab:        newTab(agentCommand: cmd)
+        case .splitRight: splitFocused(.horizontal, agentCommand: cmd)
+        case .splitDown:  splitFocused(.vertical, agentCommand: cmd)
+        case .workspace:  addWorkspace(agentCommand: cmd)
+        }
+    }
+
+    func splitFocused(_ direction: SplitDirection, agentCommand: String? = nil) {
         guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
         let new = PaneID(value: workspaces[i].nextPaneSeq)
         workspaces[i].nextPaneSeq += 1
@@ -1632,6 +1732,7 @@ final class WorkspaceStore: ObservableObject {
             newID: new
         ) ?? workspaces[i].tabs[t].root
         workspaces[i].tabs[t].focusedPane = new
+        queueInitialInput(agentCommand, workspace: workspaces[i].id, pane: new)
     }
 
     /// Shells whose presence as the foreground process means "nothing of
@@ -1639,11 +1740,12 @@ final class WorkspaceStore: ObservableObject {
     /// close-confirmation check and the workspace icon picker.
     static let benignShells: Set<String> = ["zsh", "bash", "fish", "sh", "dash", "ksh", "login", "tmux"]
 
-    private static func agentToken(forProcessName name: String) -> String? {
+    static func agentToken(forProcessName name: String) -> String? {
         switch agentKind(named: name) {
         case .claude: return "claude"
         case .codex: return "codex"
         case .opencode: return "opencode"
+        case .devin: return "devin"
         case nil: return nil
         }
     }
@@ -1651,11 +1753,12 @@ final class WorkspaceStore: ObservableObject {
     /// Classify a foreground-process name or a hook's agent token into an
     /// agent kind. Both are matched identically (by substring), so there is
     /// one resolver rather than separate process-name / token variants.
-    private static func agentKind(named name: String) -> PaneAgentKind? {
+    static func agentKind(named name: String) -> PaneAgentKind? {
         let lower = name.lowercased()
         if lower.contains("claude") { return .claude }
         if lower.contains("codex") { return .codex }
         if lower.contains("opencode") { return .opencode }
+        if lower.contains("devin") { return .devin }
         return nil
     }
 
@@ -1888,7 +1991,7 @@ final class WorkspaceStore: ObservableObject {
     /// Open a new tab in the current workspace, inheriting the focused pane's
     /// cwd (terminal convention: a new tab opens "here"). Inserts it right
     /// after the current tab and selects it.
-    func newTab() {
+    func newTab(agentCommand: String? = nil) {
         guard let i = currentIndex else { return }
         let inheritedCwd = (workspaces[i].selectedTab?.focusedPane)
             .flatMap { workspaces[i].panes[$0]?.workingDirectory }
@@ -1904,6 +2007,7 @@ final class WorkspaceStore: ObservableObject {
             workspaces[i].tabs.append(tab)
         }
         workspaces[i].selectedTabID = tab.id
+        queueInitialInput(agentCommand, workspace: workspaces[i].id, pane: pane)
     }
 
     /// Close a tab and every pane it holds, cleaning up each pane's surface,
@@ -2141,7 +2245,7 @@ final class WorkspaceStore: ObservableObject {
         workspaces.move(fromOffsets: IndexSet(integer: source), toOffset: offset)
     }
 
-    func addWorkspace() {
+    func addWorkspace(agentCommand: String? = nil) {
         let palette = [
             ("5E5CE6", "•"), ("FF6582", "•"), ("30D158", "•"),
             ("FF9F0A", "•"), ("64D2FF", "•"), ("BF5AF2", "•"),
@@ -2151,6 +2255,8 @@ final class WorkspaceStore: ObservableObject {
         let ws = Workspace.fresh(name: "New workspace", accentHex: pick.0, symbol: pick.1)
         workspaces.append(ws)
         selectedWorkspaceID = ws.id
+        // Workspace.fresh seeds a single pane at PaneID 0.
+        queueInitialInput(agentCommand, workspace: ws.id, pane: PaneID(value: 0))
     }
 
     /// Open a workspace anchored at `directory` (the "Local Repo" source). The
@@ -2158,34 +2264,6 @@ final class WorkspaceStore: ObservableObject {
     /// stub called `addWorkspace()` and dropped the path, landing the user in
     /// their home dir. If the directory is inside a git repo, the source is then
     /// upgraded to `.localRepo` so the git button / worktree actions light up.
-    func openDirectoryWorkspace(_ directory: String) {
-        let expanded = (directory as NSString).expandingTildeInPath
-        guard !expanded.isEmpty else { addWorkspace(); return }
-        let first = PaneID(value: 0)
-        let pane = Pane(id: first, title: "zsh", workingDirectory: expanded)
-        let tab = WorkspaceTab(id: TabID(value: 0), name: nil, root: .leaf(first), focusedPane: first)
-        let ws = Workspace(
-            id: UUID(), name: "New workspace", userNamed: false,
-            accentHex: nextAccentHex(), symbol: "•",
-            tabs: [tab], selectedTabID: tab.id, nextTabSeq: 1,
-            panes: [first: pane], nextPaneSeq: 1,
-            source: WorkspaceSource(kind: .plain))
-        workspaces.append(ws)
-        selectedWorkspaceID = ws.id
-        let id = ws.id
-        Task {
-            guard let root = await git.repoRoot(at: expanded) else { return }
-            let branch = await git.currentBranch(at: root)
-            await MainActor.run {
-                if let i = workspaces.firstIndex(where: { $0.id == id }) {
-                    workspaces[i].source = WorkspaceSource(
-                        kind: .localRepo, repoRoot: root, branch: branch)
-                }
-                refreshGitStatusNow(for: id)
-            }
-        }
-    }
-
     // MARK: - Worktree (Plan B: out-of-band git, never via the terminal)
 
     private func nextAccentHex() -> String {
@@ -2220,11 +2298,22 @@ final class WorkspaceStore: ObservableObject {
     @discardableResult
     func createWorktreeWorkspace(repoRoot: String, baseBranch: String, branch: String,
                                  worktreePath: String, createBranch: Bool = true,
+                                 carryUncommitted: Bool = false,
                                  agentCommand: String?) async throws -> UUID {
         let expanded = (worktreePath as NSString).expandingTildeInPath
         try await git.addWorktree(repo: repoRoot, path: expanded,
                                   newBranch: createBranch ? branch : nil,
                                   base: createBranch ? baseBranch : branch)
+        // Replay base's uncommitted changes into the fresh worktree BEFORE the
+        // workspace (and its agent pane) come up, so the agent never sees a
+        // half-populated tree. A copy hiccup must not fail the whole creation —
+        // the worktree stands and the originals stay in base — but it's surfaced
+        // as a warning rather than swallowed.
+        var carryFailed = false
+        if carryUncommitted {
+            do { try await git.carryWorkingTree(from: repoRoot, to: expanded) }
+            catch { carryFailed = true }
+        }
 
         let first = PaneID(value: 0)
         let pane = Pane(id: first, title: "zsh", workingDirectory: expanded)
@@ -2243,6 +2332,7 @@ final class WorkspaceStore: ObservableObject {
         }
         workspaces.append(ws)
         selectedWorkspaceID = ws.id
+        if carryFailed { worktreeCarryFailed = true }
         await refreshGitStatus(for: ws.id)
         return ws.id
     }
@@ -2437,6 +2527,7 @@ enum WorkspaceIconKind {
     case claude
     case codex
     case opencode
+    case devin
     case ssh
     case vim
     case python
@@ -2453,7 +2544,7 @@ enum WorkspaceIconKind {
         case .python: return "chevron.left.forwardslash.chevron.right"
         case .node:   return "hexagon.fill"
         case .git:    return "arrow.triangle.branch"
-        case .claude, .codex, .opencode, .other:
+        case .claude, .codex, .opencode, .devin, .other:
             return nil
         }
     }
@@ -2464,6 +2555,7 @@ enum WorkspaceIconKind {
         case .claude: return "✦"
         case .codex:  return "λ"
         case .opencode: return "O"
+        case .devin:  return "D"
         case .other(let s):
             return s.first.map { String($0).uppercased() } ?? "?"
         default:
@@ -2672,7 +2764,7 @@ extension WorkspaceStore {
     /// workspace (all panes) and a single tab (just that tab's leaves).
     private func liveIconKind(paneIDs: [PaneID], workspaceID: UUID) -> WorkspaceIconKind {
         // Agent push-state wins over pid polling — if any pane reported a
-        // claude/codex/opencode hook, surface that. With several agent panes (e.g.
+        // claude/codex/opencode/devin hook, surface that. With several agent panes (e.g.
         // claude + codex side by side) the busy one wins; when all are equally
         // busy/idle, the most recently active wins. `paneIDs` may come from a
         // Dictionary's keys, so without this ordering the icon would be
@@ -2692,6 +2784,7 @@ extension WorkspaceStore {
             case .claude: return .claude
             case .codex: return .codex
             case .opencode: return .opencode
+            case .devin: return .devin
             }
         }
 
@@ -2704,6 +2797,7 @@ extension WorkspaceStore {
         if names.contains(where: { $0.contains("claude") })        { return .claude }
         if names.contains(where: { $0 == "codex" || $0.contains("codex") }) { return .codex }
         if names.contains(where: { $0 == "opencode" || $0.contains("opencode") }) { return .opencode }
+        if names.contains(where: { $0 == "devin" || $0.contains("devin") }) { return .devin }
         if names.contains(where: { $0 == "vim" || $0 == "nvim" || $0 == "vi" }) { return .vim }
         if names.contains(where: { $0 == "python" || $0 == "python3" || $0 == "ipython" }) { return .python }
         if names.contains(where: { $0 == "node" || $0 == "deno" || $0 == "bun" }) { return .node }

@@ -79,7 +79,7 @@ struct GitStatusPopover: View {
             if !isWT, path != nil {
                 popButton("New Worktree from Here…", prominent: true) {
                     close()
-                    store.openNewWorkspace(tab: "worktree", repoHint: path)
+                    store.openNewWorkspace(repoHint: path)
                 }
             }
 

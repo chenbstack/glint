@@ -247,6 +247,45 @@ struct GitService {
                            isBare: false, isDetached: false, isLocked: false)
     }
 
+    /// Copy `base`'s uncommitted working-tree state into a freshly created
+    /// `worktree`, leaving `base` untouched (the originals stay put). Tracked
+    /// edits (staged + unstaged) replay through a `diff HEAD` patch; genuinely
+    /// untracked files — gitignored ones excluded — are copied across. The
+    /// patch applies onto an identical HEAD by construction, so it can't
+    /// conflict; per-file copies are best-effort.
+    func carryWorkingTree(from base: String, to worktree: String) async throws {
+        let wt = (worktree as NSString).expandingTildeInPath
+
+        // 1) Tracked changes relative to HEAD. `git diff --output=<file>` writes
+        //    the patch straight to disk: capturing it as stdout would round-trip
+        //    the bytes through the runner's lossy UTF-8 decode (then a re-encode
+        //    on write), corrupting any binary hunk or non-UTF-8 text file so
+        //    `git apply` silently fails. Letting git own the file keeps it exact.
+        let patch = NSTemporaryDirectory() + "glint-carry-\(UUID().uuidString).patch"
+        defer { try? FileManager.default.removeItem(atPath: patch) }
+        try await git(["diff", "HEAD", "--binary", "--output=\(patch)"], cwd: base)
+        // `--output` writes an empty file when there are no tracked changes;
+        // skip the apply in that case (and avoid a needless subprocess).
+        let attrs = try? FileManager.default.attributesOfItem(atPath: patch)
+        let patchSize = (attrs?[.size] as? Int) ?? 0
+        if patchSize > 0 {
+            try await git(["apply", "--whitespace=nowarn", "--", patch], cwd: wt)
+        }
+
+        // 2) Untracked, non-ignored files (build artifacts stay out via
+        //    --exclude-standard). Copied verbatim, preserving relative layout.
+        let others = try await git(["ls-files", "--others", "--exclude-standard", "-z"], cwd: base)
+        let fm = FileManager.default
+        for rel in others.stdout.split(separator: "\0", omittingEmptySubsequences: true) {
+            let relPath = String(rel)
+            let src = (base as NSString).appendingPathComponent(relPath)
+            let dst = (wt as NSString).appendingPathComponent(relPath)
+            try? fm.createDirectory(atPath: (dst as NSString).deletingLastPathComponent,
+                                    withIntermediateDirectories: true)
+            try? fm.copyItem(atPath: src, toPath: dst)
+        }
+    }
+
     /// Remove a worktree directory (`git worktree remove`). `force` allows
     /// removal even with uncommitted changes — the UI gates this behind an
     /// explicit confirm.

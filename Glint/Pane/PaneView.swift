@@ -44,7 +44,8 @@ struct PaneView: View {
             paneBacking
             PaneSurfaceRepresentable(
                 surfaceView: store.surfaceView(workspaceID: workspaceID, paneID: paneID, cwd: cwd),
-                focused: isFocused
+                focused: isFocused,
+                deferFocus: store.commandPaletteOpen || store.agentChooserIntent != nil
             )
             if !isFocused {
                 // Dim unfocused panes with a black wash in BOTH modes. A

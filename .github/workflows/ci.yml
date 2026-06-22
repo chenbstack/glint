@@ -57,3 +57,18 @@ jobs:
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
             build
+
+      - name: Test Glint
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project Glint.xcodeproj \
+            -scheme GlintTests \
+            -configuration Debug \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            test

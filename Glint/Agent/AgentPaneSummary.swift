@@ -13,6 +13,7 @@ extension PaneAgentKind {
         case .claude:   return .claude
         case .codex:    return .codex
         case .opencode: return .opencode
+        case .devin:    return .devin
         }
     }
 }
