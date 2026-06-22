@@ -45,6 +45,32 @@ struct AgentQuota: Hashable, Codable {
     }
 }
 
+struct CodexSidebarQuota: Identifiable, Hashable {
+    let id: UUID
+    let name: String
+    let quota: AgentQuota
+}
+
+enum CodexQuotaPresentation {
+    static func sidebarItems(
+        from statuses: [CodexHomeStatus],
+        fallback: AgentQuota?
+    ) -> [CodexSidebarQuota] {
+        let items = statuses.compactMap { status -> CodexSidebarQuota? in
+            guard case .available(let quota) = status.quotaStatus,
+                  let quota = quota.sanitized() else { return nil }
+            return CodexSidebarQuota(
+                id: status.id,
+                name: status.home.label ?? status.resolvedURL.lastPathComponent,
+                quota: quota
+            )
+        }
+        if !items.isEmpty { return items }
+        guard let fallback = fallback?.sanitized() else { return [] }
+        return [CodexSidebarQuota(id: CodexHome.default.id, name: "Codex", quota: fallback)]
+    }
+}
+
 /// Polls per-agent usage/rate-limit data and republishes it for the sidebar.
 ///
 /// Data sources are asymmetric on purpose:
@@ -73,6 +99,10 @@ final class UsageStore: ObservableObject {
     @Published private(set) var claude: AgentQuota?
     @Published private(set) var codex: AgentQuota?
     @Published private(set) var codexHomeStatuses: [CodexHomeStatus] = []
+
+    var codexSidebarQuotas: [CodexSidebarQuota] {
+        CodexQuotaPresentation.sidebarItems(from: codexHomeStatuses, fallback: codex)
+    }
 
     /// Per-agent switches, persisted, default off — opt-in, since Claude's
     /// poll needs login-keychain access (a system prompt on first read).

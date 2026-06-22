@@ -93,7 +93,7 @@ struct SidebarView: View {
                 .scrollContentBackground(.hidden)
 
                 VStack(spacing: 0) {
-                    QuotaSection(claude: usage.claude, codex: usage.codex)
+                    QuotaSection(claude: usage.claude, codexHomes: usage.codexSidebarQuotas)
                     newWorkspaceCard
                         .padding(.horizontal, 10)
                         .padding(.top, 10)
@@ -368,7 +368,7 @@ struct SidebarView: View {
 private struct QuotaSection: View {
     @EnvironmentObject var store: WorkspaceStore
     let claude: AgentQuota?
-    let codex: AgentQuota?
+    let codexHomes: [CodexSidebarQuota]
 
     /// Brand fills, matching the sidebar mascot shadows.
     private static let claudeColor = Color(red: 235/255, green: 140/255, blue: 82/255)
@@ -376,7 +376,7 @@ private struct QuotaSection: View {
     private static let warnColor = Color(red: 1.0, green: 0.745, blue: 0.18) // #FFBE2E
 
     var body: some View {
-        if claude == nil && codex == nil {
+        if claude == nil && codexHomes.isEmpty {
             EmptyView()
         } else {
             VStack(spacing: 10) {
@@ -387,10 +387,10 @@ private struct QuotaSection: View {
                              quota: claude,
                              color: Self.claudeColor, warn: Self.warnColor)
                 }
-                if let codex {
-                    QuotaRow(name: "Codex",
+                ForEach(codexHomes) { item in
+                    QuotaRow(name: item.name,
                              iconAsset: MascotAsset.codex(for: nil),
-                             quota: codex,
+                             quota: item.quota,
                              color: Self.codexColor, warn: Self.warnColor)
                 }
             }

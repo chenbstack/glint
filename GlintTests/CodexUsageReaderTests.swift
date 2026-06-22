@@ -39,4 +39,38 @@ final class CodexUsageReaderTests: XCTestCase {
             .write(to: authURL, atomically: true, encoding: .utf8)
         XCTAssertEqual(CodexLiveReader.authStatus(from: home), .found)
     }
+
+    func testSidebarUsesQuotaFromLaterAvailableHome() {
+        let unavailable = CodexHome(label: "API", path: "~/api/.codex")
+        let subscription = CodexHome(label: "Subscription", path: "~/subscription/.codex")
+        let quota = AgentQuota(
+            sessionPercent: 27,
+            weeklyPercent: 40,
+            sessionResetsAt: nil,
+            weeklyResetsAt: nil,
+            planType: "plus"
+        )
+        let statuses = [
+            CodexHomeStatus(
+                home: unavailable,
+                resolvedURL: unavailable.resolvedURL,
+                hookStatus: .notInstalled,
+                authStatus: .found,
+                quotaStatus: .unavailable("Quota unavailable")
+            ),
+            CodexHomeStatus(
+                home: subscription,
+                resolvedURL: subscription.resolvedURL,
+                hookStatus: .installed,
+                authStatus: .found,
+                quotaStatus: .available(quota)
+            ),
+        ]
+
+        let items = CodexQuotaPresentation.sidebarItems(from: statuses, fallback: nil)
+
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items[0].name, "Subscription")
+        XCTAssertEqual(items[0].quota, quota)
+    }
 }
