@@ -103,4 +103,15 @@ final class CodexUsageReaderTests: XCTestCase {
         coordinator.invalidate()
         XCTAssertFalse(coordinator.accepts(newer))
     }
+
+    func testDisabledHomeStatusDoesNotRemainLoading() {
+        XCTAssertEqual(
+            CodexQuotaStatus.placeholder(isHomeEnabled: false, isUsageEnabled: true),
+            .unavailable("Disabled")
+        )
+        XCTAssertEqual(
+            CodexQuotaStatus.placeholder(isHomeEnabled: true, isUsageEnabled: true),
+            .loading
+        )
+    }
 }

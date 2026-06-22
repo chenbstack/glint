@@ -44,6 +44,11 @@ enum CodexQuotaStatus: Hashable {
     case available(AgentQuota)
     case unavailable(String)
     case loading
+
+    static func placeholder(isHomeEnabled: Bool, isUsageEnabled: Bool) -> CodexQuotaStatus {
+        if !isHomeEnabled { return .unavailable("Disabled") }
+        return isUsageEnabled ? .loading : .unavailable("Usage off")
+    }
 }
 
 struct CodexHomeStatus: Identifiable, Hashable {

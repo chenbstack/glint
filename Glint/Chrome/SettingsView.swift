@@ -1154,7 +1154,7 @@ private struct AgentsPane: View {
             .padding(.vertical, 10)
             SettingsDivider()
             SettingsRow("Show usage in sidebar",
-                        subtitle: "Display the first available enabled Codex Home's 5-hour and weekly limits in the sidebar.") {
+                        subtitle: "Display available enabled Codex Home usage in the sidebar.") {
                 Toggle("", isOn: $usage.codexEnabled)
                     .toggleStyle(.switch).labelsHidden()
             }
@@ -1309,7 +1309,10 @@ private struct AgentsPane: View {
             resolvedURL: home.resolvedURL,
             hookStatus: CodexHookInstaller.status(in: home.resolvedURL),
             authStatus: CodexLiveReader.authStatus(from: home.resolvedURL),
-            quotaStatus: usage.codexEnabled ? .loading : .unavailable("Usage off")
+            quotaStatus: .placeholder(
+                isHomeEnabled: home.isEnabled,
+                isUsageEnabled: usage.codexEnabled
+            )
         )
     }
 
