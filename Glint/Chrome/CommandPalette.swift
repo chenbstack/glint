@@ -1,14 +1,23 @@
 import SwiftUI
+import AppKit
+import Combine
 
 /// Centered modal overlay summoned by ⌘⇧P or the toolbar's ⌘ button.
 /// Type to fuzzy-filter; ↑↓ to move selection; ⏎ to execute; ⎋ to close.
 struct CommandPalette: View {
     @EnvironmentObject var store: WorkspaceStore
     @State private var query: String = ""
-    @State private var selectedIndex: Int = 0
     @FocusState private var queryFocused: Bool
+    /// Selection + the key-monitor token live on a reference type. The arrows
+    /// arrive through a raw AppKit `NSEvent` closure, and mutating local
+    /// `@State` from there is unreliable — the captured struct copy reads
+    /// stale values, so `model.selectedIndex += 1` jumped around and the highlight
+    /// never moved. A reference type mutates shared storage that SwiftUI
+    /// observes cleanly. Fresh instance each open (the view is torn down on
+    /// close), so selection always starts at the top.
+    @StateObject private var model = PaletteModel()
 
-    /// Why `selectedIndex` last changed. Only keyboard navigation may
+    /// Why `model.selectedIndex` last changed. Only keyboard navigation may
     /// auto-scroll the selection into view: if hover-driven changes did
     /// too, pressing ↑↓ would scroll rows under the stationary cursor,
     /// hover would instantly re-steal the selection, and the highlight
@@ -60,12 +69,16 @@ struct CommandPalette: View {
             .shadow(color: Color.black.opacity(0.5), radius: 30, y: 12)
             .padding(.top, -80) // bias slightly above center
         }
-        .onAppear { queryFocused = true }
+        .onAppear {
+            queryFocused = true
+            installKeyMonitor()
+        }
+        .onDisappear { removeKeyMonitor() }
         .onChange(of: query) { _, _ in
             // Typing resets the selection to the top hit; treat it like
             // keyboard input so the list scrolls back up with it.
             selectionSource = .keyboard
-            selectedIndex = 0
+            model.selectedIndex = 0
         }
     }
 
@@ -81,16 +94,6 @@ struct CommandPalette: View {
                 .font(.system(size: 15))
                 .foregroundStyle(Theme.text1)
                 .focused($queryFocused)
-                .onSubmit { execute() }
-                .onKeyPress(.upArrow) {
-                    move(-1); return .handled
-                }
-                .onKeyPress(.downArrow) {
-                    move(1); return .handled
-                }
-                .onKeyPress(.escape) {
-                    close(); return .handled
-                }
             Text("ESC")
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(Theme.text3)
@@ -113,20 +116,25 @@ struct CommandPalette: View {
                     noResultsPlaceholder
                 } else {
                     LazyVStack(spacing: 2) {
-                        ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                        // Key by position (offset), not `element.id`:
+                        // PaletteItem.id is a fresh UUID every render, so
+                        // keying on it made ForEach tear down and rebuild all
+                        // rows each frame — and LazyVStack then failed to
+                        // refresh the rows' `selected` flag, so the highlight
+                        // never moved even though selectedIndex did.
+                        ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
                             PaletteRow(
                                 item: item,
-                                selected: idx == selectedIndex
+                                selected: idx == model.selectedIndex
                             )
-                            .id(idx)
                             .onTapGesture {
-                                selectedIndex = idx
+                                model.selectedIndex = idx
                                 execute()
                             }
                             .onHover { hovering in
                                 if hovering {
                                     selectionSource = .pointer
-                                    selectedIndex = idx
+                                    model.selectedIndex = idx
                                 }
                             }
                         }
@@ -135,7 +143,7 @@ struct CommandPalette: View {
                     .padding(.vertical, 6)
                 }
             }
-            .onChange(of: selectedIndex) { _, idx in
+            .onChange(of: model.selectedIndex) { _, idx in
                 // Hover-driven selection must not auto-scroll — see
                 // `SelectionSource` for the feedback loop it causes.
                 guard selectionSource == .keyboard else { return }
@@ -303,21 +311,63 @@ struct CommandPalette: View {
         let items = filteredItems()
         guard !items.isEmpty else { return }
         selectionSource = .keyboard
-        selectedIndex = (selectedIndex + delta + items.count) % items.count
+        model.selectedIndex = (model.selectedIndex + delta + items.count) % items.count
     }
 
     private func execute() {
         let items = filteredItems()
-        guard items.indices.contains(selectedIndex) else { return }
-        items[selectedIndex].action()
+        guard items.indices.contains(model.selectedIndex) else { return }
+        items[model.selectedIndex].action()
         close()
     }
 
     private func close() {
         store.commandPaletteOpen = false
         query = ""
-        selectedIndex = 0
+        model.selectedIndex = 0
     }
+
+    // MARK: - Keyboard
+
+    /// ↑↓/⏎/⎋ are routed through a local NSEvent monitor instead of the
+    /// TextField's `.onKeyPress`: the underlying NSTextField's field editor
+    /// consumes arrow keys (and Return) for caret movement before SwiftUI's
+    /// press hook runs, so `.onKeyPress(.upArrow)` never fired and the
+    /// highlight never moved. The monitor sees each keyDown first and
+    /// consumes it by returning nil. While the IME is composing it steps
+    /// aside entirely so arrows/Return/Esc keep working for candidate
+    /// selection — otherwise Chinese input's pick/confirm keys get hijacked.
+    private func installKeyMonitor() {
+        guard model.keyMonitor == nil else { return }
+        model.keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if (NSApp.keyWindow?.firstResponder as? NSTextInputClient)?.hasMarkedText() ?? false {
+                return event
+            }
+            switch event.keyCode {
+            case 126:  // upArrow
+                move(-1); return nil
+            case 125:  // downArrow
+                move(1);  return nil
+            case 36:   // return
+                execute(); return nil
+            case 53:   // escape
+                close();  return nil
+            default:
+                return event
+            }
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let m = model.keyMonitor { NSEvent.removeMonitor(m); model.keyMonitor = nil }
+    }
+}
+
+/// Reference-typed home for the palette's keyboard selection and its key-event
+/// monitor token. See `CommandPalette.model` for why this can't be `@State`.
+private final class PaletteModel: ObservableObject {
+    @Published var selectedIndex: Int = 0
+    var keyMonitor: Any?
 }
 
 // MARK: - Row + model

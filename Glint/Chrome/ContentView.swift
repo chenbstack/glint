@@ -10,6 +10,11 @@ struct ContentView: View {
     /// in-house `GlassCapsuleFallback`. Glass off → stacked band layout.
     private var floatingHeader: Bool { store.glassEffect }
 
+    /// Who had keyboard focus when the command palette opened, so it can be
+    /// handed back on close — terminal surface *or* a text field (sidebar
+    /// search). Captured in the false→true transition below.
+    @State private var prePaletteResponder: NSResponder?
+
     var body: some View {
         HStack(spacing: 0) {
             if !store.sidebarCollapsed {
@@ -107,6 +112,25 @@ struct ContentView: View {
         }
         .animation(.spring(response: 0.28, dampingFraction: 0.82),
                    value: store.commandPaletteOpen)
+        // Save who had focus when the palette opens, hand it back when it
+        // closes (terminal surface *or* a text field). Without this the
+        // palette's text field resigns to nil on close and nothing re-asserts
+        // the prior responder — PaneSurfaceRepresentable.updateNSView doesn't
+        // re-run (its inputs are unchanged), so focus is stranded.
+        .onChange(of: store.commandPaletteOpen) { _, open in
+            if open {
+                prePaletteResponder = Self.focusOwner(NSApp.keyWindow?.firstResponder)
+            } else {
+                let target = prePaletteResponder
+                prePaletteResponder = nil
+                // Async so the palette's field editor has resigned first.
+                DispatchQueue.main.async {
+                    guard let window = NSApp.keyWindow, let target,
+                          window.firstResponder !== target else { return }
+                    window.makeFirstResponder(target)
+                }
+            }
+        }
         .sheet(isPresented: $store.settingsOpen) {
             GlintSettingsView()
                 .environmentObject(store)
@@ -155,6 +179,20 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    /// When focus is in a text field, `window.firstResponder` is the window's
+    /// transient field editor (an NSTextView), not the field — and that editor
+    /// is reclaimed the moment focus leaves, so it can't be restored directly.
+    /// Resolve to the owning control (the editor's delegate) so the palette
+    /// can hand focus back to it. Anything else (the terminal surface is an
+    /// NSView that is its own first responder) is returned as-is.
+    private static func focusOwner(_ responder: NSResponder?) -> NSResponder? {
+        if let editor = responder as? NSTextView,
+           let owner = editor.delegate as? NSResponder {
+            return owner
+        }
+        return responder
     }
 }
 
