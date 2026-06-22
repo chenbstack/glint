@@ -91,4 +91,16 @@ final class CodexUsageReaderTests: XCTestCase {
 
         XCTAssertTrue(items.isEmpty)
     }
+
+    func testOlderRefreshIsRejectedAfterNewRefreshBegins() {
+        var coordinator = CodexRefreshCoordinator()
+        let older = coordinator.begin()
+        let newer = coordinator.begin()
+
+        XCTAssertFalse(coordinator.accepts(older))
+        XCTAssertTrue(coordinator.accepts(newer))
+
+        coordinator.invalidate()
+        XCTAssertFalse(coordinator.accepts(newer))
+    }
 }

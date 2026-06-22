@@ -72,6 +72,23 @@ enum CodexQuotaPresentation {
     }
 }
 
+struct CodexRefreshCoordinator {
+    private(set) var generation = 0
+
+    mutating func begin() -> Int {
+        generation += 1
+        return generation
+    }
+
+    mutating func invalidate() {
+        generation += 1
+    }
+
+    func accepts(_ candidate: Int) -> Bool {
+        candidate == generation
+    }
+}
+
 /// Polls per-agent usage/rate-limit data and republishes it for the sidebar.
 ///
 /// Data sources are asymmetric on purpose:
@@ -125,6 +142,7 @@ final class UsageStore: ObservableObject {
             guard codexEnabled != oldValue else { return }
             UserDefaults.standard.set(codexEnabled, forKey: Self.codexKey)
             if !codexEnabled {
+                codexRefreshCoordinator.invalidate()
                 codex = nil
                 codexHomeStatuses = []
                 Self.saveQuota(nil, agent: .codex)
@@ -137,6 +155,7 @@ final class UsageStore: ObservableObject {
     private static let claudeKey = "glint.showClaudeUsage"
     private static let codexKey = "glint.showCodexUsage"
     private var timer: Timer?
+    private var codexRefreshCoordinator = CodexRefreshCoordinator()
     /// Refresh cadence. Rate-limit windows move on the order of minutes, so a
     /// minute of staleness is invisible and keeps disk/network churn trivial.
     private let interval: TimeInterval = 60
@@ -175,10 +194,13 @@ final class UsageStore: ObservableObject {
     /// Refresh whichever agents are currently enabled and publish results.
     func refreshNow() {
         if codexEnabled {
+            let generation = codexRefreshCoordinator.begin()
             Task { [weak self] in
                 let homes = Self.configuredCodexHomes().filter(\.isEnabled)
                 await MainActor.run {
-                    self?.codexHomeStatuses = homes.map {
+                    guard let self,
+                          self.codexRefreshCoordinator.accepts(generation) else { return }
+                    self.codexHomeStatuses = homes.map {
                         CodexHomeStatus(
                             home: $0,
                             resolvedURL: $0.resolvedURL,
@@ -206,7 +228,11 @@ final class UsageStore: ObservableObject {
                     for await status in group { byID[status.id] = status }
                     return homes.compactMap { byID[$0.id] }
                 }
-                await MainActor.run { self?.applyCodex(statuses) }
+                await MainActor.run {
+                    guard let self,
+                          self.codexRefreshCoordinator.accepts(generation) else { return }
+                    self.applyCodex(statuses)
+                }
             }
         }
         if claudeEnabled {
