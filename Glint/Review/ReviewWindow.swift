@@ -623,7 +623,16 @@ struct DiffDocument: Sendable {
         var out: [DiffLine] = []
         var oldLine = 0, newLine = 0
         var id = 0
-        for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
+        // Normalize CRLF / lone CR to LF before splitting. Swift treats "\r\n" as
+        // a single Character (extended grapheme cluster), so split(separator: "\n")
+        // never matches it and silently merges every CRLF-terminated line into one
+        // blob — a Windows-authored file (its diff body keeps the source's CRLF)
+        // then parses as zero adds/dels, so nothing tints and the raw +/- markers
+        // leak through as un-parsed text. Git's own meta lines are LF, so only the
+        // diff body is affected (the file-list numstat, pure git output, is fine).
+        let normed = text.replacingOccurrences(of: "\r\n", with: "\n")
+                         .replacingOccurrences(of: "\r", with: "\n")
+        for raw in normed.split(separator: "\n", omittingEmptySubsequences: false) {
             let line = String(raw)
             // The only truly-empty element is the trailing split artifact after
             // the diff's final newline; real blank context lines are " ".
