@@ -445,6 +445,17 @@ final class WorkspaceStore: ObservableObject {
     /// status (thinking/permission/…) the 1s name poll can't know.
     /// Non-persistent.
     @Published var paneAgentState: [WorkspacePaneKey: PaneAgentState] = [:]
+    /// Codex 0.141+ runs hooks in a shared app-server, so hook processes no
+    /// longer inherit GLINT_PANE_ID. Bind its stable session id after the first
+    /// submitted prompt and use that route for the rest of the session.
+    private struct CodexSessionRoute {
+        var pane: WorkspacePaneKey
+        var lastSeen: Date
+    }
+    private static let codexSessionRouteTTL: TimeInterval = 12 * 60 * 60
+    private static let codexSessionRouteLimit = 256
+    private var codexSessionPanes: [String: CodexSessionRoute] = [:]
+    private var recentPaneReturns: [WorkspacePaneKey: Date] = [:]
 
     /// Drives the command-palette overlay. Toggled by the toolbar's ⌘
     /// button and the ⌘⇧P global shortcut. Mutually exclusive with the agent
@@ -1380,14 +1391,11 @@ final class WorkspaceStore: ObservableObject {
 
     // MARK: agent hook events
 
-    /// Translate one hook from the AgentBridge into pane state. The hook
-    /// itself only carries the event name — full payload routing comes later
-    /// once we wire `data` through.
+    /// Translate one hook from the AgentBridge into pane state.
     func handleAgentEvent(_ info: [AnyHashable: Any]?) {
         guard let info,
-              let paneStr = info["pane"] as? String,
               let hook = info["hook"] as? String,
-              let key = Self.parsePaneKey(paneStr) else { return }
+              let key = resolveAgentEventPane(info, hook: hook) else { return }
 
         let explicitKind = (info["agent"] as? String).flatMap(Self.agentKind(named:))
         let foregroundKind = surfaceViews[key]?.foregroundProcessName()
@@ -1522,8 +1530,14 @@ final class WorkspaceStore: ObservableObject {
     func handlePaneReturn(_ info: [AnyHashable: Any]?) {
         guard let info,
               let paneStr = info["pane"] as? String,
-              let key = Self.parsePaneKey(paneStr),
-              var state = paneAgentState[key],
+              let key = Self.parsePaneKey(paneStr) else { return }
+        // Permission approval is not a new prompt. Recording it as a submit
+        // candidate could make a different, newly-started Codex session bind
+        // to this pane if both events land within the routing window.
+        if paneAgentState[key]?.status != .needsPermission {
+            recentPaneReturns[key] = Date()
+        }
+        guard var state = paneAgentState[key],
               state.status == .needsPermission else { return }
         let now = Date()
         state.status = .tool
@@ -1531,6 +1545,104 @@ final class WorkspaceStore: ObservableObject {
         state.turnStartedAt = now
         paneAgentState[key] = state
         clearDockBadge(for: key)
+    }
+
+    /// Resolve direct pane-addressed hooks, or bind a shared Codex session on
+    /// its first submitted prompt. The Return timestamp is process-local, so
+    /// when production and debug Glint are both running only the owning app
+    /// claims the session. A unique cwd match covers `codex "prompt"` and
+    /// other launches that submit without a separate terminal Return.
+    private func resolveAgentEventPane(
+        _ info: [AnyHashable: Any],
+        hook: String,
+        now: Date = Date()
+    ) -> WorkspacePaneKey? {
+        if let pane = info["pane"] as? String,
+           let key = Self.parsePaneKey(pane) {
+            return key
+        }
+        guard (info["agent"] as? String) == "codex",
+              let session = info["session"] as? String,
+              !session.isEmpty else { return nil }
+
+        pruneCodexSessionRoutes(now: now)
+        if var route = codexSessionPanes[session] {
+            route.lastSeen = now
+            codexSessionPanes[session] = route
+            let key = route.pane
+            if let view = surfaceViews[key], view.hasLiveSurface {
+                if hook != "UserPromptSubmit" {
+                    return key
+                }
+                let kind = Self.codexRoutingCandidateKind(
+                    foregroundProcessName: view.foregroundProcessName(),
+                    polledProcessName: paneProcesses[key],
+                    stateKind: paneAgentState[key]?.kind
+                )
+                if kind == .codex {
+                    recentPaneReturns.removeValue(forKey: key)
+                    return key
+                }
+            }
+            codexSessionPanes.removeValue(forKey: session)
+        }
+        guard hook == "UserPromptSubmit" else { return nil }
+
+        let codexPanes = surfaceViews.compactMap { key, view -> WorkspacePaneKey? in
+            guard view.hasLiveSurface else { return nil }
+            // A known foreground process is authoritative even when it is not
+            // an agent. Falling through from "zsh" to stale hook state would
+            // incorrectly keep an exited Codex pane in the routing candidates.
+            let kind = Self.codexRoutingCandidateKind(
+                foregroundProcessName: view.foregroundProcessName(),
+                polledProcessName: paneProcesses[key],
+                stateKind: paneAgentState[key]?.kind
+            )
+            return kind == .codex ? key : nil
+        }
+        let recentlySubmitted = codexPanes.compactMap { key -> (WorkspacePaneKey, Date)? in
+            guard let date = recentPaneReturns[key],
+                  now.timeIntervalSince(date) >= 0,
+                  now.timeIntervalSince(date) <= 10 else { return nil }
+            return (key, date)
+        }
+        let key: WorkspacePaneKey?
+        if let latest = recentlySubmitted.max(by: { $0.1 < $1.1 }) {
+            key = latest.0
+        } else if let cwd = info["cwd"] as? String, !cwd.isEmpty {
+            let normalized = URL(fileURLWithPath: cwd).standardizedFileURL.path
+            let matches = codexPanes.filter { candidate in
+                let known = surfaceViews[candidate]?.cachedCwd
+                    ?? workspaces.first(where: { $0.id == candidate.workspace })?
+                        .panes[candidate.pane]?.workingDirectory
+                guard let known else { return false }
+                return URL(fileURLWithPath: known).standardizedFileURL.path == normalized
+            }
+            key = matches.count == 1 ? matches[0] : nil
+        } else {
+            key = nil
+        }
+        guard let key else {
+            NSLog("[glint] agent: could not route Codex session \(session)")
+            return nil
+        }
+        codexSessionPanes[session] = CodexSessionRoute(pane: key, lastSeen: now)
+        pruneCodexSessionRoutes(now: now)
+        recentPaneReturns.removeValue(forKey: key)
+        return key
+    }
+
+    private func pruneCodexSessionRoutes(now: Date) {
+        codexSessionPanes = codexSessionPanes.filter {
+            now.timeIntervalSince($0.value.lastSeen) <= Self.codexSessionRouteTTL
+        }
+        let overflow = codexSessionPanes.count - Self.codexSessionRouteLimit
+        guard overflow > 0 else { return }
+        for (session, _) in codexSessionPanes
+            .sorted(by: { $0.value.lastSeen < $1.value.lastSeen })
+            .prefix(overflow) {
+            codexSessionPanes.removeValue(forKey: session)
+        }
     }
 
     /// Clear any `.justCompleted` / `.failed` panes back to `.idle` — but
@@ -1760,6 +1872,17 @@ final class WorkspaceStore: ObservableObject {
         if lower.contains("opencode") { return .opencode }
         if lower.contains("devin") { return .devin }
         return nil
+    }
+
+    static func codexRoutingCandidateKind(
+        foregroundProcessName: String?,
+        polledProcessName: String?,
+        stateKind: PaneAgentKind?
+    ) -> PaneAgentKind? {
+        if let processName = foregroundProcessName ?? polledProcessName {
+            return agentKind(named: processName)
+        }
+        return stateKind
     }
 
     private static func isBenignShellProcessName(_ name: String) -> Bool {

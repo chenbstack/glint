@@ -6,6 +6,10 @@ import Darwin
 ///
 ///     {"pane":"<workspace-uuid>:<pane-seq>","hook":"UserPromptSubmit"}
 ///
+/// Codex hooks may instead originate in its shared app-server, which has no
+/// pane environment. Those events carry base64-encoded session/cwd metadata
+/// and are associated with a pane by `WorkspaceStore`.
+///
 /// The bridge parses, posts `.glintAgentEvent` on the main queue, and
 /// `WorkspaceStore` translates it into pane state.
 final class AgentBridge {
@@ -144,28 +148,52 @@ final class AgentBridge {
     }
 
     private struct HookEnvelope: Decodable {
-        let pane: String
+        let pane: String?
         let hook: String
         let agent: String?
+        let sessionB64: String?
+        let cwdB64: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case pane, hook, agent
+            case sessionB64 = "session_b64"
+            case cwdB64 = "cwd_b64"
+        }
+    }
+
+    static func decodeHookLine(_ line: Data) -> [String: String]? {
+        guard let env = try? JSONDecoder().decode(HookEnvelope.self, from: line) else {
+            return nil
+        }
+        var result = ["hook": env.hook]
+        if let pane = env.pane, !pane.isEmpty { result["pane"] = pane }
+        if let agent = env.agent, !agent.isEmpty { result["agent"] = agent }
+        if let encoded = env.sessionB64,
+           let data = Data(base64Encoded: encoded),
+           let value = String(data: data, encoding: .utf8),
+           !value.isEmpty {
+            result["session"] = value
+        }
+        if let encoded = env.cwdB64,
+           let data = Data(base64Encoded: encoded),
+           let value = String(data: data, encoding: .utf8),
+           !value.isEmpty {
+            result["cwd"] = value
+        }
+        guard result["pane"] != nil || result["session"] != nil else { return nil }
+        return result
     }
 
     private func handle(line: Data) {
-        guard let env = try? JSONDecoder().decode(HookEnvelope.self, from: line) else {
+        guard let decoded = Self.decodeHookLine(line) else {
             NSLog("[glint] agent: malformed hook line (\(line.count) bytes)")
             return
         }
         DispatchQueue.main.async {
-            var userInfo: [String: Any] = [
-                "pane": env.pane,
-                "hook": env.hook,
-            ]
-            if let agent = env.agent, !agent.isEmpty {
-                userInfo["agent"] = agent
-            }
             NotificationCenter.default.post(
                 name: .glintAgentEvent,
                 object: nil,
-                userInfo: userInfo
+                userInfo: decoded
             )
         }
     }
