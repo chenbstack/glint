@@ -113,7 +113,7 @@ extension GlintTheme {
     /// 无法派生,follow 态的 chrome 策略留到第 3/4 步定。
     static let followGhostty = GlintTheme(
         id: "follow-ghostty",
-        name: "跟随 Ghostty 配置",
+        name: "Follow Ghostty Config",
         isDark: true,
         background: glintDark.background,
         foreground: glintDark.foreground,

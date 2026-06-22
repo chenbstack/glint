@@ -1,6 +1,149 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "App icon": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用图标"
+          }
+        }
+      }
+    },
+    "Apply": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用"
+          }
+        }
+      }
+    },
+    "Background blur": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景模糊"
+          }
+        }
+      }
+    },
+    "Browse all %lld themes": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浏览全部 %lld 套主题"
+          }
+        }
+      }
+    },
+    "Current": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前"
+          }
+        }
+      }
+    },
+    "Interface opacity": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "界面透明度"
+          }
+        }
+      }
+    },
+    "Let the desktop show through — the terminal area and the sidebar/toolbar can be tuned separately. Background blur frosts the desktop behind the window so terminal text stays readable. Note: macOS native fullscreen disables window transparency.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "让桌面从背后透出 —— 终端区与侧栏/工具栏可分开调。背景模糊把透出的桌面磨砂虚化,终端文字更易读。注:macOS 原生全屏下系统会禁用窗口透明。"
+          }
+        }
+      }
+    },
+    "Opacity & blur": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "透明度与模糊"
+          }
+        }
+      }
+    },
+    "Search themes…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索主题…"
+          }
+        }
+      }
+    },
+    "Sidebar and toolbar": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "侧栏与工具栏"
+          }
+        }
+      }
+    },
+    "Switch the Dock icon. \"Default\" keeps the Liquid Glass icon on macOS 26; the other accents are static icons.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换程序坞（Dock）中的图标。「默认」在 macOS 26 上保留 Liquid Glass 玻璃图标；其余配色为静态图标。"
+          }
+        }
+      }
+    },
+    "Terminal and interface share one palette — recolor both at once.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "终端与界面共用一套配色,一键换肤。"
+          }
+        }
+      }
+    },
+    "Terminal opacity": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "终端透明度"
+          }
+        }
+      }
+    },
     "External control": {
       "extractionState": "manual",
       "localizations": {

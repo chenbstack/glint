@@ -487,7 +487,7 @@ private struct AppearancePane: View {
     var body: some View {
         SettingsCard("Theme") {
             VStack(alignment: .leading, spacing: 8) {
-                Text("终端与界面共用一套配色,一键换肤。")
+                Text("Terminal and interface share one palette — recolor both at once.")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.text3)
                 LazyVGrid(
@@ -507,7 +507,7 @@ private struct AppearancePane: View {
                     HStack(spacing: 6) {
                         Image(systemName: "square.grid.2x2")
                             .font(.system(size: 11, weight: .medium))
-                        Text("浏览全部 \(ThemeRegistry.catalog.count + ThemeRegistry.featured.count) 套主题")
+                        Text("Browse all \(ThemeRegistry.catalog.count + ThemeRegistry.featured.count) themes")
                             .font(.system(size: 12, weight: .medium))
                         Image(systemName: "chevron.right")
                             .font(.system(size: 9, weight: .semibold))
@@ -565,17 +565,17 @@ private struct AppearancePane: View {
             }
         }
 
-        SettingsCard("透明度与模糊",
-                     footer: "让桌面从背后透出 —— 终端区与侧栏/工具栏可分开调。背景模糊把透出的桌面磨砂虚化,终端文字更易读。注:macOS 原生全屏下系统会禁用窗口透明。") {
-            SettingsRow("终端透明度") {
+        SettingsCard("Opacity & blur",
+                     footer: "Let the desktop show through — the terminal area and the sidebar/toolbar can be tuned separately. Background blur frosts the desktop behind the window so terminal text stays readable. Note: macOS native fullscreen disables window transparency.") {
+            SettingsRow("Terminal opacity") {
                 OpacityControl(value: $store.terminalOpacity)
             }
             SettingsDivider()
-            SettingsRow("界面透明度", subtitle: "侧栏与工具栏") {
+            SettingsRow("Interface opacity", subtitle: "Sidebar and toolbar") {
                 OpacityControl(value: $store.chromeOpacity)
             }
             SettingsDivider()
-            SettingsRow("背景模糊") {
+            SettingsRow("Background blur") {
                 HStack(spacing: 10) {
                     Slider(value: $store.backgroundBlur, in: 0...60)
                         .frame(width: 150)
@@ -587,8 +587,8 @@ private struct AppearancePane: View {
             }
         }
 
-        SettingsCard("应用图标",
-                     footer: "切换程序坞（Dock）中的图标。「默认」在 macOS 26 上保留 Liquid Glass 玻璃图标；其余配色为静态图标。") {
+        SettingsCard("App icon",
+                     footer: "Switch the Dock icon. \"Default\" keeps the Liquid Glass icon on macOS 26; the other accents are static icons.") {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 5), spacing: 14) {
                 ForEach(AppIconPreset.allCases) { preset in
                     VStack(spacing: 5) {
@@ -748,7 +748,7 @@ private struct ThemeBrowserSheet: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Theme.text3)
-            TextField("搜索主题…", text: $query)
+            TextField("Search themes…", text: $query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.text1)
@@ -797,7 +797,7 @@ private struct ThemeBrowserSheet: View {
     private var footer: some View {
         HStack(spacing: 10) {
             Spacer()
-            Button("取消") { dismiss() }       // applied 仍为 false → onDisappear 还原
+            Button("Cancel") { dismiss() }       // applied 仍为 false → onDisappear 还原
                 .buttonStyle(.plain)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Theme.text2)
@@ -808,7 +808,7 @@ private struct ThemeBrowserSheet: View {
                         .fill(Theme.overlay(0.05))
                 )
 
-            Button("应用") { apply() }
+            Button("Apply") { apply() }
                 .buttonStyle(.plain)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(dirty ? .white : Theme.text4)
@@ -874,7 +874,7 @@ private struct ThemeBrowserRow: View {
                             .foregroundStyle(Theme.text1)
                             .lineLimit(1)
                         if isCurrent {
-                            Text("当前")
+                            Text("Current")
                                 .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(accent)
                                 .padding(.horizontal, 5)
