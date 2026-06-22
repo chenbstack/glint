@@ -60,6 +60,13 @@ struct CodexHomeStatus: Identifiable, Hashable {
     var quotaStatus: CodexQuotaStatus
 }
 
+enum CodexHomeAddResult: Equatable {
+    case added
+    case emptyPath
+    case relativePath
+    case duplicate
+}
+
 @MainActor
 final class CodexHomeStore: ObservableObject {
     @Published private(set) var homes: [CodexHome]
@@ -83,14 +90,15 @@ final class CodexHomeStore: ObservableObject {
         homes.filter(\.isEnabled)
     }
 
-    func add(path: String, label: String? = nil) -> Bool {
+    func add(path: String, label: String? = nil) -> CodexHomeAddResult {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
+        guard !trimmed.isEmpty else { return .emptyPath }
+        guard trimmed.hasPrefix("/") || trimmed.hasPrefix("~") else { return .relativePath }
         let home = CodexHome(label: label?.nilIfBlank, path: trimmed)
-        guard !contains(resolvedURL: home.resolvedURL) else { return false }
+        guard !contains(resolvedURL: home.resolvedURL) else { return .duplicate }
         homes.append(home)
         save()
-        return true
+        return .added
     }
 
     func update(_ home: CodexHome) -> Bool {

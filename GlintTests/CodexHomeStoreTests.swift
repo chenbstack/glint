@@ -39,13 +39,13 @@ final class CodexHomeStoreTests: XCTestCase {
         let absoluteDefault = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex").path
 
-        XCTAssertFalse(store.add(path: absoluteDefault, label: "Duplicate"))
+        XCTAssertEqual(store.add(path: absoluteDefault, label: "Duplicate"), .duplicate)
         XCTAssertEqual(store.homes.count, 1)
     }
 
     func testChangesPersistAndDisabledHomesAreExcluded() {
         var store = CodexHomeStore(defaults: defaults)
-        XCTAssertTrue(store.add(path: "~/work/.codex", label: "Work"))
+        XCTAssertEqual(store.add(path: "~/work/.codex", label: "Work"), .added)
         let work = try! XCTUnwrap(store.homes.last)
         store.setEnabled(false, for: work.id)
 
@@ -67,7 +67,7 @@ final class CodexHomeStoreTests: XCTestCase {
             var errorDescription: String? { "Invalid hooks.json" }
         }
         let store = CodexHomeStore(defaults: defaults)
-        XCTAssertTrue(store.add(path: "~/broken/.codex", label: "Broken"))
+        XCTAssertEqual(store.add(path: "~/broken/.codex", label: "Broken"), .added)
         let broken = try XCTUnwrap(store.homes.last)
 
         let warning = CodexHomeRemoval.remove(broken, from: store) { _ in
@@ -76,5 +76,14 @@ final class CodexHomeStoreTests: XCTestCase {
 
         XCTAssertEqual(warning, "Invalid hooks.json")
         XCTAssertFalse(store.homes.contains(where: { $0.id == broken.id }))
+    }
+
+    func testAddRejectsRelativePaths() {
+        let store = CodexHomeStore(defaults: defaults)
+
+        XCTAssertEqual(store.add(path: "work/.codex"), .relativePath)
+        XCTAssertEqual(store.add(path: "  "), .emptyPath)
+        XCTAssertEqual(store.homes.count, 1)
+        XCTAssertNil(defaults.data(forKey: CodexHomeStore.storageKey))
     }
 }

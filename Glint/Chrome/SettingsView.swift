@@ -1032,7 +1032,7 @@ private struct AgentsPane: View {
     @EnvironmentObject var usage: UsageStore
     @EnvironmentObject var codexHomes: CodexHomeStore
     @State private var claudeInstallFailed = false
-    @State private var codexInstallFailed = false
+    @State private var codexAddError: String?
     @State private var opencodeInstallFailed = false
     @State private var devinInstallFailed = false
     @State private var newCodexHomePath = ""
@@ -1139,8 +1139,8 @@ private struct AgentsPane: View {
                         .tint(store.accent)
                         .disabled(newCodexHomePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                if codexInstallFailed {
-                    Text("That directory is already configured or the path is empty.")
+                if let codexAddError {
+                    Text(codexAddError)
                         .font(.system(size: 10.5))
                         .foregroundStyle(Color.orange)
                 }
@@ -1317,9 +1317,19 @@ private struct AgentsPane: View {
     }
 
     private func addCodexHome() {
-        let added = codexHomes.add(path: newCodexHomePath, label: newCodexHomeLabel)
-        codexInstallFailed = !added
-        guard added else { return }
+        switch codexHomes.add(path: newCodexHomePath, label: newCodexHomeLabel) {
+        case .added:
+            codexAddError = nil
+        case .emptyPath:
+            codexAddError = "Enter a Codex Home path."
+            return
+        case .relativePath:
+            codexAddError = "Use an absolute path or a path starting with ~."
+            return
+        case .duplicate:
+            codexAddError = "That directory is already configured."
+            return
+        }
         newCodexHomePath = ""
         newCodexHomeLabel = ""
         usage.refreshNow()
