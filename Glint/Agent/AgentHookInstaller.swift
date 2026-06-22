@@ -405,6 +405,16 @@ enum CodexHookInstaller {
         return false
     }
 
+    static func status(in codexHome: URL) -> CodexHookStatus {
+        let url = codexHome.appendingPathComponent("hooks.json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return .notInstalled }
+        guard let data = try? Data(contentsOf: url),
+              (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) != nil else {
+            return .error("Invalid hooks.json")
+        }
+        return isInstalled(in: codexHome) ? .installed : .notInstalled
+    }
+
     /// Whether the Codex CLI itself looks installed on this Mac.
     static func isAgentPresent() -> Bool {
         AgentPresence.directoryExists(".codex")

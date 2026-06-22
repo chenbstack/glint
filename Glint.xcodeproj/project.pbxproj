@@ -51,6 +51,7 @@
 		F6AFF715FCE5357CEB07683D /* SettingsSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */; };
 		F7ABF70CD455143BF89B89B3 /* SafeJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E2B9ADF809766CE4278047 /* SafeJSON.swift */; };
 		FCB67525DF16A4DCF9B2AF7A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 376568363043C189904E4E0A /* Localizable.xcstrings */; };
+		FEBC3158CB471E9ABDF931BB /* CodexUsageReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,6 +70,7 @@
 		08FC2FBC9E8729A5ECBF857C /* PaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneView.swift; sourceTree = "<group>"; };
 		0D29C0D2447094B07854C193 /* NewWorkspaceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewWorkspaceSheet.swift; sourceTree = "<group>"; };
 		0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevinHookInstallerTests.swift; sourceTree = "<group>"; };
+		0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageReaderTests.swift; sourceTree = "<group>"; };
 		150EEF32284061D527E51866 /* GlintTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintTheme.swift; sourceTree = "<group>"; };
 		16137B405E48DBE262A15B6D /* PaneSurfaceRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSurfaceRepresentable.swift; sourceTree = "<group>"; };
 		1E646AABA8ADCE8A2A5C6F55 /* PaneTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeView.swift; sourceTree = "<group>"; };
@@ -156,6 +158,7 @@
 				4EEF00CBEF45A9D60423A207 /* AgentKindResolutionTests.swift */,
 				6AB338782EF6F22B7B381DA8 /* CodexHomeStoreTests.swift */,
 				26141150D2DB4C0589558ECC /* CodexHookInstallerTests.swift */,
+				0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */,
 				0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */,
 				349714D49AE52D84995314FD /* MascotAssetTests.swift */,
 				EBCC04C19D745AA867D961FD /* PaneAgentKindTests.swift */,
@@ -385,6 +388,7 @@
 				81532B36FEC3039B8EAD9CB1 /* AgentKindResolutionTests.swift in Sources */,
 				C41119D04864077E5B554F59 /* CodexHomeStoreTests.swift in Sources */,
 				0FEECB27EB1ACE11E29ECCEF /* CodexHookInstallerTests.swift in Sources */,
+				FEBC3158CB471E9ABDF931BB /* CodexUsageReaderTests.swift in Sources */,
 				34997DD4A4F9B64A754FE77F /* DevinHookInstallerTests.swift in Sources */,
 				04E75EAD5165E8D96C1C5517 /* MascotAssetTests.swift in Sources */,
 				ED46CD7A6E09551A775AD3B8 /* PaneAgentKindTests.swift in Sources */,
