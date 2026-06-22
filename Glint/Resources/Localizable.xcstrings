@@ -1957,6 +1957,67 @@
         }
       }
     },
+    "Glint merges its hook entries into ~/.config/devin/config.json so Devin CLI sessions surface the same status as Claude." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 会将钩子条目合并到 ~/.config/devin/config.json，使 Devin CLI 会话能像 Claude 一样显示状态。"
+          }
+        }
+      }
+    },
+    "Hooks merged into your Devin config." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钩子已合并到你的 Devin 配置中。"
+          }
+        }
+      }
+    },
+    "Devin detected — install the reporter to show its status." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已检测到 Devin —— 安装报告器即可显示其状态。"
+          }
+        }
+      }
+    },
+    "Devin not detected on this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本机未检测到 Devin。"
+          }
+        }
+      }
+    },
+    "When Glint reopens, run `devin --continue` in any pane that was running Devin at last quit." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 重新打开时，对上次退出前在跑 Devin 的窗格自动执行 `devin --continue`。"
+          }
+        }
+      }
+    },
+    "Hooks are stored in Devin's native user config alongside your existing settings." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钩子存储在 Devin 的原生用户配置中，与你现有的设置并列。"
+          }
+        }
+      }
+    },
     "Settings…": {
       "extractionState": "stale",
       "localizations": {

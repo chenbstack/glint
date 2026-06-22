@@ -280,7 +280,7 @@ private struct WorktreePane: View {
     @State private var errorText: String?
 
     enum AgentChoice: String, CaseIterable, Identifiable {
-        case claude = "Claude Code", codex = "Codex", opencode = "OpenCode", shell = "Shell only"
+        case claude = "Claude Code", codex = "Codex", opencode = "OpenCode", devin = "Devin", shell = "Shell only"
         /// Chip / preview label. Product names stay verbatim; only "Shell only"
         /// is UI copy, so it (and only it) is routed through the string catalog.
         /// `rawValue` is a String, so `Text(choice.rawValue)` would hit the
@@ -292,6 +292,7 @@ private struct WorktreePane: View {
             case .claude: return "claude"
             case .codex: return "codex"
             case .opencode: return "opencode"
+            case .devin: return "devin"
             case .shell: return nil
             }
         }

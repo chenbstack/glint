@@ -813,6 +813,10 @@ private struct WorkspaceCard: View {
             if case .opencode = kind { return true }
             return false
         }()
+        let isDevin: Bool = {
+            if case .devin = kind { return true }
+            return false
+        }()
         return Group {
             if isClaude {
                 ClaudeMascotIcon(status: status)
@@ -820,6 +824,8 @@ private struct WorkspaceCard: View {
                 CodexMascotIcon(status: status)
             } else if isOpenCode {
                 OpenCodeMascotIcon(status: status)
+            } else if isDevin {
+                DevinMascotIcon(status: status)
             } else if let sf = kind.sfSymbol {
                 // No squircle container — a bit larger so the bare glyph
                 // holds the same visual weight as the mascots.
@@ -834,7 +840,7 @@ private struct WorkspaceCard: View {
         }
         .frame(width: 28, height: 28)
         .overlay(alignment: .bottomTrailing) {
-            if !isOpenCode {
+            if !isOpenCode && !isDevin {
                 AgentStatusDot(status: status)
                     .offset(x: 3, y: 3)
             }
@@ -847,7 +853,9 @@ private struct WorkspaceCard: View {
                         ? Color(red: 0.32, green: 0.38, blue: 1.0).opacity(0.5)
                         : isOpenCode
                             ? Color(red: 0.95, green: 0.94, blue: 0.90).opacity(0.32)
-                            : store.accent.opacity(0.5))
+                            : isDevin
+                                ? Color(red: 0.16, green: 0.43, blue: 0.81).opacity(0.5)
+                                : store.accent.opacity(0.5))
                 : .clear,
             radius: 8
         )
@@ -1213,6 +1221,18 @@ enum MascotAsset {
         case .some(.failed): return "OpenCodeFailed"
         }
     }
+
+    static func devin(for s: PaneAgentStatus?) -> String {
+        switch s {
+        case .none, .some(.idle): return "DevinIdle"
+        case .some(.thinking): return "DevinThinking"
+        case .some(.tool): return "DevinToolCall"
+        case .some(.compacting): return "DevinCompressing"
+        case .some(.needsPermission): return "DevinNeedsPermission"
+        case .some(.justCompleted): return "DevinDone"
+        case .some(.failed): return "DevinFailed"
+        }
+    }
 }
 
 /// Animated Claude mascot driven by per-status GIFs (idle / thinking /
@@ -1310,6 +1330,37 @@ private struct OpenCodeMascotIcon: View {
 
     var body: some View {
         AnimatedGIFView(assetName: MascotAsset.opencode(for: status), animates: !reduceMotion)
+            .frame(width: 34, height: 34)
+            .frame(width: 28, height: 28)
+            .scaleEffect(celebrateScale * tapScale, anchor: .bottom)
+            .onChange(of: status) { oldStatus, newStatus in
+                if newStatus == .justCompleted && oldStatus != .justCompleted {
+                    celebrateScale = 1.22
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
+                        celebrateScale = 1.0
+                    }
+                }
+            }
+            .onTapGesture {
+                tapScale = 0.85
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.5)) {
+                    tapScale = 1.0
+                }
+            }
+    }
+}
+
+/// Devin's hexagonal logo, rendered per-status as tinted static PNGs —
+/// same pattern as OpenCode. The status dot beacon handles visual state
+/// indication; the tinted variants give a subtle at-a-glance cue.
+private struct DevinMascotIcon: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let status: PaneAgentStatus?
+    @State private var celebrateScale: CGFloat = 1.0
+    @State private var tapScale: CGFloat = 1.0
+
+    var body: some View {
+        AnimatedGIFView(assetName: MascotAsset.devin(for: status), animates: !reduceMotion)
             .frame(width: 34, height: 34)
             .frame(width: 28, height: 28)
             .scaleEffect(celebrateScale * tapScale, anchor: .bottom)
