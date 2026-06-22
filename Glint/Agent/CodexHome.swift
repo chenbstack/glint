@@ -131,6 +131,27 @@ final class CodexHomeStore: ObservableObject {
     }
 }
 
+@MainActor
+enum CodexHomeRemoval {
+    /// Removing Glint's configuration must not depend on an external
+    /// `hooks.json` being readable. Return the cleanup error for UI reporting,
+    /// but always remove the non-default home from the store.
+    static func remove(
+        _ home: CodexHome,
+        from store: CodexHomeStore,
+        cleanup: (URL) throws -> Void
+    ) -> String? {
+        var cleanupError: String?
+        do {
+            try cleanup(home.resolvedURL)
+        } catch {
+            cleanupError = error.localizedDescription
+        }
+        _ = store.remove(id: home.id)
+        return cleanupError
+    }
+}
+
 private extension String {
     var nilIfBlank: String? {
         let value = trimmingCharacters(in: .whitespacesAndNewlines)

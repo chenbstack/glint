@@ -56,4 +56,20 @@ final class CodexHomeStoreTests: XCTestCase {
         XCTAssertFalse(store.remove(id: store.homes[0].id))
         XCTAssertEqual(store.homes.count, 1)
     }
+
+    func testCustomHomeIsRemovedEvenWhenHookCleanupFails() throws {
+        struct CleanupError: LocalizedError {
+            var errorDescription: String? { "Invalid hooks.json" }
+        }
+        let store = CodexHomeStore(defaults: defaults)
+        XCTAssertTrue(store.add(path: "~/broken/.codex", label: "Broken"))
+        let broken = try XCTUnwrap(store.homes.last)
+
+        let warning = CodexHomeRemoval.remove(broken, from: store) { _ in
+            throw CleanupError()
+        }
+
+        XCTAssertEqual(warning, "Invalid hooks.json")
+        XCTAssertFalse(store.homes.contains(where: { $0.id == broken.id }))
+    }
 }

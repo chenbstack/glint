@@ -1038,6 +1038,7 @@ private struct AgentsPane: View {
     @State private var newCodexHomePath = ""
     @State private var newCodexHomeLabel = ""
     @State private var codexHomeErrors: [UUID: String] = [:]
+    @State private var codexRemovalWarning: String?
 
     var body: some View {
         SettingsCard("Claude Code",
@@ -1140,6 +1141,11 @@ private struct AgentsPane: View {
                 }
                 if codexInstallFailed {
                     Text("That directory is already configured or the path is empty.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Color.orange)
+                }
+                if let codexRemovalWarning {
+                    Text(codexRemovalWarning)
                         .font(.system(size: 10.5))
                         .foregroundStyle(Color.orange)
                 }
@@ -1340,12 +1346,12 @@ private struct AgentsPane: View {
 
     private func removeHome(_ home: CodexHome) {
         guard !codexHomes.isDefault(home) else { return }
-        do {
-            try CodexHookInstaller.uninstall(from: home.resolvedURL)
-            _ = codexHomes.remove(id: home.id)
-            codexHomeErrors[home.id] = nil
-        } catch {
-            codexHomeErrors[home.id] = error.localizedDescription
+        let cleanupError = CodexHomeRemoval.remove(home, from: codexHomes) {
+            try CodexHookInstaller.uninstall(from: $0)
+        }
+        codexHomeErrors[home.id] = nil
+        codexRemovalWarning = cleanupError.map {
+            "Removed from Glint, but hook cleanup failed: \($0)"
         }
         store.codexHooksInstalled = CodexHookInstaller.isInstalled()
         usage.refreshNow()
