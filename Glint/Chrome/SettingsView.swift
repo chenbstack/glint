@@ -38,6 +38,7 @@ struct GlintSettingsView: View {
         .frame(width: 760, height: 540)
         .background(Theme.bgWindow)
         .preferredColorScheme(.dark)
+        .closeOnCmdW()
     }
 
     // MARK: - Sidebar

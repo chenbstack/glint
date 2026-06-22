@@ -783,6 +783,22 @@ private final class NoSafeAreaHostingView<Content: View>: NSHostingView<Content>
 
 // MARK: - Window controller
 
+// The app-wide ⌘W is bound to "Close Pane" (a SwiftUI menu command in GlintApp
+// whose closure fires regardless of key window — and AppDelegate.patchMainMenu
+// strips ⌘W off the system Close item so that pane-close wins). From the Review
+// window a plain ⌘W should just close this window (standard macOS key-window
+// behavior), so swallow it here before it reaches the main menu.
+private final class ReviewWindow: NSWindow {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags == .command, event.charactersIgnoringModifiers?.lowercased() == "w" {
+            performClose(nil)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
 @MainActor
 final class ReviewWindowController: NSObject, NSWindowDelegate {
     static let shared = ReviewWindowController()
@@ -812,7 +828,7 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
     }
 
     private func makeWindow() -> NSWindow {
-        let w = NSWindow(
+        let w = ReviewWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1040, height: 660),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)

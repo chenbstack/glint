@@ -55,6 +55,7 @@ struct NewWorkspaceSheet: View {
         .frame(width: 760, height: 540)
         .background(Theme.bgWindow)
         .preferredColorScheme(.dark)
+        .closeOnCmdW()
         .onAppear {
             // Clamp to an ENABLED tab: an unknown rawValue OR the disabled `.ssh`
             // (Phase 2) would otherwise land on a blank EmptyView with no nav out.

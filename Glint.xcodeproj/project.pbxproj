@@ -44,6 +44,7 @@
 		E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05F2CA2243872C8111048EF2 /* AgentBridge.swift */; };
 		ED46CD7A6E09551A775AD3B8 /* PaneAgentKindTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCC04C19D745AA867D961FD /* PaneAgentKindTests.swift */; };
 		EF3ACBA990526130228FAD0B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */; };
+		B7F3C2901E8D4A6F9C2B5E18 /* CloseOnCmdW.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E1A9D0B3F7285C6A0D3E9F1 /* CloseOnCmdW.swift */; };
 		EF937781512647E835836F83 /* ControlBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21868C7211897C87A6CAD7C3 /* ControlBridge.swift */; };
 		F6AFF715FCE5357CEB07683D /* SettingsSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */; };
 		F7ABF70CD455143BF89B89B3 /* SafeJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E2B9ADF809766CE4278047 /* SafeJSON.swift */; };
@@ -86,6 +87,7 @@
 		5A8933F67B4B6EEA3FD4E603 /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStore.swift; sourceTree = "<group>"; };
 		6860F8F626EFDB9A289FC727 /* themes.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = themes.json; sourceTree = "<group>"; };
 		6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		4E1A9D0B3F7285C6A0D3E9F1 /* CloseOnCmdW.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloseOnCmdW.swift; sourceTree = "<group>"; };
 		7039488F4C2F75498E461311 /* GitDiff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitDiff.swift; sourceTree = "<group>"; };
 		7CB74659D174004C620D538A /* GlintApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintApp.swift; sourceTree = "<group>"; };
 		81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GhosttyKit.xcframework; path = Vendor/GhosttyKit.xcframework; sourceTree = "<group>"; };
@@ -165,6 +167,7 @@
 				150EEF32284061D527E51866 /* GlintTheme.swift */,
 				0D29C0D2447094B07854C193 /* NewWorkspaceSheet.swift */,
 				6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */,
+			4E1A9D0B3F7285C6A0D3E9F1 /* CloseOnCmdW.swift */,
 				A8C269A6E9AE87961C3356DC /* SidebarView.swift */,
 				050E267AE14712D4D6633B4F /* Theme.swift */,
 				C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */,
@@ -409,6 +412,7 @@
 				F7ABF70CD455143BF89B89B3 /* SafeJSON.swift in Sources */,
 				F6AFF715FCE5357CEB07683D /* SettingsSafety.swift in Sources */,
 				EF3ACBA990526130228FAD0B /* SettingsView.swift in Sources */,
+			B7F3C2901E8D4A6F9C2B5E18 /* CloseOnCmdW.swift in Sources */,
 				CD30F5E1B78B3C46C9990FD6 /* SidebarView.swift in Sources */,
 				7FC12666816053BEB64079CB /* Theme.swift in Sources */,
 				692D1A7D490E07D796535EAA /* UpdaterController.swift in Sources */,
