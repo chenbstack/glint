@@ -457,14 +457,14 @@ enum CodexHookInstaller {
         do {
             data = try Data(contentsOf: url)
         } catch {
-            throw CodexHookInstallerError.writeFailed(error.localizedDescription)
+            throw CodexHookInstallerError.readFailed(error.localizedDescription)
         }
         guard var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw CodexHookInstallerError.invalidHooksJSON
         }
         var hooks = (root["hooks"] as? [String: Any]) ?? [:]
         var touched = false
-        for (event, bucket) in hooks {
+        for (event, bucket) in Array(hooks) {
             guard let arr = bucket as? [Any] else { continue }
             let filtered = arr.filter { entry in
                 guard let group = entry as? [String: Any],
@@ -607,6 +607,7 @@ enum CodexHookInstallerError: LocalizedError, Equatable {
     case cannotCreateHome(String)
     case invalidHooksJSON
     case invalidHookTree
+    case readFailed(String)
     case writeFailed(String)
 
     var errorDescription: String? {
@@ -615,6 +616,7 @@ enum CodexHookInstallerError: LocalizedError, Equatable {
         case .cannotCreateHome(let detail): return "Could not create the Codex Home directory: \(detail)"
         case .invalidHooksJSON: return "Invalid hooks.json. The file was not modified."
         case .invalidHookTree: return "The hook configuration cannot be encoded as JSON."
+        case .readFailed(let detail): return "Could not read hooks.json: \(detail)"
         case .writeFailed(let detail): return "Could not write hooks.json: \(detail)"
         }
     }

@@ -52,6 +52,18 @@ final class CodexHookInstallerTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: hooksURL), "not json")
     }
 
+    func testUninstallReportsReadFailure() throws {
+        let hooksURL = home.appendingPathComponent("hooks.json")
+        try FileManager.default.createDirectory(at: hooksURL, withIntermediateDirectories: false)
+
+        XCTAssertThrowsError(try CodexHookInstaller.uninstall(from: home)) { error in
+            guard case .readFailed = error as? CodexHookInstallerError else {
+                return XCTFail("Expected readFailed, got \(error)")
+            }
+            XCTAssertTrue(error.localizedDescription.hasPrefix("Could not read hooks.json:"))
+        }
+    }
+
     func testUninstallOnlyRemovesGlintHooks() throws {
         let hooksURL = home.appendingPathComponent("hooks.json")
         let existing = #"{"hooks":{"Stop":[{"matcher":"*","hooks":[{"type":"command","command":"user-hook"}]}]}}"#
