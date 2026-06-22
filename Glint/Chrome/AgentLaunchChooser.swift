@@ -8,12 +8,13 @@ import AppKit
 /// tuned to a compact Spotlight-style launcher.
 struct AgentLaunchChooser: View {
     @EnvironmentObject var store: WorkspaceStore
+    @EnvironmentObject var codexHomes: CodexHomeStore
     let intent: NewTerminalIntent
 
     @State private var selected = 0
     @FocusState private var focused: Bool
 
-    private let choices = AgentChoice.allCases
+    private var items: [AgentLaunchItem] { AgentLaunchItem.all(codexHomes: codexHomes.homes) }
 
     var body: some View {
         ZStack {
@@ -71,33 +72,51 @@ struct AgentLaunchChooser: View {
 
     private var rows: some View {
         VStack(spacing: 1) {
-            ForEach(Array(choices.enumerated()), id: \.element.id) { item in
+            ForEach(Array(items.enumerated()), id: \.element.id) { item in
                 row(item.element, index: item.offset)
             }
         }
         .padding(.horizontal, 6)
     }
 
-    private func row(_ choice: AgentChoice, index: Int) -> some View {
+    private func row(_ item: AgentLaunchItem, index: Int) -> some View {
         let on = index == selected
         return Button {
-            store.resolveAgentChooser(choice)
+            store.resolveAgentChooser(item)
         } label: {
             HStack(spacing: 11) {
-                mark(choice).frame(width: 20, height: 20)
-                Text(verbatim: choice.displayName)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Theme.text1)
+                mark(item.choice).frame(width: 20, height: 20)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Text(verbatim: item.title)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Theme.text1)
+                        if let tag = item.tag {
+                            Text(verbatim: tag)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Theme.text4)
+                        }
+                    }
+                    if let sub = item.subtitle {
+                        Text(verbatim: sub)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Theme.text4)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
                 Spacer(minLength: 8)
-                Text("\(index + 1)")
-                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                    .foregroundStyle(on ? Theme.text3 : Theme.text4)
-                    .frame(width: 17, height: 17)
-                    .background(RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(Theme.overlay(on ? 0.10 : 0.05)))
+                if index < 9 {
+                    Text("\(index + 1)")
+                        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                        .foregroundStyle(on ? Theme.text3 : Theme.text4)
+                        .frame(width: 17, height: 17)
+                        .background(RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Theme.overlay(on ? 0.10 : 0.05)))
+                }
             }
             .padding(.horizontal, 10)
-            .frame(height: 38)
+            .frame(height: item.subtitle == nil ? 38 : 46)
             .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(on ? store.accent.opacity(0.16) : Color.clear))
             .contentShape(Rectangle())
@@ -136,20 +155,22 @@ struct AgentLaunchChooser: View {
     // MARK: - Keyboard
 
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
+        let items = items
         switch press.key {
         case .upArrow:   move(-1); return .handled
         case .downArrow: move(1);  return .handled
-        case .return:    store.resolveAgentChooser(choices[selected]); return .handled
+        case .return:    store.resolveAgentChooser(items[selected]); return .handled
         case .escape:    store.resolveAgentChooser(nil); return .handled
         default:
-            if let n = Int(press.characters), (1...choices.count).contains(n) {
-                store.resolveAgentChooser(choices[n - 1]); return .handled
+            // Number shortcuts only address the first nine rows (badges stop at 9).
+            if let n = Int(press.characters), (1...min(9, items.count)).contains(n) {
+                store.resolveAgentChooser(items[n - 1]); return .handled
             }
             return .ignored
         }
     }
 
     private func move(_ delta: Int) {
-        selected = min(max(0, selected + delta), choices.count - 1)
+        selected = min(max(0, selected + delta), items.count - 1)
     }
 }

@@ -1707,11 +1707,11 @@ final class WorkspaceStore: ObservableObject {
 
     /// Resolve the chooser: nil = cancelled (no-op); otherwise run the pending
     /// action seeded with the picked agent's command (`.shell` → bare shell).
-    func resolveAgentChooser(_ choice: AgentChoice?) {
+    func resolveAgentChooser(_ item: AgentLaunchItem?) {
         guard let intent = agentChooserIntent else { return }
         agentChooserIntent = nil
-        guard let choice else { return }
-        let cmd = choice.command
+        guard let item else { return }
+        let cmd = item.command
         switch intent {
         case .tab:        newTab(agentCommand: cmd)
         case .splitRight: splitFocused(.horizontal, agentCommand: cmd)

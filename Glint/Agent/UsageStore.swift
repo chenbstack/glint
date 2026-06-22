@@ -220,7 +220,7 @@ final class UsageStore: ObservableObject {
                                 hookStatus: CodexHookInstaller.status(in: home.resolvedURL),
                                 authStatus: CodexLiveReader.authStatus(from: home.resolvedURL),
                                 quotaStatus: quota.map(CodexQuotaStatus.available)
-                                    ?? .unavailable("Quota unavailable")
+                                    ?? .unavailable(String(localized: "Quota unavailable"))
                             )
                         }
                     }

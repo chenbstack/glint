@@ -3810,13 +3810,24 @@
         }
       }
     },
-    "Codex Home stores local auth, config, sessions, and hooks. Glint only installs its own hooks and reads status; Codex continues to manage authentication and configuration.": {
+    "Codex Home stores local auth, config, sessions, and hooks. Glint only installs its own hooks and reads status; Codex continues to manage authentication and configuration. The checkbox only controls monitoring and sidebar display — unchecking a Home keeps its installed hooks; use Remove Hook to uninstall.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codex Home 存放本地认证、配置、会话和钩子。Glint 只安装自己的钩子并读取状态;认证与配置仍由 Codex 管理。"
+            "value": "Codex Home 存放本地认证、配置、会话和钩子。Glint 只安装自己的钩子并读取状态;认证与配置仍由 Codex 管理。复选框只控制监控和侧栏显示——取消勾选会保留已安装的钩子,如需卸载请用 Remove Hook。"
+          }
+        }
+      }
+    },
+    "Monitor this Home and show its usage in the sidebar. Unchecking stops monitoring but keeps any installed hooks.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "监控该 Home 并在侧栏显示其额度。取消勾选只停止监控,已安装的钩子会保留。"
           }
         }
       }
@@ -4048,6 +4059,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "未开启"
+          }
+        }
+      }
+    },
+    "Quota unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "额度不可用"
           }
         }
       }

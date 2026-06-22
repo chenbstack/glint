@@ -5,6 +5,7 @@ import AppKit
 /// Type to fuzzy-filter; ↑↓ to move selection; ⏎ to execute; ⎋ to close.
 struct CommandPalette: View {
     @EnvironmentObject var store: WorkspaceStore
+    @EnvironmentObject var codexHomes: CodexHomeStore
     @State private var query: String = ""
     @State private var selectedIndex: Int = 0
     @FocusState private var queryFocused: Bool
@@ -154,6 +155,17 @@ struct CommandPalette: View {
 
     // MARK: - Items
 
+    /// Launchable agents as (display name, command) pairs, with Codex fanned
+    /// out across enabled homes (a multi-home row reads "Codex (label)"). Shared
+    /// by the New Workspace / New Tab / Split Right launcher loops below.
+    private var agentLaunchOptions: [(name: String, command: String?)] {
+        AgentLaunchItem.all(codexHomes: codexHomes.homes).compactMap { item in
+            guard item.command != nil else { return nil }
+            let name = item.tag.map { "\(item.title) (\($0))" } ?? item.title
+            return (name, item.command)
+        }
+    }
+
     private func allItems() -> [PaletteItem] {
         var items: [PaletteItem] = []
         let actionTint = store.accent
@@ -187,12 +199,11 @@ struct CommandPalette: View {
         // Per-agent launchers, symmetric with New Tab / Split: the palette is
         // itself an agent picker, so these create the workspace directly rather
         // than popping the chooser. Product names stay verbatim.
-        for choice in AgentChoice.allCases where choice.command != nil {
-            let name = choice.rawValue
-            let cmd = choice.command
+        for opt in agentLaunchOptions {
+            let cmd = opt.command
             items.append(.action(
-                title: String(format: String(localized: "New Workspace · %@"), name),
-                subtitle: String(format: String(localized: "Open a workspace running %@"), name),
+                title: String(format: String(localized: "New Workspace · %@"), opt.name),
+                subtitle: String(format: String(localized: "Open a workspace running %@"), opt.name),
                 symbol: "plus.square",
                 shortcut: "",
                 tint: actionTint,
@@ -242,12 +253,11 @@ struct CommandPalette: View {
         // Per-agent launchers: ⌘T / ⌘D open a bare shell; these drop the new
         // tab / pane straight into an agent. Product names stay verbatim; the
         // surrounding copy localizes via the format string.
-        for choice in AgentChoice.allCases where choice.command != nil {
-            let name = choice.rawValue
-            let cmd = choice.command
+        for opt in agentLaunchOptions {
+            let cmd = opt.command
             items.append(.action(
-                title: String(format: String(localized: "New Tab · %@"), name),
-                subtitle: String(format: String(localized: "Open a tab running %@"), name),
+                title: String(format: String(localized: "New Tab · %@"), opt.name),
+                subtitle: String(format: String(localized: "Open a tab running %@"), opt.name),
                 symbol: "plus.rectangle.on.rectangle",
                 shortcut: "",
                 tint: actionTint,
@@ -274,12 +284,11 @@ struct CommandPalette: View {
             tint: actionTint,
             action: { store.splitFocused(.vertical) }
         ))
-        for choice in AgentChoice.allCases where choice.command != nil {
-            let name = choice.rawValue
-            let cmd = choice.command
+        for opt in agentLaunchOptions {
+            let cmd = opt.command
             items.append(.action(
-                title: String(format: String(localized: "Split Right · %@"), name),
-                subtitle: String(format: String(localized: "Open a pane running %@"), name),
+                title: String(format: String(localized: "Split Right · %@"), opt.name),
+                subtitle: String(format: String(localized: "Open a pane running %@"), opt.name),
                 symbol: "rectangle.split.2x1",
                 shortcut: "",
                 tint: actionTint,

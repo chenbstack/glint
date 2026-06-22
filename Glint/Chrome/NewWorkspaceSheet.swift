@@ -23,6 +23,7 @@ struct NewWorkspaceSheet: View {
 
 private struct WorktreePane: View {
     @EnvironmentObject var store: WorkspaceStore
+    @EnvironmentObject var codexHomes: CodexHomeStore
 
     @State private var repo = ""
     @State private var repoRoot: String?
@@ -35,7 +36,7 @@ private struct WorktreePane: View {
     @State private var branchInvalid = false          // syntactically illegal git ref name
     @State private var baseDirty = 0
     @State private var carryDirty = false   // bring base's uncommitted changes along
-    @State private var agent: AgentChoice = .claude
+    @State private var agentID: String = AgentChoice.claude.id
     @State private var creating = false
     @State private var errorText: String?
     @State private var showAdvanced = false
@@ -167,7 +168,8 @@ private struct WorktreePane: View {
     }
 
     private var agentChips: some View {
-        AgentChips(selection: $agent, accent: store.accent)
+        AgentChips(items: AgentLaunchItem.all(codexHomes: codexHomes.homes),
+                   selection: $agentID, accent: store.accent)
     }
 
     /// Base has uncommitted work — hand the call to the user instead of silently
@@ -299,7 +301,8 @@ private struct WorktreePane: View {
         let b = branch.trimmingCharacters(in: .whitespaces)
         let path = worktreePath
         let base = baseBranch
-        let cmd = agent.command
+        let items = AgentLaunchItem.all(codexHomes: codexHomes.homes)
+        let cmd = (items.first { $0.id == agentID } ?? items.first)?.command
         let carry = carryDirty
         Task {
             do {
@@ -420,29 +423,69 @@ private struct LabeledField: View {
 }
 
 /// "Open with" row of agent chips — picks which agent (if any) the new
-/// worktree's pane starts running.
+/// worktree's pane starts running. Codex fans out into one chip per enabled
+/// Codex Home (see `AgentLaunchItem`), so the chips wrap onto multiple lines.
 private struct AgentChips: View {
-    @Binding var selection: AgentChoice
+    let items: [AgentLaunchItem]
+    @Binding var selection: String   // AgentLaunchItem.id
     let accent: Color
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             FieldLabel("Open with")
-            HStack(spacing: 7) {
-                ForEach(AgentChoice.allCases) { choice in
-                    let on = choice == selection
-                    Button { selection = choice } label: {
-                        Text(verbatim: choice.displayName)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(on ? Theme.text1 : Theme.text2)
-                            .padding(.horizontal, 11).padding(.vertical, 7)
-                            .background(RoundedRectangle(cornerRadius: 8)
-                                .fill(on ? accent.opacity(0.18) : Theme.overlay(0.04)))
-                            .overlay(RoundedRectangle(cornerRadius: 8)
-                                .stroke(on ? accent.opacity(0.4) : Theme.border, lineWidth: 1))
+            FlowLayout(spacing: 7, lineSpacing: 7) {
+                ForEach(items) { item in
+                    let on = item.id == selection
+                    Button { selection = item.id } label: {
+                        HStack(spacing: 5) {
+                            Text(verbatim: item.title)
+                                .foregroundStyle(on ? Theme.text1 : Theme.text2)
+                            if let tag = item.tag {
+                                Text(verbatim: tag).foregroundStyle(Theme.text4)
+                            }
+                        }
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 11).padding(.vertical, 7)
+                        .background(RoundedRectangle(cornerRadius: 8)
+                            .fill(on ? accent.opacity(0.18) : Theme.overlay(0.04)))
+                        .overlay(RoundedRectangle(cornerRadius: 8)
+                            .stroke(on ? accent.opacity(0.4) : Theme.border, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
             }
+        }
+    }
+}
+
+/// Minimal wrapping row layout — lays subviews left-to-right, wrapping to a new
+/// line when the next would overflow the proposed width. Used by `AgentChips`
+/// so a growing list of Codex Homes flows onto multiple lines.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 7
+    var lineSpacing: CGFloat = 7
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0, widest: CGFloat = 0
+        for v in subviews {
+            let s = v.sizeThatFits(.unspecified)
+            if x > 0, x + s.width > maxWidth { x = 0; y += lineHeight + lineSpacing; lineHeight = 0 }
+            x += s.width + spacing
+            lineHeight = max(lineHeight, s.height)
+            widest = max(widest, x - spacing)
+        }
+        return CGSize(width: min(widest, maxWidth), height: y + lineHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0
+        for v in subviews {
+            let s = v.sizeThatFits(.unspecified)
+            if x > 0, x + s.width > bounds.width { x = 0; y += lineHeight + lineSpacing; lineHeight = 0 }
+            v.place(at: CGPoint(x: bounds.minX + x, y: bounds.minY + y),
+                    anchor: .topLeading, proposal: ProposedViewSize(s))
+            x += s.width + spacing
+            lineHeight = max(lineHeight, s.height)
         }
     }
 }

@@ -1112,7 +1112,7 @@ private struct AgentsPane: View {
         }
 
         SettingsCard("Codex Home Directories",
-                     footer: "Codex Home stores local auth, config, sessions, and hooks. Glint only installs its own hooks and reads status; Codex continues to manage authentication and configuration.") {
+                     footer: "Codex Home stores local auth, config, sessions, and hooks. Glint only installs its own hooks and reads status; Codex continues to manage authentication and configuration. The checkbox only controls monitoring and sidebar display — unchecking a Home keeps its installed hooks; use Remove Hook to uninstall.") {
             ForEach(Array(codexHomes.homes.enumerated()), id: \.element.id) { index, home in
                 CodexHomeSettingsRow(
                     home: home,
@@ -1396,6 +1396,7 @@ private struct CodexHomeSettingsRow: View {
                 Toggle("", isOn: Binding(get: { home.isEnabled }, set: onToggle))
                     .toggleStyle(.checkbox)
                     .labelsHidden()
+                    .help("Monitor this Home and show its usage in the sidebar. Unchecking stops monitoring but keeps any installed hooks.")
                 VStack(alignment: .leading, spacing: 2) {
                     Text(home.label ?? home.resolvedURL.lastPathComponent)
                         .font(.system(size: 12.5, weight: .semibold))
