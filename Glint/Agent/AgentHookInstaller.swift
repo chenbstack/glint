@@ -319,8 +319,10 @@ enum AgentHookInstaller {
         }
     }
 
-    /// Pure POSIX sh — runs inside the pty so `$GLINT_PANE_ID` resolves.
-    /// Stays cheap (single send, swallows stdin).
+    /// Pure POSIX sh. Claude and other agents inherit the pane route. Codex may
+    /// execute hooks in a shared app-server instead, so its events always use
+    /// the stable session identity from stdin and let Glint bind that session
+    /// to the pane that submitted the prompt.
     ///
     /// Uses `/usr/bin/nc` (absolute) not bare `nc`: Homebrew's GNU netcat
     /// (`/opt/homebrew/bin/nc`, netcat 0.7.1) shadows it and rejects `-U`
@@ -333,19 +335,50 @@ enum AgentHookInstaller {
     /// existing Claude installs keep working without a script rewrite.
     static let scriptBody: String = """
     #!/bin/sh
-    # Glint CLI-agent hook reporter. Argv[1] = hook event, argv[2] = agent kind.
-    [ -z "$GLINT_PANE_ID" ] && exit 0
-    [ -z "$GLINT_AGENT_SOCK" ] && exit 0
-    [ ! -S "$GLINT_AGENT_SOCK" ] && exit 0
-
+    # Glint CLI-agent hook reporter. argv: event, agent kind.
     HOOK="${1:-Unknown}"
     AGENT="${2:-claude}"
-    # Drain stdin (claude/codex pass the hook payload there). We ignore it for
-    # now — only the hook name + agent are needed to drive pane state.
-    cat >/dev/null 2>&1
+    PANE="${GLINT_PANE_ID:-}"
+    SOCK="${GLINT_AGENT_SOCK:-}"
 
-    printf '{"pane":"%s","hook":"%s","agent":"%s"}\\n' "$GLINT_PANE_ID" "$HOOK" "$AGENT" \\
-      | /usr/bin/nc -U -w 1 "$GLINT_AGENT_SOCK" >/dev/null 2>&1 || true
+    if [ "$AGENT" != "codex" ] && [ -n "$PANE" ] && [ -n "$SOCK" ]; then
+      cat >/dev/null 2>&1
+      [ ! -S "$SOCK" ] && exit 0
+      printf '{"pane":"%s","hook":"%s","agent":"%s"}\\n' "$PANE" "$HOOK" "$AGENT" \\
+        | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
+      exit 0
+    fi
+
+    # Codex's shared app-server lacks GLINT_* variables. Keep the configured
+    # hook command identical for every pane (so Codex can trust it once), and
+    # forward only routing metadata from the hook payload.
+    [ "$AGENT" != "codex" ] && { cat >/dev/null 2>&1; exit 0; }
+    umask 077
+    TMP=$(/usr/bin/mktemp "${TMPDIR:-/tmp}/glint-hook.XXXXXX") || { cat >/dev/null 2>&1; exit 0; }
+    trap '/bin/rm -f "$TMP"' EXIT HUP INT TERM
+    cat >"$TMP"
+    SESSION=$(/usr/bin/plutil -extract session_id raw -o - "$TMP" 2>/dev/null || true)
+    CWD=$(/usr/bin/plutil -extract cwd raw -o - "$TMP" 2>/dev/null || true)
+    /bin/rm -f "$TMP"
+    trap - EXIT HUP INT TERM
+    [ -z "$SESSION" ] && exit 0
+    SESSION_B64=$(printf '%s' "$SESSION" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
+    CWD_B64=$(printf '%s' "$CWD" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
+
+    send_codex_event() {
+      TARGET_SOCK="$1"
+      [ ! -S "$TARGET_SOCK" ] && return 0
+      printf '{"hook":"%s","agent":"codex","session_b64":"%s","cwd_b64":"%s"}\\n' \\
+        "$HOOK" "$SESSION_B64" "$CWD_B64" \\
+        | /usr/bin/nc -U -w 1 "$TARGET_SOCK" >/dev/null 2>&1 || true
+    }
+
+    if [ -n "$SOCK" ] && [ -S "$SOCK" ]; then
+      send_codex_event "$SOCK"
+    else
+      send_codex_event "$HOME/.glint/run/agent.sock"
+      send_codex_event "$HOME/.glint/run/agent-debug.sock"
+    fi
     exit 0
     """
 
@@ -363,9 +396,9 @@ enum AgentHookInstaller {
 ///       }
 ///     }
 ///
-/// Codex passes the entire hook payload on stdin, same as Claude — the
-/// shared `glint-report.sh` swallows it and only forwards the event name
-/// plus the agent kind ("codex") to Glint's local socket.
+/// Codex passes the entire hook payload on stdin. The shared reporter extracts
+/// only session/cwd routing metadata and forwards it with the event name to
+/// Glint's local socket.
 enum CodexHookInstaller {
     /// Events Glint reacts to. Codex has no Notification event, but it does
     /// expose tool boundaries; PreToolUse is important for clearing a pending
