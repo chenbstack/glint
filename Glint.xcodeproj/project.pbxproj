@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		04E75EAD5165E8D96C1C5517 /* MascotAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 349714D49AE52D84995314FD /* MascotAssetTests.swift */; };
 		07817DC6A98F8ED2E236CFA1 /* CodexHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E3B385162995D0F1F5B72D /* CodexHome.swift */; };
+		0FEECB27EB1ACE11E29ECCEF /* CodexHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26141150D2DB4C0589558ECC /* CodexHookInstallerTests.swift */; };
 		1115F230E14FBE3C1FC754A2 /* GhosttySurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E298AD81B1615CBBFD69F48A /* GhosttySurfaceView.swift */; };
 		11AB712CD3F25FE8A034F205 /* GitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39F54835E4A44EC88236EFBE /* GitService.swift */; };
 		164C6F51683CE7942393E816 /* GitDiff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7039488F4C2F75498E461311 /* GitDiff.swift */; };
@@ -74,6 +75,7 @@
 		21868C7211897C87A6CAD7C3 /* ControlBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlBridge.swift; sourceTree = "<group>"; };
 		235E2D958A2244483CAA0812 /* CommandPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPalette.swift; sourceTree = "<group>"; };
 		25DADCEBA9C483C729B69388 /* Glint.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Glint.entitlements; sourceTree = "<group>"; };
+		26141150D2DB4C0589558ECC /* CodexHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHookInstallerTests.swift; sourceTree = "<group>"; };
 		265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHookInstaller.swift; sourceTree = "<group>"; };
 		3023490E670A10EC38870B12 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		349714D49AE52D84995314FD /* MascotAssetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotAssetTests.swift; sourceTree = "<group>"; };
@@ -153,6 +155,7 @@
 			children = (
 				4EEF00CBEF45A9D60423A207 /* AgentKindResolutionTests.swift */,
 				6AB338782EF6F22B7B381DA8 /* CodexHomeStoreTests.swift */,
+				26141150D2DB4C0589558ECC /* CodexHookInstallerTests.swift */,
 				0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */,
 				349714D49AE52D84995314FD /* MascotAssetTests.swift */,
 				EBCC04C19D745AA867D961FD /* PaneAgentKindTests.swift */,
@@ -381,6 +384,7 @@
 			files = (
 				81532B36FEC3039B8EAD9CB1 /* AgentKindResolutionTests.swift in Sources */,
 				C41119D04864077E5B554F59 /* CodexHomeStoreTests.swift in Sources */,
+				0FEECB27EB1ACE11E29ECCEF /* CodexHookInstallerTests.swift in Sources */,
 				34997DD4A4F9B64A754FE77F /* DevinHookInstallerTests.swift in Sources */,
 				04E75EAD5165E8D96C1C5517 /* MascotAssetTests.swift in Sources */,
 				ED46CD7A6E09551A775AD3B8 /* PaneAgentKindTests.swift in Sources */,
