@@ -66,14 +66,30 @@ enum Persistence {
         do {
             return try JSONDecoder().decode(PersistedState.self, from: data)
         } catch {
-            // A single undecodable pane entry would otherwise quarantine the
-            // whole file and lose every workspace. PaneID isn't a String/Int
-            // key, so [PaneID: Pane] serializes as a flat alternating
-            // [key, value, ...] array; stripBadPanes drops just the bad pair.
-            if let repaired = Self.stripBadPanes(from: data),
+            // Progressive recovery before quarantining. Two stages, each
+            // feeding the next so a file with mixed damage still recovers the
+            // good workspaces:
+            //   1. stripBadPanes — drops a single undecodable pane entry.
+            //      PaneID isn't a String/Int key, so [PaneID: Pane] serializes
+            //      as a flat alternating [key, value, ...] array; we drop just
+            //      the bad pair, keeping the workspace.
+            //   2. stripBadWorkspaces — drops a whole undecodable workspace
+            //      (corruption in a workspace-level field like tabs/source/
+            //      accentHex, not a pane), keeping the rest.
+            let paneFixed = Self.stripBadPanes(from: data) ?? data
+            let repaired = Self.stripBadWorkspaces(from: paneFixed) ?? paneFixed
+            if repaired != data,
                let state = try? JSONDecoder().decode(PersistedState.self, from: repaired) {
-                NSLog("[glint] decoded \(fileName) after stripping undecodable pane(s); persisting the repaired copy")
-                try? repaired.write(to: url, options: [.atomic])
+                NSLog("[glint] decoded \(fileName) after stripping undecodable pane(s)/workspace(s); persisting the repaired copy")
+                do {
+                    try repaired.write(to: url, options: [.atomic])
+                } catch {
+                    // Couldn't persist the repair (disk full/permissions).
+                    // Guard the original so the next autosave doesn't
+                    // overwrite the only copy with the stripped state.
+                    corruptUnmovablePath = url.path
+                    NSLog("[glint] couldn't persist repaired \(fileName); refusing to overwrite — original kept at \(url.path)")
+                }
                 return state
             }
 
@@ -119,7 +135,7 @@ enum Persistence {
     /// nothing changed or the structure is unrecognizable (so the caller only
     /// retries when there's something to retry with). Lets one bad pane cost
     /// only that pane instead of the whole file.
-    private static func stripBadPanes(from data: Data) -> Data? {
+    static func stripBadPanes(from data: Data) -> Data? {
         guard var root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               var workspaces = root["workspaces"] as? [[String: Any]] else { return nil }
         let pdecoder = JSONDecoder()
@@ -145,6 +161,35 @@ enum Persistence {
         }
         guard changed else { return nil }
         root["workspaces"] = workspaces
+        return SafeJSON.data(root)
+    }
+
+    /// Drop any top-level workspace that won't decode, keeping the rest.
+    /// Runs after stripBadPanes, so by the time this fires the damage is in a
+    /// workspace-level field (tabs, source, accentHex, …) rather than a pane —
+    /// letting one bad workspace cost only that workspace instead of the whole
+    /// file. Returns nil if nothing was dropped, if every workspace is bad
+    /// (abstaining lets the caller fall back to a fresh state and preserve the
+    /// original on disk), or if the structure is unrecognizable.
+    static func stripBadWorkspaces(from data: Data) -> Data? {
+        guard var root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let workspaces = root["workspaces"] as? [Any] else { return nil }
+        let wdecoder = JSONDecoder()
+        var kept: [Any] = []
+        var dropped = 0
+        for ws in workspaces {
+            // SafeJSON, not bare data(withJSONObject:): a stray non-JSON leaf
+            // or non-finite number throws an NSException (uncatchable by try?).
+            let blob = SafeJSON.data(ws) ?? Data()
+            if (try? wdecoder.decode(Workspace.self, from: blob)) != nil {
+                kept.append(ws)
+            } else {
+                dropped += 1
+            }
+        }
+        guard dropped > 0, !kept.isEmpty else { return nil }
+        root["workspaces"] = kept
+        NSLog("[glint] \(fileName): dropping \(dropped) undecodable workspace(s), keeping \(kept.count)")
         return SafeJSON.data(root)
     }
 }
