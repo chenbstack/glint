@@ -5,7 +5,7 @@ import IOKit
 
 /// One agent's rate-limit snapshot. Percentages are 0–100 (fraction of the
 /// window already consumed); `nil` fields mean "not reported by this source".
-struct AgentQuota: Equatable, Codable {
+struct AgentQuota: Hashable, Codable {
     /// Rolling session window (Codex `primary`, ~5h). 0–100.
     var sessionPercent: Double
     /// Longer rolling window (Codex `secondary`, ~7d). nil when unknown.
@@ -45,6 +45,50 @@ struct AgentQuota: Equatable, Codable {
     }
 }
 
+struct CodexSidebarQuota: Identifiable, Hashable {
+    let id: UUID
+    let name: String
+    let quota: AgentQuota
+}
+
+enum CodexQuotaPresentation {
+    static func sidebarItems(
+        from statuses: [CodexHomeStatus],
+        fallback: AgentQuota?,
+        hasEnabledHomes: Bool = true
+    ) -> [CodexSidebarQuota] {
+        let items = statuses.compactMap { status -> CodexSidebarQuota? in
+            guard case .available(let quota) = status.quotaStatus,
+                  let quota = quota.sanitized() else { return nil }
+            return CodexSidebarQuota(
+                id: status.id,
+                name: status.home.label ?? status.resolvedURL.lastPathComponent,
+                quota: quota
+            )
+        }
+        if !items.isEmpty { return items }
+        guard hasEnabledHomes, let fallback = fallback?.sanitized() else { return [] }
+        return [CodexSidebarQuota(id: CodexHome.default.id, name: "Codex", quota: fallback)]
+    }
+}
+
+struct CodexRefreshCoordinator {
+    private(set) var generation = 0
+
+    mutating func begin() -> Int {
+        generation += 1
+        return generation
+    }
+
+    mutating func invalidate() {
+        generation += 1
+    }
+
+    func accepts(_ candidate: Int) -> Bool {
+        candidate == generation
+    }
+}
+
 /// Polls per-agent usage/rate-limit data and republishes it for the sidebar.
 ///
 /// Data sources are asymmetric on purpose:
@@ -72,6 +116,15 @@ struct AgentQuota: Equatable, Codable {
 final class UsageStore: ObservableObject {
     @Published private(set) var claude: AgentQuota?
     @Published private(set) var codex: AgentQuota?
+    @Published private(set) var codexHomeStatuses: [CodexHomeStatus] = []
+
+    var codexSidebarQuotas: [CodexSidebarQuota] {
+        CodexQuotaPresentation.sidebarItems(
+            from: codexHomeStatuses,
+            fallback: codex,
+            hasEnabledHomes: Self.configuredCodexHomes().contains(where: \.isEnabled)
+        )
+    }
 
     /// Per-agent switches, persisted, default off — opt-in, since Claude's
     /// poll needs login-keychain access (a system prompt on first read).
@@ -88,7 +141,12 @@ final class UsageStore: ObservableObject {
         didSet {
             guard codexEnabled != oldValue else { return }
             UserDefaults.standard.set(codexEnabled, forKey: Self.codexKey)
-            if !codexEnabled { codex = nil; Self.saveQuota(nil, agent: .codex) }
+            if !codexEnabled {
+                codexRefreshCoordinator.invalidate()
+                codex = nil
+                codexHomeStatuses = []
+                Self.saveQuota(nil, agent: .codex)
+            }
             syncTimer()
             if codexEnabled { refreshNow() }
         }
@@ -97,6 +155,7 @@ final class UsageStore: ObservableObject {
     private static let claudeKey = "glint.showClaudeUsage"
     private static let codexKey = "glint.showCodexUsage"
     private var timer: Timer?
+    private var codexRefreshCoordinator = CodexRefreshCoordinator()
     /// Refresh cadence. Rate-limit windows move on the order of minutes, so a
     /// minute of staleness is invisible and keeps disk/network churn trivial.
     private let interval: TimeInterval = 60
@@ -135,9 +194,45 @@ final class UsageStore: ObservableObject {
     /// Refresh whichever agents are currently enabled and publish results.
     func refreshNow() {
         if codexEnabled {
+            let generation = codexRefreshCoordinator.begin()
             Task { [weak self] in
-                let codex = await CodexUsageReader.readPreferLive()
-                await MainActor.run { self?.apply(codex, to: .codex) }
+                let homes = Self.configuredCodexHomes().filter(\.isEnabled)
+                await MainActor.run {
+                    guard let self,
+                          self.codexRefreshCoordinator.accepts(generation) else { return }
+                    self.codexHomeStatuses = homes.map {
+                        CodexHomeStatus(
+                            home: $0,
+                            resolvedURL: $0.resolvedURL,
+                            hookStatus: CodexHookInstaller.status(in: $0.resolvedURL),
+                            authStatus: CodexLiveReader.authStatus(from: $0.resolvedURL),
+                            quotaStatus: .loading
+                        )
+                    }
+                }
+                let statuses = await withTaskGroup(of: CodexHomeStatus.self) { group in
+                    for home in homes {
+                        group.addTask {
+                            let quota = await CodexUsageReader.readPreferLive(from: home.resolvedURL)
+                            return CodexHomeStatus(
+                                home: home,
+                                resolvedURL: home.resolvedURL,
+                                hookStatus: CodexHookInstaller.status(in: home.resolvedURL),
+                                authStatus: CodexLiveReader.authStatus(from: home.resolvedURL),
+                                quotaStatus: quota.map(CodexQuotaStatus.available)
+                                    ?? .unavailable("Quota unavailable")
+                            )
+                        }
+                    }
+                    var byID: [UUID: CodexHomeStatus] = [:]
+                    for await status in group { byID[status.id] = status }
+                    return homes.compactMap { byID[$0.id] }
+                }
+                await MainActor.run {
+                    guard let self,
+                          self.codexRefreshCoordinator.accepts(generation) else { return }
+                    self.applyCodex(statuses)
+                }
             }
         }
         if claudeEnabled {
@@ -148,6 +243,29 @@ final class UsageStore: ObservableObject {
                 }
             }
         }
+    }
+
+    private func applyCodex(_ statuses: [CodexHomeStatus]) {
+        guard codexEnabled else { return }
+        codexHomeStatuses = statuses
+        guard !statuses.isEmpty else {
+            codex = nil
+            Self.saveQuota(nil, agent: .codex)
+            return
+        }
+        let quota = statuses.lazy.compactMap { status -> AgentQuota? in
+            guard case .available(let quota) = status.quotaStatus else { return nil }
+            return quota
+        }.first
+        apply(quota, to: .codex)
+    }
+
+    nonisolated private static func configuredCodexHomes() -> [CodexHome] {
+        guard let data = UserDefaults.standard.data(forKey: CodexHomeStore.storageKey),
+              let homes = try? JSONDecoder().decode([CodexHome].self, from: data),
+              !homes.isEmpty else { return [.default] }
+        var seen = Set<URL>()
+        return homes.filter { seen.insert($0.resolvedURL).inserted }
     }
 
     /// Publish and persist a fresh snapshot. A `nil` result (transient network
@@ -241,14 +359,13 @@ enum CodexUsageReader {
     /// active session, ChatGPT login only); fall back to the on-disk session
     /// snapshot on any failure or in API-key mode. The disk read is bounced off
     /// the main actor since it touches the filesystem.
-    static func readPreferLive() async -> AgentQuota? {
-        if let live = await CodexLiveReader.read() { return live }
-        return await Task.detached(priority: .utility) { read() }.value
+    static func readPreferLive(from codexHome: URL = CodexHome.default.resolvedURL) async -> AgentQuota? {
+        if let live = await CodexLiveReader.read(from: codexHome) { return live }
+        return await Task.detached(priority: .utility) { read(from: codexHome) }.value
     }
 
-    static func read() -> AgentQuota? {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let sessions = home.appendingPathComponent(".codex/sessions", isDirectory: true)
+    static func read(from codexHome: URL = CodexHome.default.resolvedURL) -> AgentQuota? {
+        let sessions = codexHome.appendingPathComponent("sessions", isDirectory: true)
         let files = recentRolloutFiles(under: sessions, limit: 6)
         // Walk newest-first; the first file that yields a rate_limits line wins
         // (an idle older session would only carry staler numbers).
@@ -364,8 +481,8 @@ enum CodexLiveReader {
         let rate_limit: RateLimit?
     }
 
-    static func read() async -> AgentQuota? {
-        guard let (token, accountId) = loadAuth() else { return nil }
+    static func read(from codexHome: URL = CodexHome.default.resolvedURL) async -> AgentQuota? {
+        guard let (token, accountId) = loadAuth(from: codexHome) else { return nil }
         var req = URLRequest(url: endpoint)
         req.httpMethod = "GET"
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -380,9 +497,18 @@ enum CodexLiveReader {
     /// (access token, account id) when in ChatGPT-OAuth mode. The access token
     /// is owned and rotated by Codex; we only read it. An empty/absent token
     /// (API-key login) yields `nil` so the caller uses the disk fallback.
-    private static func loadAuth() -> (String, String?)? {
-        let path = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex/auth.json")
+    static func authStatus(from codexHome: URL) -> CodexAuthStatus {
+        let path = codexHome.appendingPathComponent("auth.json")
+        guard FileManager.default.fileExists(atPath: path.path) else { return .missing }
+        guard let data = try? Data(contentsOf: path),
+              (try? JSONDecoder().decode(Auth.self, from: data)) != nil else {
+            return .invalid("Invalid auth.json")
+        }
+        return .found
+    }
+
+    private static func loadAuth(from codexHome: URL) -> (String, String?)? {
+        let path = codexHome.appendingPathComponent("auth.json")
         guard let data = try? Data(contentsOf: path),
               let auth = try? JSONDecoder().decode(Auth.self, from: data),
               let token = auth.tokens?.access_token, !token.isEmpty else { return nil }

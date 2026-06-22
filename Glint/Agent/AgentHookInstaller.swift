@@ -382,8 +382,11 @@ enum CodexHookInstaller {
     ]
 
     static func isInstalled() -> Bool {
-        let url = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex/hooks.json")
+        configuredHomes().contains { isInstalled(in: $0.resolvedURL) }
+    }
+
+    static func isInstalled(in codexHome: URL) -> Bool {
+        let url = codexHome.appendingPathComponent("hooks.json")
         guard let data = try? Data(contentsOf: url),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let hooks = root["hooks"] as? [String: Any] else {
@@ -402,6 +405,16 @@ enum CodexHookInstaller {
         return false
     }
 
+    static func status(in codexHome: URL) -> CodexHookStatus {
+        let url = codexHome.appendingPathComponent("hooks.json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return .notInstalled }
+        guard let data = try? Data(contentsOf: url),
+              (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) != nil else {
+            return .error("Invalid hooks.json")
+        }
+        return isInstalled(in: codexHome) ? .installed : .notInstalled
+    }
+
     /// Whether the Codex CLI itself looks installed on this Mac.
     static func isAgentPresent() -> Bool {
         AgentPresence.directoryExists(".codex")
@@ -410,58 +423,86 @@ enum CodexHookInstaller {
 
     static func installIfNeeded(socketPath: String) {
         guard let scriptPath = AgentHookInstaller.ensureReporterScript() else { return }
-        mergeCodexHooks(scriptPath: scriptPath)
+        for home in configuredHomes().filter(\.isEnabled) {
+            do {
+                try mergeCodexHooks(scriptPath: scriptPath, codexHome: home.resolvedURL)
+            } catch {
+                NSLog("[glint] codex hook install failed for \(home.resolvedURL.path): \(error)")
+            }
+        }
         _ = socketPath
+    }
+
+    static func install(in codexHome: URL) throws {
+        guard let scriptPath = AgentHookInstaller.ensureReporterScript() else {
+            throw CodexHookInstallerError.reporterUnavailable
+        }
+        try mergeCodexHooks(scriptPath: scriptPath, codexHome: codexHome)
     }
 
     /// Remove Glint's entries from `~/.codex/hooks.json`. The reporter script
     /// itself is shared with Claude, so we only delete it when neither agent
     /// still references it.
     static func uninstall() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let url = home.appendingPathComponent(".codex/hooks.json")
-        if let data = try? Data(contentsOf: url),
-           var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            var hooks = (root["hooks"] as? [String: Any]) ?? [:]
-            var touched = false
-            for (event, bucket) in hooks {
-                guard let arr = bucket as? [Any] else { continue }
-                let filtered = arr.filter { entry in
-                    guard let group = entry as? [String: Any],
-                          let inner = group["hooks"] as? [[String: Any]] else { return true }
-                    return !inner.contains { ($0["command"] as? String)?.contains("glint-report.sh") == true }
-                }
-                if filtered.count != arr.count {
-                    touched = true
-                    if filtered.isEmpty {
-                        hooks.removeValue(forKey: event)
-                    } else {
-                        hooks[event] = filtered
-                    }
-                }
+        for home in configuredHomes() {
+            try? uninstall(from: home.resolvedURL)
+        }
+        removeReporterIfUnused()
+    }
+
+    static func uninstall(from codexHome: URL) throws {
+        let url = codexHome.appendingPathComponent("hooks.json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            throw CodexHookInstallerError.readFailed(error.localizedDescription)
+        }
+        guard var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw CodexHookInstallerError.invalidHooksJSON
+        }
+        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+        var touched = false
+        for (event, bucket) in Array(hooks) {
+            guard let arr = bucket as? [Any] else { continue }
+            let filtered = arr.filter { entry in
+                guard let group = entry as? [String: Any],
+                      let inner = group["hooks"] as? [[String: Any]] else { return true }
+                return !inner.contains { ($0["command"] as? String)?.contains("glint-report.sh") == true }
             }
-            if touched {
-                if hooks.isEmpty {
-                    root.removeValue(forKey: "hooks")
+            if filtered.count != arr.count {
+                touched = true
+                if filtered.isEmpty {
+                    hooks.removeValue(forKey: event)
                 } else {
-                    root["hooks"] = hooks
+                    hooks[event] = filtered
                 }
-                if root.isEmpty {
-                    // Whole file was just our hooks → remove it cleanly.
-                    try? FileManager.default.removeItem(at: url)
-                } else if let out = SafeJSON.data(
-                    root,
-                    options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-                ) {
-                    let mode = posixPermissions(atPath: url.path)
-                    try? out.write(to: url, options: [.atomic])
-                    setPosixPermissions(mode, atPath: url.path)
-                }
-                NSLog("[glint] codex hooks removed from \(url.path)")
             }
         }
-        // Only nuke the shared reporter if no other installed agent still
-        // references it — Claude, Codex, and Devin all share the same script.
+        if touched {
+            if hooks.isEmpty {
+                root.removeValue(forKey: "hooks")
+            } else {
+                root["hooks"] = hooks
+            }
+            if root.isEmpty {
+                // Whole file was just our hooks → remove it cleanly.
+                try FileManager.default.removeItem(at: url)
+            } else if let out = SafeJSON.data(
+                root,
+                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            ) {
+                let mode = posixPermissions(atPath: url.path)
+                try out.write(to: url, options: [.atomic])
+                setPosixPermissions(mode, atPath: url.path)
+            }
+            NSLog("[glint] codex hooks removed from \(url.path)")
+        }
+    }
+
+    private static func removeReporterIfUnused() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
         if !AgentHookInstaller.isInstalled() && !CodexHookInstaller.isInstalled()
             && !DevinHookInstaller.isInstalled() {
             let script = home.appendingPathComponent(".glint/hooks/glint-report.sh")
@@ -469,15 +510,17 @@ enum CodexHookInstaller {
         }
     }
 
-    private static func mergeCodexHooks(scriptPath: String) {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let codexDir = home.appendingPathComponent(".codex", isDirectory: true)
+    static func mergeCodexHooks(scriptPath: String, codexHome: URL) throws {
+        let codexDir = codexHome.standardizedFileURL
         let url = codexDir.appendingPathComponent("hooks.json")
         do {
-            try FileManager.default.createDirectory(at: codexDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: codexDir,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
         } catch {
-            NSLog("[glint] couldn't create ~/.codex: \(error)")
-            return
+            throw CodexHookInstallerError.cannotCreateHome(error.localizedDescription)
         }
 
         var root: [String: Any] = [:]
@@ -487,8 +530,7 @@ enum CodexHookInstaller {
                 let backup = url.appendingPathExtension("glint-backup")
                 try? FileManager.default.copyItem(at: url, to: backup)
                 setPosixPermissions(posixPermissions(atPath: url.path), atPath: backup.path)
-                NSLog("[glint] ~/.codex/hooks.json isn't a JSON object; backed up to \(backup.lastPathComponent), skipping merge")
-                return
+                throw CodexHookInstallerError.invalidHooksJSON
             }
             root = dict
         }
@@ -522,8 +564,7 @@ enum CodexHookInstaller {
             root,
             options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         ) else {
-            NSLog("[glint] ~/.codex/hooks.json: hook tree not serializable, skipping write")
-            return
+            throw CodexHookInstallerError.invalidHookTree
         }
         do {
             // Same mode-preservation dance as the Claude merge above.
@@ -538,8 +579,16 @@ enum CodexHookInstaller {
             setPosixPermissions(mode, atPath: url.path)
             NSLog("[glint] codex hooks merged into \(url.path)")
         } catch {
-            NSLog("[glint] writing ~/.codex/hooks.json failed: \(error)")
+            throw CodexHookInstallerError.writeFailed(error.localizedDescription)
         }
+    }
+
+    private static func configuredHomes(defaults: UserDefaults = .standard) -> [CodexHome] {
+        guard let data = defaults.data(forKey: CodexHomeStore.storageKey),
+              let homes = try? JSONDecoder().decode([CodexHome].self, from: data),
+              !homes.isEmpty else { return [.default] }
+        var seen = Set<URL>()
+        return homes.filter { seen.insert($0.resolvedURL).inserted }
     }
 
     private static func equalsJSON(_ a: Any?, _ b: Any) -> Bool {
@@ -550,6 +599,26 @@ enum CodexHookInstaller {
             return false
         }
         return da == db
+    }
+}
+
+enum CodexHookInstallerError: LocalizedError, Equatable {
+    case reporterUnavailable
+    case cannotCreateHome(String)
+    case invalidHooksJSON
+    case invalidHookTree
+    case readFailed(String)
+    case writeFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .reporterUnavailable: return "Could not create the Glint reporter script."
+        case .cannotCreateHome(let detail): return "Could not create the Codex Home directory: \(detail)"
+        case .invalidHooksJSON: return "Invalid hooks.json. The file was not modified."
+        case .invalidHookTree: return "The hook configuration cannot be encoded as JSON."
+        case .readFailed(let detail): return "Could not read hooks.json: \(detail)"
+        case .writeFailed(let detail): return "Could not write hooks.json: \(detail)"
+        }
     }
 }
 

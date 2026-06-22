@@ -1039,10 +1039,15 @@ private struct TerminalPane: View {
 private struct AgentsPane: View {
     @EnvironmentObject var store: WorkspaceStore
     @EnvironmentObject var usage: UsageStore
+    @EnvironmentObject var codexHomes: CodexHomeStore
     @State private var claudeInstallFailed = false
-    @State private var codexInstallFailed = false
+    @State private var codexAddError: String?
     @State private var opencodeInstallFailed = false
     @State private var devinInstallFailed = false
+    @State private var newCodexHomePath = ""
+    @State private var newCodexHomeLabel = ""
+    @State private var codexHomeErrors: [UUID: String] = [:]
+    @State private var codexRemovalWarning: String?
 
     var body: some View {
         SettingsCard("Claude Code",
@@ -1106,39 +1111,59 @@ private struct AgentsPane: View {
             }
         }
 
-        SettingsCard("Codex",
-                     footer: "Glint writes its hook entries into ~/.codex/hooks.json so Codex sessions surface the same status as Claude.") {
-            SettingsRow("Status", subtitle: codexInstallFailed
-                        ? "Install failed — check Console for [glint] logs (often a malformed hooks.json)."
-                        : (store.codexHooksInstalled
-                           ? "Hooks merged into your Codex config."
-                           : (store.codexDetected
-                              ? "Codex detected — install the reporter to show its status."
-                              : "Codex not detected on this Mac."))) {
-                HStack(spacing: 8) {
-                    StatusPill(
-                        label: store.codexHooksInstalled ? "Installed" : (store.codexDetected ? "Not installed" : "Not detected"),
-                        tone: store.codexHooksInstalled ? .ok : .neutral
-                    )
-                    if store.codexHooksInstalled {
-                        Button("Uninstall") {
-                            store.uninstallCodexHooks()
-                            codexInstallFailed = false
-                        }
-                            .controlSize(.small)
-                    } else {
-                        Button("Install") {
-                            store.installCodexHooks()
-                            codexInstallFailed = !store.codexHooksInstalled
-                        }
-                            .controlSize(.small)
-                            .tint(store.accent)
-                    }
-                }
+        SettingsCard("Codex Home Directories",
+                     footer: "Codex Home stores local auth, config, sessions, and hooks. Glint only installs its own hooks and reads status; Codex continues to manage authentication and configuration.") {
+            ForEach(Array(codexHomes.homes.enumerated()), id: \.element.id) { index, home in
+                CodexHomeSettingsRow(
+                    home: home,
+                    isDefault: codexHomes.isDefault(home),
+                    status: status(for: home),
+                    error: codexHomeErrors[home.id] ?? (
+                        FileManager.default.fileExists(atPath: home.resolvedURL.path)
+                        ? nil
+                        : String(localized: "Directory does not exist. Installing the hook will create it.")
+                    ),
+                    accent: store.accent,
+                    onToggle: { enabled in
+                        codexHomes.setEnabled(enabled, for: home.id)
+                        usage.refreshNow()
+                    },
+                    onInstall: { installHook(for: home) },
+                    onUninstall: { uninstallHook(for: home) },
+                    onOpen: { NSWorkspace.shared.open(home.resolvedURL) },
+                    onRemove: { removeHome(home) }
+                )
+                if index < codexHomes.homes.count - 1 { SettingsDivider() }
             }
             SettingsDivider()
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    TextField("Label (optional)", text: $newCodexHomeLabel)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 130)
+                    TextField("~/work/.codex", text: $newCodexHomePath)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Add") { addCodexHome() }
+                        .controlSize(.small)
+                        .tint(store.accent)
+                        .disabled(newCodexHomePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                if let codexAddError {
+                    Text(codexAddError)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Color.orange)
+                }
+                if let codexRemovalWarning {
+                    Text(codexRemovalWarning)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Color.orange)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            SettingsDivider()
             SettingsRow("Show usage in sidebar",
-                        subtitle: "Display Codex's 5-hour and weekly limits in the sidebar.") {
+                        subtitle: "Display available enabled Codex Home usage in the sidebar.") {
                 Toggle("", isOn: $usage.codexEnabled)
                     .toggleStyle(.switch).labelsHidden()
             }
@@ -1281,6 +1306,175 @@ private struct AgentsPane: View {
                         .toggleStyle(.switch).labelsHidden()
                 }
             }
+        }
+    }
+
+    private func status(for home: CodexHome) -> CodexHomeStatus {
+        if let current = usage.codexHomeStatuses.first(where: { $0.id == home.id }) {
+            return current
+        }
+        return CodexHomeStatus(
+            home: home,
+            resolvedURL: home.resolvedURL,
+            hookStatus: CodexHookInstaller.status(in: home.resolvedURL),
+            authStatus: CodexLiveReader.authStatus(from: home.resolvedURL),
+            quotaStatus: .placeholder(
+                isHomeEnabled: home.isEnabled,
+                isUsageEnabled: usage.codexEnabled
+            )
+        )
+    }
+
+    private func addCodexHome() {
+        switch codexHomes.add(path: newCodexHomePath, label: newCodexHomeLabel) {
+        case .added:
+            codexAddError = nil
+        case .emptyPath:
+            codexAddError = String(localized: "Enter a Codex Home path.")
+            return
+        case .relativePath:
+            codexAddError = String(localized: "Use an absolute path or a path starting with ~.")
+            return
+        case .duplicate:
+            codexAddError = String(localized: "That directory is already configured.")
+            return
+        }
+        newCodexHomePath = ""
+        newCodexHomeLabel = ""
+        usage.refreshNow()
+    }
+
+    private func installHook(for home: CodexHome) {
+        do {
+            try CodexHookInstaller.install(in: home.resolvedURL)
+            codexHomeErrors[home.id] = nil
+        } catch {
+            codexHomeErrors[home.id] = error.localizedDescription
+        }
+        store.codexHooksInstalled = CodexHookInstaller.isInstalled()
+        usage.refreshNow()
+    }
+
+    private func uninstallHook(for home: CodexHome) {
+        do {
+            try CodexHookInstaller.uninstall(from: home.resolvedURL)
+            codexHomeErrors[home.id] = nil
+        } catch {
+            codexHomeErrors[home.id] = error.localizedDescription
+        }
+        store.codexHooksInstalled = CodexHookInstaller.isInstalled()
+        usage.refreshNow()
+    }
+
+    private func removeHome(_ home: CodexHome) {
+        guard !codexHomes.isDefault(home) else { return }
+        let cleanupError = CodexHomeRemoval.remove(home, from: codexHomes) {
+            try CodexHookInstaller.uninstall(from: $0)
+        }
+        codexHomeErrors[home.id] = nil
+        codexRemovalWarning = cleanupError.map {
+            String(localized: "Removed from Glint, but hook cleanup failed: \($0)")
+        }
+        store.codexHooksInstalled = CodexHookInstaller.isInstalled()
+        usage.refreshNow()
+    }
+}
+
+private struct CodexHomeSettingsRow: View {
+    let home: CodexHome
+    let isDefault: Bool
+    let status: CodexHomeStatus
+    let error: String?
+    let accent: Color
+    let onToggle: (Bool) -> Void
+    let onInstall: () -> Void
+    let onUninstall: () -> Void
+    let onOpen: () -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Toggle("", isOn: Binding(get: { home.isEnabled }, set: onToggle))
+                    .toggleStyle(.checkbox)
+                    .labelsHidden()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(home.label ?? home.resolvedURL.lastPathComponent)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(Theme.text1)
+                    Text(home.path)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(Theme.text4)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                if isDefault {
+                    Text("Default")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(accent)
+                }
+                Spacer()
+                Button("Open") { onOpen() }
+                    .controlSize(.mini)
+                    .disabled(!FileManager.default.fileExists(atPath: home.resolvedURL.path))
+                if case .installed = status.hookStatus {
+                    Button("Remove Hook") { onUninstall() }.controlSize(.mini)
+                } else {
+                    Button("Install Hook") { onInstall() }.controlSize(.mini).tint(accent)
+                }
+                if !isDefault {
+                    Button(role: .destructive) { onRemove() } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove this Codex Home from Glint")
+                }
+            }
+            HStack(spacing: 12) {
+                statusLabel(String(localized: "Hook"), hookText)
+                statusLabel(String(localized: "Auth"), authText)
+                statusLabel(String(localized: "Quota"), quotaText)
+            }
+            if let error {
+                Text(error)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Color.orange)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .opacity(home.isEnabled ? 1 : 0.62)
+    }
+
+    private func statusLabel(_ name: String, _ value: String) -> some View {
+        Text("\(name): \(value)")
+            .font(.system(size: 10.5, weight: .medium))
+            .foregroundStyle(Theme.text3)
+    }
+
+    private var hookText: String {
+        switch status.hookStatus {
+        case .installed: return String(localized: "Installed")
+        case .notInstalled: return String(localized: "Not installed")
+        case .error(let message): return message
+        }
+    }
+
+    private var authText: String {
+        switch status.authStatus {
+        case .found: return String(localized: "Found")
+        case .missing: return String(localized: "Missing")
+        case .invalid(let message): return message
+        }
+    }
+
+    private var quotaText: String {
+        switch status.quotaStatus {
+        case .available(let quota):
+            let pct = "\(Int(quota.sessionPercent.rounded()))%"
+            return String(localized: "\(pct) used")
+        case .unavailable(let message): return message
+        case .loading: return String(localized: "Loading…")
         }
     }
 }
