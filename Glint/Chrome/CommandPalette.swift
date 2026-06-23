@@ -409,6 +409,14 @@ struct CommandPalette: View {
 private final class PaletteModel: ObservableObject {
     @Published var selectedIndex: Int = 0
     var keyMonitor: Any?
+
+    deinit {
+        // `.onDisappear` normally removes the monitor, but SwiftUI occasionally
+        // skips it (view replaced rather than removed). An NSEvent local monitor
+        // isn't auto-removed on dealloc, so a leaked one would silently swallow
+        // every arrow/Return/Escape in the app. Belt-and-suspenders cleanup.
+        if let m = keyMonitor { NSEvent.removeMonitor(m) }
+    }
 }
 
 // MARK: - Row + model
