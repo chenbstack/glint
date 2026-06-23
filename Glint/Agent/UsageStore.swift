@@ -197,21 +197,28 @@ final class UsageStore: ObservableObject {
             let generation = codexRefreshCoordinator.begin()
             Task { [weak self] in
                 let homes = Self.configuredCodexHomes().filter(\.isEnabled)
-                await MainActor.run {
+                let previousStatusesByID = await MainActor.run { () -> [UUID: CodexQuotaStatus]? in
                     guard let self,
-                          self.codexRefreshCoordinator.accepts(generation) else { return }
+                          self.codexRefreshCoordinator.accepts(generation) else { return nil }
+                    let previousStatusesByID = Dictionary(
+                        self.codexHomeStatuses.map { ($0.id, $0.quotaStatus) },
+                        uniquingKeysWith: { first, _ in first }
+                    )
                     self.codexHomeStatuses = homes.map {
                         CodexHomeStatus(
                             home: $0,
                             resolvedURL: $0.resolvedURL,
                             hookStatus: CodexHookInstaller.status(in: $0.resolvedURL),
                             authStatus: CodexLiveReader.authStatus(from: $0.resolvedURL),
-                            quotaStatus: .loading
+                            quotaStatus: .refreshing(previous: previousStatusesByID[$0.id])
                         )
                     }
+                    return previousStatusesByID
                 }
+                guard let previousStatusesByID else { return }
                 let statuses = await withTaskGroup(of: CodexHomeStatus.self) { group in
                     for home in homes {
+                        let previousQuotaStatus = previousStatusesByID[home.id]
                         group.addTask {
                             let quota = await CodexUsageReader.readPreferLive(from: home.resolvedURL)
                             return CodexHomeStatus(
@@ -220,7 +227,10 @@ final class UsageStore: ObservableObject {
                                 hookStatus: CodexHookInstaller.status(in: home.resolvedURL),
                                 authStatus: CodexLiveReader.authStatus(from: home.resolvedURL),
                                 quotaStatus: quota.map(CodexQuotaStatus.available)
-                                    ?? .unavailable(String(localized: "Quota unavailable"))
+                                    ?? .refreshFailed(
+                                        previous: previousQuotaStatus,
+                                        message: String(localized: "Quota unavailable")
+                                    )
                             )
                         }
                     }

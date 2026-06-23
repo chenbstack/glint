@@ -33,7 +33,10 @@ final class CodexUsageReaderTests: XCTestCase {
 
         let authURL = home.appendingPathComponent("auth.json")
         try "invalid".write(to: authURL, atomically: true, encoding: .utf8)
-        XCTAssertEqual(CodexLiveReader.authStatus(from: home), .invalid("Invalid auth.json"))
+        XCTAssertEqual(
+            CodexLiveReader.authStatus(from: home),
+            .invalid(String(localized: "Invalid auth.json"))
+        )
 
         try #"{"tokens":{"access_token":"token","account_id":"account"}}"#
             .write(to: authURL, atomically: true, encoding: .utf8)
@@ -72,6 +75,98 @@ final class CodexUsageReaderTests: XCTestCase {
         XCTAssertEqual(items.count, 1)
         XCTAssertEqual(items[0].name, "Subscription")
         XCTAssertEqual(items[0].quota, quota)
+    }
+
+    func testSidebarKeepsAvailableHomeRowsVisibleWhileRefreshing() {
+        let primary = CodexHome(label: "Primary", path: "~/primary/.codex")
+        let secondary = CodexHome(label: "Secondary", path: "~/secondary/.codex")
+        let primaryQuota = AgentQuota(
+            sessionPercent: 21,
+            weeklyPercent: 35,
+            sessionResetsAt: nil,
+            weeklyResetsAt: nil,
+            planType: "plus"
+        )
+        let secondaryQuota = AgentQuota(
+            sessionPercent: 42,
+            weeklyPercent: 63,
+            sessionResetsAt: nil,
+            weeklyResetsAt: nil,
+            planType: "pro"
+        )
+        let refreshingStatuses = [
+            CodexHomeStatus(
+                home: primary,
+                resolvedURL: primary.resolvedURL,
+                hookStatus: .installed,
+                authStatus: .found,
+                quotaStatus: .refreshing(previous: .available(primaryQuota))
+            ),
+            CodexHomeStatus(
+                home: secondary,
+                resolvedURL: secondary.resolvedURL,
+                hookStatus: .installed,
+                authStatus: .found,
+                quotaStatus: .refreshing(previous: .available(secondaryQuota))
+            ),
+        ]
+
+        let items = CodexQuotaPresentation.sidebarItems(
+            from: refreshingStatuses,
+            fallback: primaryQuota
+        )
+
+        XCTAssertEqual(items.map(\.name), ["Primary", "Secondary"])
+        XCTAssertEqual(items.map(\.quota), [primaryQuota, secondaryQuota])
+    }
+
+    func testSidebarKeepsAvailableHomeRowsVisibleWhenRefreshFails() {
+        let primary = CodexHome(label: "Primary", path: "~/primary/.codex")
+        let secondary = CodexHome(label: "Secondary", path: "~/secondary/.codex")
+        let primaryQuota = AgentQuota(
+            sessionPercent: 21,
+            weeklyPercent: 35,
+            sessionResetsAt: nil,
+            weeklyResetsAt: nil,
+            planType: "plus"
+        )
+        let secondaryQuota = AgentQuota(
+            sessionPercent: 42,
+            weeklyPercent: 63,
+            sessionResetsAt: nil,
+            weeklyResetsAt: nil,
+            planType: "pro"
+        )
+        let failedStatuses = [
+            CodexHomeStatus(
+                home: primary,
+                resolvedURL: primary.resolvedURL,
+                hookStatus: .installed,
+                authStatus: .found,
+                quotaStatus: .refreshFailed(
+                    previous: .available(primaryQuota),
+                    message: "Quota unavailable"
+                )
+            ),
+            CodexHomeStatus(
+                home: secondary,
+                resolvedURL: secondary.resolvedURL,
+                hookStatus: .installed,
+                authStatus: .found,
+                quotaStatus: .refreshFailed(
+                    previous: .available(secondaryQuota),
+                    message: "Quota unavailable"
+                )
+            ),
+        ]
+
+        let items = CodexQuotaPresentation.sidebarItems(
+            from: failedStatuses,
+            fallback: primaryQuota
+        )
+
+        XCTAssertEqual(items.map(\.name), ["Primary", "Secondary"])
+        XCTAssertEqual(items.map(\.quota), [primaryQuota, secondaryQuota])
     }
 
     func testSidebarHidesFallbackWhenEveryHomeIsDisabled() {

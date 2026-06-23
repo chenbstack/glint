@@ -45,6 +45,20 @@ enum CodexQuotaStatus: Hashable {
     case unavailable(String)
     case loading
 
+    static func refreshing(previous: CodexQuotaStatus?) -> CodexQuotaStatus {
+        switch previous {
+        case .available(let quota): return .available(quota)
+        case .unavailable, .loading, .none: return .loading
+        }
+    }
+
+    static func refreshFailed(previous: CodexQuotaStatus?, message: String) -> CodexQuotaStatus {
+        switch previous {
+        case .available(let quota): return .available(quota)
+        case .unavailable, .loading, .none: return .unavailable(message)
+        }
+    }
+
     static func placeholder(isHomeEnabled: Bool, isUsageEnabled: Bool) -> CodexQuotaStatus {
         if !isHomeEnabled { return .unavailable(String(localized: "Disabled")) }
         return isUsageEnabled ? .loading : .unavailable(String(localized: "Usage off"))
