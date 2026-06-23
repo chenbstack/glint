@@ -15,7 +15,7 @@ final class UpdaterController: NSObject, ObservableObject {
     /// UserDefaults key backing the beta opt-in. Read directly in the
     /// (nonisolated) Sparkle delegate callback, so it lives outside the
     /// published property.
-    private static let receiveBetaUpdatesKey = "GlintReceiveBetaUpdates"
+    nonisolated private static let receiveBetaUpdatesKey = "GlintReceiveBetaUpdates"
 
     /// Bound to the "Check for updates automatically" toggle in Settings.
     @Published var automaticallyChecksForUpdates: Bool = false {
@@ -50,7 +50,23 @@ final class UpdaterController: NSObject, ObservableObject {
         // would offer to replace the dev binary with the production release.
         // Never start the updater in Debug.
         canCheckForUpdates = false
+        #endif
+    }
+
+    func startDeferred() {
+        #if DEBUG
+        canCheckForUpdates = false
         #else
+        guard controller == nil else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.startIfNeeded()
+        }
+        #endif
+    }
+
+    private func startIfNeeded() {
+        #if !DEBUG
+        guard controller == nil else { return }
         controller = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: self,
