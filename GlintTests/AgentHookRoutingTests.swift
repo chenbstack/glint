@@ -77,6 +77,93 @@ final class AgentHookRoutingTests: XCTestCase {
     }
 
     @MainActor
+    func testLatestRecentReturnWinsAmongCodexPanes() {
+        let older = WorkspaceStore.WorkspacePaneKey(
+            workspace: UUID(),
+            pane: PaneID(value: 0)
+        )
+        let latest = WorkspaceStore.WorkspacePaneKey(
+            workspace: UUID(),
+            pane: PaneID(value: 1)
+        )
+        let now = Date()
+
+        let routed = WorkspaceStore.selectRecentCodexRoutingPane(
+            codexPanes: [older, latest],
+            recentPaneReturns: [
+                older: now.addingTimeInterval(-2),
+                latest: now.addingTimeInterval(-1),
+            ],
+            now: now
+        )
+
+        XCTAssertEqual(routed, latest)
+    }
+
+    @MainActor
+    func testPreferredRecentReturnWinsForExistingCodexRoute() {
+        let routePane = WorkspaceStore.WorkspacePaneKey(
+            workspace: UUID(),
+            pane: PaneID(value: 0)
+        )
+        let otherPane = WorkspaceStore.WorkspacePaneKey(
+            workspace: UUID(),
+            pane: PaneID(value: 1)
+        )
+        let now = Date()
+
+        let routed = WorkspaceStore.selectRecentCodexRoutingPane(
+            codexPanes: [routePane, otherPane],
+            recentPaneReturns: [
+                routePane: now.addingTimeInterval(-2),
+                otherPane: now.addingTimeInterval(-1),
+            ],
+            now: now,
+            preferredPane: routePane
+        )
+
+        XCTAssertEqual(routed, routePane)
+    }
+
+    @MainActor
+    func testRebindingCodexRouteReleasesDisplacedSessionForTargetPane() {
+        let pane1 = WorkspaceStore.WorkspacePaneKey(
+            workspace: UUID(),
+            pane: PaneID(value: 0)
+        )
+        let pane2 = WorkspaceStore.WorkspacePaneKey(
+            workspace: UUID(),
+            pane: PaneID(value: 1)
+        )
+        let now = Date()
+        var routes = [
+            "sessionA": WorkspaceStore.CodexSessionRoute(
+                pane: pane1,
+                lastSeen: now.addingTimeInterval(-10)
+            ),
+            "sessionB": WorkspaceStore.CodexSessionRoute(
+                pane: pane2,
+                lastSeen: now.addingTimeInterval(-5)
+            ),
+        ]
+        var releasedSessions: [String] = []
+
+        WorkspaceStore.replaceCodexSessionRoute(
+            routes: &routes,
+            session: "sessionB",
+            pane: pane1,
+            now: now,
+            releaseClaim: { releasedSessions.append($0) }
+        )
+
+        XCTAssertNil(routes["sessionA"])
+        XCTAssertEqual(routes["sessionB"]?.pane, pane1)
+        XCTAssertEqual(routes["sessionB"]?.lastSeen, now)
+        XCTAssertEqual(Set(routes.keys), Set(["sessionB"]))
+        XCTAssertEqual(releasedSessions, ["sessionA"])
+    }
+
+    @MainActor
     func testCwdFallbackDoesNotStealAlreadyBoundCodexPane() {
         let key = WorkspaceStore.WorkspacePaneKey(
             workspace: UUID(),

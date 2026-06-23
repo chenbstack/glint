@@ -449,7 +449,7 @@ final class WorkspaceStore: ObservableObject {
     /// Codex 0.141+ runs hooks in a shared app-server, so hook processes no
     /// longer inherit GLINT_PANE_ID. Bind its stable session id after the first
     /// submitted prompt and use that route for the rest of the session.
-    private struct CodexSessionRoute {
+    struct CodexSessionRoute {
         var pane: WorkspacePaneKey
         var lastSeen: Date
     }
@@ -1221,16 +1221,24 @@ final class WorkspaceStore: ObservableObject {
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: .glintPaneEscPressed,
             object: nil,
-            queue: .main
+            queue: nil
         ) { [weak self] note in
-            Task { @MainActor in self?.handlePaneEsc(note.userInfo) }
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { self?.handlePaneEsc(note.userInfo) }
+            } else {
+                Task { @MainActor in self?.handlePaneEsc(note.userInfo) }
+            }
         })
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: .glintPaneReturnPressed,
             object: nil,
-            queue: .main
+            queue: nil
         ) { [weak self] note in
-            Task { @MainActor in self?.handlePaneReturn(note.userInfo) }
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { self?.handlePaneReturn(note.userInfo) }
+            } else {
+                Task { @MainActor in self?.handlePaneReturn(note.userInfo) }
+            }
         })
     }
 
@@ -1599,7 +1607,19 @@ final class WorkspaceStore: ObservableObject {
 
         pruneCodexSessionRoutes(now: now)
         pruneRecentPaneReturns(now: now)
+        let codexPanes = liveCodexRoutingPanes()
         if var route = codexSessionPanes[session] {
+            if hook == "UserPromptSubmit",
+               let key = Self.selectRecentCodexRoutingPane(
+                    codexPanes: codexPanes,
+                    recentPaneReturns: recentPaneReturns,
+                    now: now,
+                    preferredPane: route.pane
+               ) {
+                replaceCodexSessionRoute(session, pane: key, now: now)
+                recentPaneReturns.removeValue(forKey: key)
+                return key
+            }
             route.lastSeen = now
             codexSessionPanes[session] = route
             let key = route.pane
@@ -1626,18 +1646,6 @@ final class WorkspaceStore: ObservableObject {
         }
         guard hook == "UserPromptSubmit" else { return nil }
 
-        let codexPanes = surfaceViews.compactMap { key, view -> WorkspacePaneKey? in
-            guard view.hasLiveSurface else { return nil }
-            // A known foreground process is authoritative even when it is not
-            // an agent. Falling through from "zsh" to stale hook state would
-            // incorrectly keep an exited Codex pane in the routing candidates.
-            let kind = Self.codexRoutingCandidateKind(
-                foregroundProcessName: view.foregroundProcessName(),
-                polledProcessName: paneProcesses[key],
-                stateKind: paneAgentState[key]?.kind
-            )
-            return kind == .codex ? key : nil
-        }
         let key = Self.selectCodexRoutingPane(
             codexPanes: codexPanes,
             boundPanes: Set(codexSessionPanes.values.map { $0.pane }),
@@ -1658,10 +1666,24 @@ final class WorkspaceStore: ObservableObject {
             NSLog("[glint] agent: Codex session \(session) claimed by another Glint — skipping")
             return nil
         }
-        releaseCodexSessionRoutes(for: key, keeping: session)
-        codexSessionPanes[session] = CodexSessionRoute(pane: key, lastSeen: now)
+        replaceCodexSessionRoute(session, pane: key, now: now)
         recentPaneReturns.removeValue(forKey: key)
         return key
+    }
+
+    private func liveCodexRoutingPanes() -> [WorkspacePaneKey] {
+        surfaceViews.compactMap { key, view -> WorkspacePaneKey? in
+            guard view.hasLiveSurface else { return nil }
+            // A known foreground process is authoritative even when it is not
+            // an agent. Falling through from "zsh" to stale hook state would
+            // incorrectly keep an exited Codex pane in the routing candidates.
+            let kind = Self.codexRoutingCandidateKind(
+                foregroundProcessName: view.foregroundProcessName(),
+                polledProcessName: paneProcesses[key],
+                stateKind: paneAgentState[key]?.kind
+            )
+            return kind == .codex ? key : nil
+        }
     }
 
     /// Pick the pane for a new shared Codex session. A recent Return is a
@@ -1676,16 +1698,12 @@ final class WorkspaceStore: ObservableObject {
         now: Date,
         cwdForPane: (WorkspacePaneKey) -> String?
     ) -> WorkspacePaneKey? {
-        let recentlySubmitted = codexPanes.compactMap { key -> (WorkspacePaneKey, Date)? in
-            guard let date = recentPaneReturns[key],
-                  now.timeIntervalSince(date) >= 0,
-                  now.timeIntervalSince(date) <= recentPaneReturnRoutingWindow else {
-                return nil
-            }
-            return (key, date)
-        }
-        if let latest = recentlySubmitted.max(by: { $0.1 < $1.1 }) {
-            return latest.0
+        if let key = selectRecentCodexRoutingPane(
+            codexPanes: codexPanes,
+            recentPaneReturns: recentPaneReturns,
+            now: now
+        ) {
+            return key
         }
 
         // Panes already routing for another Codex session must not be reused
@@ -1705,14 +1723,52 @@ final class WorkspaceStore: ObservableObject {
         return matches.count == 1 ? matches[0] : nil
     }
 
-    private func releaseCodexSessionRoutes(for key: WorkspacePaneKey, keeping session: String) {
-        let replaced = codexSessionPanes.compactMap { existingSession, route -> String? in
+    static func selectRecentCodexRoutingPane(
+        codexPanes: [WorkspacePaneKey],
+        recentPaneReturns: [WorkspacePaneKey: Date],
+        now: Date,
+        preferredPane: WorkspacePaneKey? = nil
+    ) -> WorkspacePaneKey? {
+        let recentlySubmitted = codexPanes.compactMap { key -> (WorkspacePaneKey, Date)? in
+            guard let date = recentPaneReturns[key],
+                  now.timeIntervalSince(date) >= 0,
+                  now.timeIntervalSince(date) <= recentPaneReturnRoutingWindow else {
+                return nil
+            }
+            return (key, date)
+        }
+        if let preferredPane,
+           recentlySubmitted.contains(where: { $0.0 == preferredPane }) {
+            return preferredPane
+        }
+        return recentlySubmitted.max(by: { $0.1 < $1.1 })?.0
+    }
+
+    private func replaceCodexSessionRoute(_ session: String, pane key: WorkspacePaneKey, now: Date) {
+        Self.replaceCodexSessionRoute(
+            routes: &codexSessionPanes,
+            session: session,
+            pane: key,
+            now: now,
+            releaseClaim: Self.releaseCodexSessionClaim
+        )
+    }
+
+    static func replaceCodexSessionRoute(
+        routes: inout [String: CodexSessionRoute],
+        session: String,
+        pane key: WorkspacePaneKey,
+        now: Date,
+        releaseClaim: (String) -> Void
+    ) {
+        let replaced = routes.compactMap { existingSession, route -> String? in
             existingSession != session && route.pane == key ? existingSession : nil
         }
         for existingSession in replaced {
-            codexSessionPanes.removeValue(forKey: existingSession)
-            Self.releaseCodexSessionClaim(existingSession)
+            routes.removeValue(forKey: existingSession)
+            releaseClaim(existingSession)
         }
+        routes[session] = CodexSessionRoute(pane: key, lastSeen: now)
     }
 
     private func pruneCodexSessionRoutes(now: Date) {
