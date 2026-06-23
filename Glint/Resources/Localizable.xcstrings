@@ -243,10 +243,46 @@
         }
       }
     },
-    "—": {},
-    "· %@": {},
-    "%@": {},
-    "%@%%": {},
+    "—": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "—"
+          }
+        }
+      }
+    },
+    "· %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "· %@"
+          }
+        }
+      }
+    },
+    "%@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@"
+          }
+        }
+      }
+    },
+    "%@%%": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%%"
+          }
+        }
+      }
+    },
     "%d of its panes still have something running; everything in this workspace will be terminated.": {
       "extractionState": "stale",
       "localizations": {
@@ -269,10 +305,46 @@
         }
       }
     },
-    "+%@": {},
-    "~/.glint/hooks/glint-report.sh": {},
-    "⌘N": {},
-    "⌘T": {},
+    "+%@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%@"
+          }
+        }
+      }
+    },
+    "~/.glint/hooks/glint-report.sh": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/.glint/hooks/glint-report.sh"
+          }
+        }
+      }
+    },
+    "⌘N": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌘N"
+          }
+        }
+      }
+    },
+    "⌘T": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌘T"
+          }
+        }
+      }
+    },
     "── session restored ──": {
       "extractionState": "manual",
       "localizations": {
@@ -1534,7 +1606,16 @@
         }
       }
     },
-    "No results": {},
+    "No results": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无结果"
+          }
+        }
+      }
+    },
     "Not installed": {
       "extractionState": "stale",
       "localizations": {
@@ -2545,7 +2626,16 @@
         }
       }
     },
-    "TABS": {},
+    "TABS": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标签页"
+          }
+        }
+      }
+    },
     "Terminal": {
       "extractionState": "stale",
       "localizations": {
