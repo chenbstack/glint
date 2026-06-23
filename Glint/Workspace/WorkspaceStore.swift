@@ -463,6 +463,7 @@ final class WorkspaceStore: ObservableObject {
     /// values forever.
     private var recentPaneReturns: [WorkspacePaneKey: Date] = [:]
     private static let recentPaneReturnTTL: TimeInterval = 60
+    private static let recentPaneReturnRoutingWindow: TimeInterval = 10
     /// Maximum staleness for a `.needsPermission` status before a fresh
     /// Return is treated as a real new-prompt submit again. Codex sometimes
     /// fails to clear permission state (client died mid-tool, hook lost),
@@ -1637,36 +1638,14 @@ final class WorkspaceStore: ObservableObject {
             )
             return kind == .codex ? key : nil
         }
-        // Panes already routing for another Codex session must not be reused
-        // for a new one — a subsequent Return in a cwd-bound pane would
-        // otherwise silently steal an unrelated session that submits within
-        // the 10-second window.
-        let alreadyBound = Set(codexSessionPanes.values.map { $0.pane })
-        let unboundPanes = codexPanes.filter { !alreadyBound.contains($0) }
-        let recentlySubmitted = unboundPanes.compactMap { key -> (WorkspacePaneKey, Date)? in
-            guard let date = recentPaneReturns[key],
-                  now.timeIntervalSince(date) >= 0,
-                  now.timeIntervalSince(date) <= 10 else { return nil }
-            return (key, date)
-        }
-        let key: WorkspacePaneKey?
-        if let latest = recentlySubmitted.max(by: { $0.1 < $1.1 }) {
-            key = latest.0
-        } else if let cwd = info["cwd"] as? String, !cwd.isEmpty {
-            let normalized = Self.canonicalizeCwd(cwd)
-            // Only compare against cwds the shell has actually reported via
-            // OSC 7. The pane's initial `workingDirectory` would misroute
-            // anyone who `cd`'d before launching codex (first prompt fires
-            // before OSC 7 has populated cachedCwd) — better to give up than
-            // bind the wrong pane.
-            let matches = unboundPanes.filter { candidate in
-                guard let known = surfaceViews[candidate]?.cachedCwd else { return false }
-                return Self.canonicalizeCwd(known) == normalized
-            }
-            key = matches.count == 1 ? matches[0] : nil
-        } else {
-            key = nil
-        }
+        let key = Self.selectCodexRoutingPane(
+            codexPanes: codexPanes,
+            boundPanes: Set(codexSessionPanes.values.map { $0.pane }),
+            recentPaneReturns: recentPaneReturns,
+            cwd: info["cwd"] as? String,
+            now: now,
+            cwdForPane: { surfaceViews[$0]?.cachedCwd }
+        )
         guard let key else {
             NSLog("[glint] agent: could not route Codex session \(session)")
             return nil
@@ -1679,9 +1658,61 @@ final class WorkspaceStore: ObservableObject {
             NSLog("[glint] agent: Codex session \(session) claimed by another Glint — skipping")
             return nil
         }
+        releaseCodexSessionRoutes(for: key, keeping: session)
         codexSessionPanes[session] = CodexSessionRoute(pane: key, lastSeen: now)
         recentPaneReturns.removeValue(forKey: key)
         return key
+    }
+
+    /// Pick the pane for a new shared Codex session. A recent Return is a
+    /// direct user action in that pane, so it may replace an older route on the
+    /// same Codex process (`/new`). Cwd-only fallback remains limited to
+    /// unbound panes, where it cannot steal an existing session.
+    static func selectCodexRoutingPane(
+        codexPanes: [WorkspacePaneKey],
+        boundPanes: Set<WorkspacePaneKey>,
+        recentPaneReturns: [WorkspacePaneKey: Date],
+        cwd: String?,
+        now: Date,
+        cwdForPane: (WorkspacePaneKey) -> String?
+    ) -> WorkspacePaneKey? {
+        let recentlySubmitted = codexPanes.compactMap { key -> (WorkspacePaneKey, Date)? in
+            guard let date = recentPaneReturns[key],
+                  now.timeIntervalSince(date) >= 0,
+                  now.timeIntervalSince(date) <= recentPaneReturnRoutingWindow else {
+                return nil
+            }
+            return (key, date)
+        }
+        if let latest = recentlySubmitted.max(by: { $0.1 < $1.1 }) {
+            return latest.0
+        }
+
+        // Panes already routing for another Codex session must not be reused
+        // by cwd alone — a cwd-bound pane could otherwise silently steal an
+        // unrelated session. Only the stronger Return signal above may rebind.
+        let unboundPanes = codexPanes.filter { !boundPanes.contains($0) }
+        guard let cwd, !cwd.isEmpty else { return nil }
+        let normalized = canonicalizeCwd(cwd)
+        // Only compare against cwds the shell has actually reported via OSC 7.
+        // The pane's initial `workingDirectory` would misroute anyone who
+        // `cd`'d before launching codex (first prompt fires before OSC 7 has
+        // populated cachedCwd) — better to give up than bind the wrong pane.
+        let matches = unboundPanes.filter { candidate in
+            guard let known = cwdForPane(candidate) else { return false }
+            return canonicalizeCwd(known) == normalized
+        }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    private func releaseCodexSessionRoutes(for key: WorkspacePaneKey, keeping session: String) {
+        let replaced = codexSessionPanes.compactMap { existingSession, route -> String? in
+            existingSession != session && route.pane == key ? existingSession : nil
+        }
+        for existingSession in replaced {
+            codexSessionPanes.removeValue(forKey: existingSession)
+            Self.releaseCodexSessionClaim(existingSession)
+        }
     }
 
     private func pruneCodexSessionRoutes(now: Date) {

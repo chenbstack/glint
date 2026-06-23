@@ -56,6 +56,64 @@ final class AgentHookRoutingTests: XCTestCase {
         ), .codex)
     }
 
+    @MainActor
+    func testRecentReturnCanRebindBoundCodexPaneForNewSession() {
+        let key = WorkspaceStore.WorkspacePaneKey(
+            workspace: UUID(),
+            pane: PaneID(value: 0)
+        )
+        let now = Date()
+
+        let routed = WorkspaceStore.selectCodexRoutingPane(
+            codexPanes: [key],
+            boundPanes: [key],
+            recentPaneReturns: [key: now.addingTimeInterval(-1)],
+            cwd: "/tmp",
+            now: now,
+            cwdForPane: { _ in "/tmp" }
+        )
+
+        XCTAssertEqual(routed, key)
+    }
+
+    @MainActor
+    func testCwdFallbackDoesNotStealAlreadyBoundCodexPane() {
+        let key = WorkspaceStore.WorkspacePaneKey(
+            workspace: UUID(),
+            pane: PaneID(value: 0)
+        )
+
+        let routed = WorkspaceStore.selectCodexRoutingPane(
+            codexPanes: [key],
+            boundPanes: [key],
+            recentPaneReturns: [:],
+            cwd: "/tmp",
+            now: Date(),
+            cwdForPane: { _ in "/tmp" }
+        )
+
+        XCTAssertNil(routed)
+    }
+
+    @MainActor
+    func testCwdFallbackStillRoutesUniqueUnboundCodexPane() {
+        let key = WorkspaceStore.WorkspacePaneKey(
+            workspace: UUID(),
+            pane: PaneID(value: 0)
+        )
+
+        let routed = WorkspaceStore.selectCodexRoutingPane(
+            codexPanes: [key],
+            boundPanes: [],
+            recentPaneReturns: [:],
+            cwd: "/tmp",
+            now: Date(),
+            cwdForPane: { _ in "/tmp" }
+        )
+
+        XCTAssertEqual(routed, key)
+    }
+
     func testReporterKeepsCodexCommandStableAndDrainsPayload() throws {
         let body = AgentHookInstaller.scriptBody
         XCTAssertTrue(body.contains("plutil -extract session_id"))
