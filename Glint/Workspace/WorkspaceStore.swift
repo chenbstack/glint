@@ -128,46 +128,36 @@ struct Pane: Identifiable, Codable {
     /// `restoreClaudeSession` / `restoreCodexSession`. Reflects the CURRENT
     /// state, not sticky: an agent that quit back to the shell clears it.
     var lastAgent: String?
-    /// Claude session id captured from hook payloads while Claude was the
-    /// foreground agent. When set, the resume-on-launch path uses
-    /// `claude --resume <id>` instead of `--continue`, so multiple Claude
-    /// panes in one workspace don't all collapse onto the same most-recent
-    /// session (#45). Tied to the `lastAgent == "claude"` lifecycle: cleared
-    /// whenever `lastAgent` stops being claude, so a stale id can't leak
+    /// Per-agent session id captured from hook events, keyed by
+    /// `PaneAgentKind.rawValue` ("claude"/"codex"/"opencode"/"devin"). When
+    /// set, restore-on-launch issues the agent's `--resume <id>` /
+    /// `--session <id>` form so multiple panes in one workspace don't
+    /// collapse onto the most-recent session (#45). Lifecycle: entries are
+    /// dropped in `captureCwdsFromLiveSurfaces` the moment the foreground
+    /// agent stops matching the entry's key, so a stale id can't leak
     /// across an exit/relaunch.
-    var lastClaudeSessionId: String?
-    /// Same idea as `lastClaudeSessionId`, for Codex. Codex hooks ship
-    /// `session_id` (UUID) on every event via the shared app-server route;
-    /// when set, restore uses `codex resume <id>` instead of `--last`.
-    var lastCodexSessionId: String?
-    /// OpenCode session id, captured via the JS plugin (which extracts it
-    /// from event payloads and forwards `session_b64`). Restore uses
-    /// `opencode --session <id>` instead of `--continue` when present.
-    var lastOpenCodeSessionId: String?
-    /// Devin session id, captured via the shared reporter script's stdin
-    /// `session_id` extraction (Devin follows Claude-style hook payloads).
-    /// Restore uses `devin --resume <id>` instead of `--continue` when set.
-    var lastDevinSessionId: String?
+    var sessionIds: [String: String]
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, workingDirectory, lastAgent
-        case lastClaudeSessionId, lastCodexSessionId, lastOpenCodeSessionId, lastDevinSessionId
+        case id, title, workingDirectory, lastAgent, sessionIds
+    }
+
+    /// Field shape from the first cut of #45 (one Optional per agent). Read
+    /// at decode for forward-compat with already-persisted state from that
+    /// shape; never written. Once a Pane is re-encoded it migrates to
+    /// `sessionIds` and these keys disappear from disk.
+    private enum LegacyKeys: String, CodingKey {
+        case lastClaudeSessionId, lastCodexSessionId
+        case lastOpenCodeSessionId, lastDevinSessionId
     }
 
     init(id: PaneID, title: String, workingDirectory: String? = nil,
-         lastAgent: String? = nil,
-         lastClaudeSessionId: String? = nil,
-         lastCodexSessionId: String? = nil,
-         lastOpenCodeSessionId: String? = nil,
-         lastDevinSessionId: String? = nil) {
+         lastAgent: String? = nil) {
         self.id = id
         self.title = title
         self.workingDirectory = workingDirectory
         self.lastAgent = lastAgent
-        self.lastClaudeSessionId = lastClaudeSessionId
-        self.lastCodexSessionId = lastCodexSessionId
-        self.lastOpenCodeSessionId = lastOpenCodeSessionId
-        self.lastDevinSessionId = lastDevinSessionId
+        self.sessionIds = [:]
     }
 
     init(from decoder: Decoder) throws {
@@ -176,12 +166,36 @@ struct Pane: Identifiable, Codable {
         self.title = try c.decode(String.self, forKey: .title)
         self.workingDirectory = try c.decodeIfPresent(String.self, forKey: .workingDirectory)
         self.lastAgent = try c.decodeIfPresent(String.self, forKey: .lastAgent)
-        // decodeIfPresent: old pre-#45 panes have no key here, decode to nil
-        // and fall back to `--continue` at restore time — no crash on upgrade.
-        self.lastClaudeSessionId = try c.decodeIfPresent(String.self, forKey: .lastClaudeSessionId)
-        self.lastCodexSessionId = try c.decodeIfPresent(String.self, forKey: .lastCodexSessionId)
-        self.lastOpenCodeSessionId = try c.decodeIfPresent(String.self, forKey: .lastOpenCodeSessionId)
-        self.lastDevinSessionId = try c.decodeIfPresent(String.self, forKey: .lastDevinSessionId)
+        if let map = try c.decodeIfPresent([String: String].self, forKey: .sessionIds) {
+            self.sessionIds = map
+        } else {
+            // No `sessionIds` key — either a pre-#45 pane (no agent state at
+            // all → empty dict) or one persisted by the first per-agent-field
+            // cut (#45 v1) which we migrate field-by-field. Failing the
+            // LegacyKeys container open is fine; just yields an empty dict.
+            var map: [String: String] = [:]
+            if let legacy = try? decoder.container(keyedBy: LegacyKeys.self) {
+                if let v = try? legacy.decodeIfPresent(String.self, forKey: .lastClaudeSessionId) { map[PaneAgentKind.claude.rawValue] = v }
+                if let v = try? legacy.decodeIfPresent(String.self, forKey: .lastCodexSessionId) { map[PaneAgentKind.codex.rawValue] = v }
+                if let v = try? legacy.decodeIfPresent(String.self, forKey: .lastOpenCodeSessionId) { map[PaneAgentKind.opencode.rawValue] = v }
+                if let v = try? legacy.decodeIfPresent(String.self, forKey: .lastDevinSessionId) { map[PaneAgentKind.devin.rawValue] = v }
+            }
+            self.sessionIds = map
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encodeIfPresent(workingDirectory, forKey: .workingDirectory)
+        try c.encodeIfPresent(lastAgent, forKey: .lastAgent)
+        // Skip the key entirely when there's nothing to remember — most
+        // panes never see an agent, and an empty `{}` on every pane would
+        // be persistent noise in the autosave file.
+        if !sessionIds.isEmpty {
+            try c.encode(sessionIds, forKey: .sessionIds)
+        }
     }
 }
 
@@ -829,6 +843,18 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreDevinSession, forKey: "glint.restoreDevinSession") }
     }
 
+    /// Whether session-restore-on-launch is enabled for `kind` — single
+    /// dispatch site for the four per-agent toggles, so `surfaceView`'s
+    /// resume logic stays kind-agnostic.
+    private func restoreEnabled(for kind: PaneAgentKind) -> Bool {
+        switch kind {
+        case .claude:   return restoreClaudeSession
+        case .codex:    return restoreCodexSession
+        case .opencode: return restoreOpenCodeSession
+        case .devin:    return restoreDevinSession
+        }
+    }
+
     /// Master switch for the external control socket (control.sock). Off by
     /// default — the socket lets any local process holding the 0600 token
     /// inject keystrokes into your terminals, so it's opt-in. The didSet
@@ -1310,54 +1336,21 @@ final class WorkspaceStore: ObservableObject {
         // A pending one-shot command (e.g. launch the agent chosen when this
         // worktree workspace was created) wins over agent-resume and is consumed
         // exactly once.
+        // Auto-resume the agent that was live on this pane at last quit, if
+        // its per-agent toggle is on. We prefer `--resume <id>` (or each CLI's
+        // equivalent) so multiple panes in the same cwd each land in their OWN
+        // previous session instead of collapsing onto the most-recent one
+        // (#45). No id captured ⇒ fall back to "resume most recent" — handles
+        // pre-fix data and panes where no hook fired before shutdown.
         let restoreCommand: String? = {
             if let pending = pendingInitialInput.removeValue(forKey: key) { return pending }
-            guard let pane = workspaces.first(where: { $0.id == workspaceID })?.panes[paneID]
-            else { return nil }
-            switch pane.lastAgent {
-            case "claude" where restoreClaudeSession:
-                // Prefer `--resume <id>` so multiple Claude panes in the same
-                // cwd each land in their OWN previous session, not all
-                // collapsed onto the most-recent one (#45). `--continue` is a
-                // graceful fallback for panes upgraded from pre-#45 builds (no
-                // id captured yet) and for sessions where the hook never fired
-                // a session id before shutdown.
-                if let sid = pane.lastClaudeSessionId,
-                   Self.isValidSessionId(sid) {
-                    return "claude --resume \(sid)\n"
-                }
-                return "claude --continue\n"
-            case "codex" where restoreCodexSession:
-                // Same #45 rationale for Codex. `codex resume <SESSION_ID>` is
-                // the documented direct-resume form; `--last` is the fallback
-                // when we never captured an id (pre-fix data, or no Codex hook
-                // fired before shutdown).
-                if let sid = pane.lastCodexSessionId,
-                   Self.isValidSessionId(sid) {
-                    return "codex resume \(sid)\n"
-                }
-                return "codex resume --last\n"
-            case "opencode" where restoreOpenCodeSession:
-                // OpenCode CLI: `opencode --session <id>` jumps directly to a
-                // specific session; `--continue` resumes the most recent one
-                // and is our fallback when the JS plugin never delivered an
-                // id (older plugin build, or no event fired before quit).
-                if let sid = pane.lastOpenCodeSessionId,
-                   Self.isValidSessionId(sid) {
-                    return "opencode --session \(sid)\n"
-                }
-                return "opencode --continue\n"
-            case "devin" where restoreDevinSession:
-                // Devin CLI: `devin --resume <id>` (alias `-r`) jumps to a
-                // specific session; `--continue` (alias `-c`) resumes the
-                // most recent. Same fallback rule as the others.
-                if let sid = pane.lastDevinSessionId,
-                   Self.isValidSessionId(sid) {
-                    return "devin --resume \(sid)\n"
-                }
-                return "devin --continue\n"
-            default: return nil
-            }
+            guard let pane = workspaces.first(where: { $0.id == workspaceID })?.panes[paneID],
+                  let token = pane.lastAgent,
+                  let kind = PaneAgentKind(rawValue: token),
+                  restoreEnabled(for: kind) else { return nil }
+            let sid = pane.sessionIds[kind.rawValue]
+                .flatMap { Self.isValidSessionId($0) ? $0 : nil }
+            return kind.restoreCommand(sessionId: sid)
         }()
         let v = GhosttySurfaceView(
             frame: .zero,
@@ -1430,27 +1423,18 @@ final class WorkspaceStore: ObservableObject {
                     if workspaces[i].panes[paneID]?.lastAgent != agent {
                         workspaces[i].panes[paneID]?.lastAgent = agent
                     }
-                    // Claude/Codex session ids are only meaningful while the
-                    // matching agent is the foreground. Drop them the moment
-                    // the foreground is anything else, so a future restart
-                    // can't try to resume a session the user has clearly
-                    // moved on from. Each id is (re)captured from the next
-                    // hook event after a fresh launch.
-                    if agent != "claude",
-                       workspaces[i].panes[paneID]?.lastClaudeSessionId != nil {
-                        workspaces[i].panes[paneID]?.lastClaudeSessionId = nil
-                    }
-                    if agent != "codex",
-                       workspaces[i].panes[paneID]?.lastCodexSessionId != nil {
-                        workspaces[i].panes[paneID]?.lastCodexSessionId = nil
-                    }
-                    if agent != "opencode",
-                       workspaces[i].panes[paneID]?.lastOpenCodeSessionId != nil {
-                        workspaces[i].panes[paneID]?.lastOpenCodeSessionId = nil
-                    }
-                    if agent != "devin",
-                       workspaces[i].panes[paneID]?.lastDevinSessionId != nil {
-                        workspaces[i].panes[paneID]?.lastDevinSessionId = nil
+                    // A session id is only meaningful while its agent is the
+                    // foreground. Drop any entry whose key isn't the current
+                    // foreground (agent==nil clears them all) so a future
+                    // restart can't try to resume a session the user has
+                    // moved on from; the next hook event for a re-launched
+                    // agent repopulates its own slot.
+                    if let existing = workspaces[i].panes[paneID]?.sessionIds,
+                       !existing.isEmpty {
+                        let kept = existing.filter { $0.key == agent }
+                        if kept.count != existing.count {
+                            workspaces[i].panes[paneID]?.sessionIds = kept
+                        }
                     }
                 }
             }
@@ -1525,50 +1509,19 @@ final class WorkspaceStore: ObservableObject {
         // the event and leave the pane looking like a bare shell.
         let kind = explicitKind ?? paneAgentState[key]?.kind ?? foregroundKind ?? polledKind ?? .claude
 
-        // Stash the Claude session id whenever a Claude hook carries one. This
-        // is the only signal we have for the per-pane session — Claude exposes
-        // it on stdin to every hook, the reporter script forwards it in
-        // `session_b64`, and AgentBridge decodes it into `session`. Without it
-        // the restart path falls back to `claude --continue` and conflates
-        // multiple Claude panes onto the same session (#45).
-        if kind == .claude,
-           let sessionId = info["session"] as? String,
+        // Stash the per-pane session id whenever the hook carries one. Each
+        // agent ships its id by a different route — Claude/Devin push it on
+        // stdin (the shared reporter extracts it via plutil), Codex's
+        // app-server forwards it pre-decoded, and the OpenCode JS plugin
+        // walks event payloads — but by the time AgentBridge has decoded
+        // `session_b64` they all land here as `info["session"]`. Without
+        // this stash the restart path can only run `--continue`/`--last`,
+        // which collapses every same-cwd pane onto one session (#45).
+        if let sessionId = info["session"] as? String,
            Self.isValidSessionId(sessionId),
            let wsIdx = workspaces.firstIndex(where: { $0.id == key.workspace }),
-           workspaces[wsIdx].panes[key.pane] != nil,
-           workspaces[wsIdx].panes[key.pane]?.lastClaudeSessionId != sessionId {
-            workspaces[wsIdx].panes[key.pane]?.lastClaudeSessionId = sessionId
-        }
-        // Same idea for Codex. Its session_id is already routed through
-        // `codexSessionPanes` for live status — persisting it onto the pane
-        // here lets restart use `codex resume <id>` instead of `--last`, so
-        // multi-Codex workspaces stop collapsing onto the most recent session.
-        if kind == .codex,
-           let sessionId = info["session"] as? String,
-           Self.isValidSessionId(sessionId),
-           let wsIdx = workspaces.firstIndex(where: { $0.id == key.workspace }),
-           workspaces[wsIdx].panes[key.pane] != nil,
-           workspaces[wsIdx].panes[key.pane]?.lastCodexSessionId != sessionId {
-            workspaces[wsIdx].panes[key.pane]?.lastCodexSessionId = sessionId
-        }
-        // OpenCode (JS plugin forwards `sessionID`) and Devin (Claude-style
-        // `session_id` on stdin, extracted by the shared reporter script).
-        // Same persist-then-resume pattern as Claude/Codex above.
-        if kind == .opencode,
-           let sessionId = info["session"] as? String,
-           Self.isValidSessionId(sessionId),
-           let wsIdx = workspaces.firstIndex(where: { $0.id == key.workspace }),
-           workspaces[wsIdx].panes[key.pane] != nil,
-           workspaces[wsIdx].panes[key.pane]?.lastOpenCodeSessionId != sessionId {
-            workspaces[wsIdx].panes[key.pane]?.lastOpenCodeSessionId = sessionId
-        }
-        if kind == .devin,
-           let sessionId = info["session"] as? String,
-           Self.isValidSessionId(sessionId),
-           let wsIdx = workspaces.firstIndex(where: { $0.id == key.workspace }),
-           workspaces[wsIdx].panes[key.pane] != nil,
-           workspaces[wsIdx].panes[key.pane]?.lastDevinSessionId != sessionId {
-            workspaces[wsIdx].panes[key.pane]?.lastDevinSessionId = sessionId
+           workspaces[wsIdx].panes[key.pane]?.sessionIds[kind.rawValue] != sessionId {
+            workspaces[wsIdx].panes[key.pane]?.sessionIds[kind.rawValue] = sessionId
         }
 
         // Note: we deliberately do NOT force-write paneProcesses here. The

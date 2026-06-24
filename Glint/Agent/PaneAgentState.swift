@@ -16,6 +16,24 @@ enum PaneAgentKind: String, Codable {
         case .devin:    return "Devin"
         }
     }
+
+    /// Shell command (with trailing newline) that boots the agent at session
+    /// restore time. With a captured `sessionId`, jumps straight back to THAT
+    /// pane's session (#45 fix — without it, multiple panes collapse onto the
+    /// most-recent session). nil id ⇒ "resume the most-recent" fallback for
+    /// pre-fix data or panes where no hook fired before shutdown.
+    func restoreCommand(sessionId: String?) -> String {
+        switch self {
+        case .claude:
+            return sessionId.map { "claude --resume \($0)\n" } ?? "claude --continue\n"
+        case .codex:
+            return sessionId.map { "codex resume \($0)\n" } ?? "codex resume --last\n"
+        case .opencode:
+            return sessionId.map { "opencode --session \($0)\n" } ?? "opencode --continue\n"
+        case .devin:
+            return sessionId.map { "devin --resume \($0)\n" } ?? "devin --continue\n"
+        }
+    }
 }
 
 enum PaneAgentStatus: String, Codable {

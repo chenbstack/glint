@@ -369,13 +369,12 @@ enum AgentHookInstaller {
       trap - EXIT HUP INT TERM
       if [ -n "$SESSION" ]; then
         SESSION_B64=$(printf '%s' "$SESSION" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
-        printf '{"pane":"%s","hook":"%s","agent":"%s","session_b64":"%s"}\\n' \\
-          "$PANE" "$HOOK" "$AGENT" "$SESSION_B64" \\
-          | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
+        PAYLOAD=$(printf '{"pane":"%s","hook":"%s","agent":"%s","session_b64":"%s"}' \\
+          "$PANE" "$HOOK" "$AGENT" "$SESSION_B64")
       else
-        printf '{"pane":"%s","hook":"%s","agent":"%s"}\\n' "$PANE" "$HOOK" "$AGENT" \\
-          | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
+        PAYLOAD=$(printf '{"pane":"%s","hook":"%s","agent":"%s"}' "$PANE" "$HOOK" "$AGENT")
       fi
+      printf '%s\\n' "$PAYLOAD" | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
       exit 0
     fi
 
@@ -771,6 +770,9 @@ enum OpenCodeHookInstaller {
     // (verified against the bundled CLI binary), and may nest the value under
     // a `session` or `info` sub-object. Returning the first hit means a future
     // event-shape tweak only loses the field, never crashes the plugin.
+    // Same charset/length whitelist Swift's `isValidSessionId` enforces —
+    // keeps malformed ids from ever reaching `--session <id>` on restore.
+    const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
     const pickSessionId = (event) => {
       const candidates = [
         event?.properties?.sessionID,
@@ -783,7 +785,7 @@ enum OpenCodeHookInstaller {
         event?.sessionId,
       ]
       for (const c of candidates) {
-        if (typeof c === "string" && c.length > 0 && c.length <= 128) return c
+        if (typeof c === "string" && SESSION_ID_RE.test(c)) return c
       }
       return null
     }
