@@ -2638,6 +2638,29 @@ final class WorkspaceStore: ObservableObject {
             [URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])
     }
 
+    /// Reveal the focused pane's current directory in Finder — the global ⌘⇧F
+    /// shortcut. Cwd-first so it works anywhere (even outside a git repo),
+    /// falling back to the same worktree/repo-root/effective-git chain as
+    /// `revealWorktreeInFinder` when no cwd has been reported yet. Nothing
+    /// resolves ⇒ beep, mirroring `openReview`'s no-op.
+    func revealCurrentInFinder() {
+        guard let ws = selectedWorkspace else {
+            NSSound.beep()
+            return
+        }
+        let cwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
+        guard let path = cwd
+            ?? ws.source.worktreePath
+            ?? ws.source.repoRoot
+            ?? effectiveGitPath(for: ws)
+        else {
+            NSSound.beep()
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting(
+            [URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])
+    }
+
     /// Open the read-only Review window for a workspace. Always offers the
     /// working-tree scope; for a worktree with a known base branch it also offers
     /// the whole-branch (`base...HEAD`) scope, so the segmented control appears.

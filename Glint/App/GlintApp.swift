@@ -131,6 +131,12 @@ struct GlintApp: App {
                 .disabled(workspaceStore.selectedWorkspace.flatMap {
                     workspaceStore.effectiveGitPath(for: $0)
                 } == nil)
+                // Reveal the focused pane's cwd in Finder from anywhere — even
+                // outside a git repo (unlike Review Changes). Never disabled.
+                Button("Reveal in Finder") {
+                    workspaceStore.revealCurrentInFinder()
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
             }
             // Hijack the App menu's Settings… so ⌘, opens our in-window
             // sheet instead of trying to summon a separate scene.

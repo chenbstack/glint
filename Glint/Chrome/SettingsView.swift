@@ -274,12 +274,12 @@ struct SettingsCard<Content: View>: View {
 }
 
 struct SettingsRow<Trailing: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let subtitle: String?
     let wip: Bool
     @ViewBuilder var trailing: () -> Trailing
 
-    init(_ title: String, subtitle: String? = nil, wip: Bool = false,
+    init(_ title: LocalizedStringKey, subtitle: String? = nil, wip: Bool = false,
          @ViewBuilder trailing: @escaping () -> Trailing) {
         self.title = title
         self.subtitle = subtitle
@@ -291,7 +291,7 @@ struct SettingsRow<Trailing: View>: View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(LocalizedStringKey(title))
+                    Text(title)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Theme.text1)
                     if wip {
@@ -1861,6 +1861,8 @@ private struct ShortcutsPane: View {
             SettingsDivider()
             shortcutRow("Find in Sidebar", keys: ["⌥", "⌘", "F"])
             SettingsDivider()
+            shortcutRow("Reveal in Finder", keys: ["⌘", "⇧", "F"])
+            SettingsDivider()
             shortcutRow("Settings", keys: ["⌘", ","])
             SettingsDivider()
             shortcutRow("Minimize", keys: ["⌘", "M"])
@@ -1881,7 +1883,7 @@ private struct ShortcutsPane: View {
         }
     }
 
-    private func shortcutRow(_ name: String, keys: [String]) -> some View {
+    private func shortcutRow(_ name: LocalizedStringKey, keys: [String]) -> some View {
         SettingsRow(name, subtitle: nil) {
             HStack(spacing: 4) {
                 ForEach(Array(keys.enumerated()), id: \.offset) { _, k in
