@@ -64,9 +64,15 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: 截图或日志 / Screenshots or logs
-      description: 可以拖入截图，或粘贴相关日志、崩溃信息。 / Drag screenshots here, or paste relevant logs and crash details.
-      render: shell
+      label: 日志、截图或崩溃报告 / Logs, screenshots, or crash reports
+      description: |
+        可以把截图、日志文件或崩溃报告拖到这里上传。
+        如果 Glint 崩溃，请在 Finder 里按 Command+Shift+G，打开 `~/Library/Logs/DiagnosticReports`，查找 `Glint-*.ips`。
+        如果 GitHub 不接受 `.ips` 文件，请把它压缩成 `.zip`，或复制为 `.txt` 后上传。
+
+        Drag screenshots, log files, or crash reports here.
+        If Glint crashed, open `~/Library/Logs/DiagnosticReports` from Finder with Command+Shift+G and look for `Glint-*.ips`.
+        If GitHub does not accept the `.ips` file, zip it or copy it as a `.txt` file before uploading.
 
   - type: textarea
     id: extra
