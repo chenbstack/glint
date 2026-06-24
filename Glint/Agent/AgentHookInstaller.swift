@@ -341,6 +341,17 @@ enum AgentHookInstaller {
     PANE="${GLINT_PANE_ID:-}"
     SOCK="${GLINT_AGENT_SOCK:-}"
 
+    # Stream a JSON line on stdin to a unix socket. Used by both the
+    # Claude/OpenCode/Devin route (which has PANE+SOCK in env) and the Codex
+    # route (which broadcasts to one or two well-known sockets). Always exits
+    # 0 — a missing socket or a `nc` failure is silently swallowed so a
+    # transient bridge outage can never block an agent hook.
+    emit_event() {
+      TARGET_SOCK="$1"
+      [ ! -S "$TARGET_SOCK" ] && return 0
+      /usr/bin/nc -U -w 1 "$TARGET_SOCK" >/dev/null 2>&1 || true
+    }
+
     # Claude (and any future agent that inherits both env vars) takes the
     # direct route. Codex never enters this branch even if it happens to
     # inherit PANE+SOCK: keeping the trusted hook command identical for every
@@ -367,14 +378,17 @@ enum AgentHookInstaller {
       SESSION=$(/usr/bin/plutil -extract session_id raw -o - "$TMP" 2>/dev/null || true)
       /bin/rm -f "$TMP"
       trap - EXIT HUP INT TERM
+      # Two direct printf|nc pipelines — no intermediate $() subshell. The
+      # session_b64 field is omitted (rather than emitted as empty) so the
+      # receiver tells "no id captured" apart from "captured but empty".
       if [ -n "$SESSION" ]; then
         SESSION_B64=$(printf '%s' "$SESSION" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
-        PAYLOAD=$(printf '{"pane":"%s","hook":"%s","agent":"%s","session_b64":"%s"}' \\
-          "$PANE" "$HOOK" "$AGENT" "$SESSION_B64")
+        printf '{"pane":"%s","hook":"%s","agent":"%s","session_b64":"%s"}\\n' \\
+          "$PANE" "$HOOK" "$AGENT" "$SESSION_B64" | emit_event "$SOCK"
       else
-        PAYLOAD=$(printf '{"pane":"%s","hook":"%s","agent":"%s"}' "$PANE" "$HOOK" "$AGENT")
+        printf '{"pane":"%s","hook":"%s","agent":"%s"}\\n' \\
+          "$PANE" "$HOOK" "$AGENT" | emit_event "$SOCK"
       fi
-      printf '%s\\n' "$PAYLOAD" | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
       exit 0
     fi
 
@@ -401,11 +415,8 @@ enum AgentHookInstaller {
     CWD_B64=$(printf '%s' "$CWD" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
 
     send_codex_event() {
-      TARGET_SOCK="$1"
-      [ ! -S "$TARGET_SOCK" ] && return 0
       printf '{"hook":"%s","agent":"codex","session_b64":"%s","cwd_b64":"%s"}\\n' \\
-        "$HOOK" "$SESSION_B64" "$CWD_B64" \\
-        | /usr/bin/nc -U -w 1 "$TARGET_SOCK" >/dev/null 2>&1 || true
+        "$HOOK" "$SESSION_B64" "$CWD_B64" | emit_event "$1"
     }
 
     if [ -n "$SOCK" ] && [ -S "$SOCK" ]; then
@@ -770,9 +781,11 @@ enum OpenCodeHookInstaller {
     // (verified against the bundled CLI binary), and may nest the value under
     // a `session` or `info` sub-object. Returning the first hit means a future
     // event-shape tweak only loses the field, never crashes the plugin.
-    // Same charset/length whitelist Swift's `isValidSessionId` enforces —
-    // keeps malformed ids from ever reaching `--session <id>` on restore.
-    const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
+    // Same charset/length whitelist Swift's `PaneAgentKind.isValid(sessionId:)`
+    // enforces — the alphabet and max length below are interpolated FROM Swift
+    // at template-build time, so widening one side automatically widens the
+    // other and the two validators can't drift.
+    const SESSION_ID_RE = /^\(PaneAgentKind.sessionIdCharsetClass){1,\(PaneAgentKind.sessionIdMaxLength)}$/
     const pickSessionId = (event) => {
       const candidates = [
         event?.properties?.sessionID,

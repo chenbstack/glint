@@ -42,25 +42,36 @@ final class AgentKindResolutionTests: XCTestCase {
         XCTAssertNil(WorkspaceStore.agentKind(named: "zsh"))
     }
 
-    // MARK: agentToken(forProcessName:)
+    // MARK: agentKind(forProcessName:)
 
-    func testClaudeToken() {
-        XCTAssertEqual(WorkspaceStore.agentToken(forProcessName: "claude"), "claude")
+    func testClaudeProcessName() {
+        XCTAssertEqual(WorkspaceStore.agentKind(forProcessName: "claude"), .claude)
     }
 
-    func testCodexToken() {
-        XCTAssertEqual(WorkspaceStore.agentToken(forProcessName: "codex"), "codex")
+    func testCodexProcessName() {
+        XCTAssertEqual(WorkspaceStore.agentKind(forProcessName: "codex"), .codex)
     }
 
-    func testOpenCodeToken() {
-        XCTAssertEqual(WorkspaceStore.agentToken(forProcessName: "opencode"), "opencode")
+    func testOpenCodeProcessName() {
+        XCTAssertEqual(WorkspaceStore.agentKind(forProcessName: "opencode"), .opencode)
     }
 
-    func testDevinToken() {
-        XCTAssertEqual(WorkspaceStore.agentToken(forProcessName: "devin"), "devin")
+    func testDevinProcessName() {
+        XCTAssertEqual(WorkspaceStore.agentKind(forProcessName: "devin"), .devin)
     }
 
-    func testUnknownTokenReturnsNil() {
-        XCTAssertNil(WorkspaceStore.agentToken(forProcessName: "bash"))
+    func testUnknownProcessNameReturnsNil() {
+        XCTAssertNil(WorkspaceStore.agentKind(forProcessName: "bash"))
+    }
+
+    // Anchor the writer/reader contract: every PaneAgentKind's rawValue must
+    // be a process name `agentKind(forProcessName:)` recognizes — that's what
+    // structurally keeps `sessionIds[kind.rawValue]` lookups from quietly
+    // missing the entry the foreground poller stashed.
+    func testRawValueRoundTripsThroughForProcessName() {
+        for kind in [PaneAgentKind.claude, .codex, .opencode, .devin] {
+            XCTAssertEqual(WorkspaceStore.agentKind(forProcessName: kind.rawValue), kind,
+                           "rawValue '\(kind.rawValue)' must resolve back to \(kind)")
+        }
     }
 }

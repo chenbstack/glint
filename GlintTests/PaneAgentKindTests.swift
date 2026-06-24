@@ -39,6 +39,73 @@ final class PaneAgentKindTests: XCTestCase {
         XCTAssertTrue(isIconKind(PaneAgentKind.devin.iconKind, .devin))
     }
 
+    // MARK: isValid(sessionId:)
+
+    func testValidSessionIdAcceptsAlphanumericAndPunct() {
+        XCTAssertTrue(PaneAgentKind.isValid(sessionId: "01HK2X3F4Y5Z6A7B"))
+        XCTAssertTrue(PaneAgentKind.isValid(sessionId: "abc_def-123"))
+        XCTAssertTrue(PaneAgentKind.isValid(sessionId: "A"))
+    }
+
+    func testValidSessionIdRejectsEmpty() {
+        XCTAssertFalse(PaneAgentKind.isValid(sessionId: ""))
+    }
+
+    func testValidSessionIdRejectsTooLong() {
+        let s = String(repeating: "a", count: PaneAgentKind.sessionIdMaxLength + 1)
+        XCTAssertFalse(PaneAgentKind.isValid(sessionId: s))
+    }
+
+    func testValidSessionIdAcceptsMaxLength() {
+        let s = String(repeating: "a", count: PaneAgentKind.sessionIdMaxLength)
+        XCTAssertTrue(PaneAgentKind.isValid(sessionId: s))
+    }
+
+    func testValidSessionIdRejectsDisallowedChars() {
+        // Anything that would smuggle a second shell token must fail.
+        XCTAssertFalse(PaneAgentKind.isValid(sessionId: "a b"))
+        XCTAssertFalse(PaneAgentKind.isValid(sessionId: "a;b"))
+        XCTAssertFalse(PaneAgentKind.isValid(sessionId: "a\nb"))
+        XCTAssertFalse(PaneAgentKind.isValid(sessionId: "a/b"))
+        XCTAssertFalse(PaneAgentKind.isValid(sessionId: "a.b"))
+        XCTAssertFalse(PaneAgentKind.isValid(sessionId: "a\"b"))
+    }
+
+    // MARK: restoreCommand
+
+    func testRestoreCommandWithValidIdUsesResumeForm() {
+        XCTAssertEqual(PaneAgentKind.claude.restoreCommand(sessionId: "abc-123"),
+                       "claude --resume abc-123\n")
+        XCTAssertEqual(PaneAgentKind.codex.restoreCommand(sessionId: "abc-123"),
+                       "codex resume abc-123\n")
+        XCTAssertEqual(PaneAgentKind.opencode.restoreCommand(sessionId: "abc-123"),
+                       "opencode --session abc-123\n")
+        XCTAssertEqual(PaneAgentKind.devin.restoreCommand(sessionId: "abc-123"),
+                       "devin --resume abc-123\n")
+    }
+
+    func testRestoreCommandNilFallsBackToContinue() {
+        XCTAssertEqual(PaneAgentKind.claude.restoreCommand(sessionId: nil),
+                       "claude --continue\n")
+        XCTAssertEqual(PaneAgentKind.codex.restoreCommand(sessionId: nil),
+                       "codex resume --last\n")
+        XCTAssertEqual(PaneAgentKind.opencode.restoreCommand(sessionId: nil),
+                       "opencode --continue\n")
+        XCTAssertEqual(PaneAgentKind.devin.restoreCommand(sessionId: nil),
+                       "devin --continue\n")
+    }
+
+    func testRestoreCommandRejectsInjectedIdAndDowngradesToContinue() {
+        // Defense in depth: an id that bypassed any outer gate must NOT be
+        // interpolated into the TTY string. Caller forgets validation → we
+        // still emit the safe fallback rather than a primed shell.
+        let injected = "abc\n; rm -rf /tmp/nope\n"
+        XCTAssertEqual(PaneAgentKind.claude.restoreCommand(sessionId: injected),
+                       "claude --continue\n")
+        XCTAssertEqual(PaneAgentKind.codex.restoreCommand(sessionId: injected),
+                       "codex resume --last\n")
+    }
+
     // MARK: helpers
 
     /// WorkspaceIconKind isn't Equatable, so compare by matching the expected

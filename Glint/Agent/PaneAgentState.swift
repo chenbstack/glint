@@ -17,21 +17,54 @@ enum PaneAgentKind: String, Codable {
         }
     }
 
+    /// Single source of truth for what a CLI-agent session id may look like.
+    /// Used by Swift's `isValid(sessionId:)` validator AND interpolated into
+    /// the OpenCode JS plugin's regex, so the same alphabet+length applies on
+    /// both ingress sides. Bare character-class body (no anchors) — JS adds
+    /// `^…$`; Swift's validator walks unicode scalars.
+    static let sessionIdCharsetClass = "[A-Za-z0-9_-]"
+    static let sessionIdMaxLength = 128
+
+    /// Cheap whitelist for a CLI-agent session id before we paste it into a
+    /// resume command (`claude --resume <id>`, `codex resume <id>`). The
+    /// string ends up on the pane's stdin, so a stray quote/newline/space
+    /// would break the command (or worse, smuggle extra input). Both Claude
+    /// and Codex session ids are UUIDs in practice; we keep the alphabet a
+    /// touch wider (alnum + `-`/`_`) to absorb minor format changes, then
+    /// bound the length so a corrupt payload can't wedge an unbounded string.
+    static func isValid(sessionId s: String) -> Bool {
+        guard !s.isEmpty, s.count <= sessionIdMaxLength else { return false }
+        return s.unicodeScalars.allSatisfy { sc in
+            (sc.value >= 0x30 && sc.value <= 0x39) ||  // 0-9
+            (sc.value >= 0x41 && sc.value <= 0x5A) ||  // A-Z
+            (sc.value >= 0x61 && sc.value <= 0x7A) ||  // a-z
+            sc == "-" || sc == "_"
+        }
+    }
+
     /// Shell command (with trailing newline) that boots the agent at session
     /// restore time. With a captured `sessionId`, jumps straight back to THAT
     /// pane's session (#45 fix — without it, multiple panes collapse onto the
     /// most-recent session). nil id ⇒ "resume the most-recent" fallback for
     /// pre-fix data or panes where no hook fired before shutdown.
+    ///
+    /// Defends in depth: any non-nil id that fails the charset whitelist is
+    /// downgraded to the fallback form rather than being interpolated into
+    /// the TTY string. This keeps the function safe even if a future caller
+    /// forgets the outer validation step (the value lands on a real shell).
     func restoreCommand(sessionId: String?) -> String {
+        let validated: String? = sessionId.flatMap {
+            PaneAgentKind.isValid(sessionId: $0) ? $0 : nil
+        }
         switch self {
         case .claude:
-            return sessionId.map { "claude --resume \($0)\n" } ?? "claude --continue\n"
+            return validated.map { "claude --resume \($0)\n" } ?? "claude --continue\n"
         case .codex:
-            return sessionId.map { "codex resume \($0)\n" } ?? "codex resume --last\n"
+            return validated.map { "codex resume \($0)\n" } ?? "codex resume --last\n"
         case .opencode:
-            return sessionId.map { "opencode --session \($0)\n" } ?? "opencode --continue\n"
+            return validated.map { "opencode --session \($0)\n" } ?? "opencode --continue\n"
         case .devin:
-            return sessionId.map { "devin --resume \($0)\n" } ?? "devin --continue\n"
+            return validated.map { "devin --resume \($0)\n" } ?? "devin --continue\n"
         }
     }
 }

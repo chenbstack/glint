@@ -171,15 +171,18 @@ struct Pane: Identifiable, Codable {
         } else {
             // No `sessionIds` key — either a pre-#45 pane (no agent state at
             // all → empty dict) or one persisted by the first per-agent-field
-            // cut (#45 v1) which we migrate field-by-field. Failing the
-            // LegacyKeys container open is fine; just yields an empty dict.
+            // cut (#45 v1) which we migrate field-by-field. `decodeIfPresent`
+            // tolerates absent legacy keys but lets a typeMismatch propagate
+            // so a corrupt String→Int flip on disk surfaces as a decode error
+            // (caught by Persistence.stripBadPanes) instead of silently
+            // dropping the session hint and giving the user a #45 regression
+            // with no diagnostic.
             var map: [String: String] = [:]
-            if let legacy = try? decoder.container(keyedBy: LegacyKeys.self) {
-                if let v = try? legacy.decodeIfPresent(String.self, forKey: .lastClaudeSessionId) { map[PaneAgentKind.claude.rawValue] = v }
-                if let v = try? legacy.decodeIfPresent(String.self, forKey: .lastCodexSessionId) { map[PaneAgentKind.codex.rawValue] = v }
-                if let v = try? legacy.decodeIfPresent(String.self, forKey: .lastOpenCodeSessionId) { map[PaneAgentKind.opencode.rawValue] = v }
-                if let v = try? legacy.decodeIfPresent(String.self, forKey: .lastDevinSessionId) { map[PaneAgentKind.devin.rawValue] = v }
-            }
+            let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+            if let v = try legacy.decodeIfPresent(String.self, forKey: .lastClaudeSessionId) { map[PaneAgentKind.claude.rawValue] = v }
+            if let v = try legacy.decodeIfPresent(String.self, forKey: .lastCodexSessionId) { map[PaneAgentKind.codex.rawValue] = v }
+            if let v = try legacy.decodeIfPresent(String.self, forKey: .lastOpenCodeSessionId) { map[PaneAgentKind.opencode.rawValue] = v }
+            if let v = try legacy.decodeIfPresent(String.self, forKey: .lastDevinSessionId) { map[PaneAgentKind.devin.rawValue] = v }
             self.sessionIds = map
         }
     }
@@ -843,16 +846,22 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreDevinSession, forKey: "glint.restoreDevinSession") }
     }
 
-    /// Whether session-restore-on-launch is enabled for `kind` — single
-    /// dispatch site for the four per-agent toggles, so `surfaceView`'s
-    /// resume logic stays kind-agnostic.
+    /// Maps each agent kind to the @Published toggle that gates its
+    /// session-restore-on-launch. Single source of truth: adding a fifth
+    /// agent means adding ONE entry here, not editing two parallel switches
+    /// across files (one here, one in `PaneAgentKind.restoreCommand`).
+    private static let restoreToggleKeyPaths: [PaneAgentKind: ReferenceWritableKeyPath<WorkspaceStore, Bool>] = [
+        .claude:   \.restoreClaudeSession,
+        .codex:    \.restoreCodexSession,
+        .opencode: \.restoreOpenCodeSession,
+        .devin:    \.restoreDevinSession,
+    ]
+
+    /// Whether session-restore-on-launch is enabled for `kind`. Used by
+    /// `surfaceView` so the resume dispatch stays kind-agnostic.
     private func restoreEnabled(for kind: PaneAgentKind) -> Bool {
-        switch kind {
-        case .claude:   return restoreClaudeSession
-        case .codex:    return restoreCodexSession
-        case .opencode: return restoreOpenCodeSession
-        case .devin:    return restoreDevinSession
-        }
+        guard let path = Self.restoreToggleKeyPaths[kind] else { return false }
+        return self[keyPath: path]
     }
 
     /// Master switch for the external control socket (control.sock). Off by
@@ -1419,19 +1428,24 @@ final class WorkspaceStore: ObservableObject {
                     // foreground (no live surface / transient empty pid) is
                     // unknown, not an exit — leave the hint alone so a momentary
                     // read gap doesn't drop a still-live session's resume hint.
-                    let agent = Self.agentToken(forProcessName: name)
-                    if workspaces[i].panes[paneID]?.lastAgent != agent {
-                        workspaces[i].panes[paneID]?.lastAgent = agent
+                    let agentKind = Self.agentKind(forProcessName: name)
+                    let agentToken = agentKind?.rawValue
+                    if workspaces[i].panes[paneID]?.lastAgent != agentToken {
+                        workspaces[i].panes[paneID]?.lastAgent = agentToken
                     }
                     // A session id is only meaningful while its agent is the
                     // foreground. Drop any entry whose key isn't the current
                     // foreground (agent==nil clears them all) so a future
                     // restart can't try to resume a session the user has
                     // moved on from; the next hook event for a re-launched
-                    // agent repopulates its own slot.
+                    // agent repopulates its own slot. Comparing against
+                    // `agentKind?.rawValue` (not a free-form String) is what
+                    // structurally guarantees the writer here and the reader
+                    // at `surfaceView`'s `pane.sessionIds[kind.rawValue]`
+                    // can't drift on spelling.
                     if let existing = workspaces[i].panes[paneID]?.sessionIds,
                        !existing.isEmpty {
-                        let kept = existing.filter { $0.key == agent }
+                        let kept = existing.filter { $0.key == agentToken }
                         if kept.count != existing.count {
                             workspaces[i].panes[paneID]?.sessionIds = kept
                         }
@@ -2088,31 +2102,20 @@ final class WorkspaceStore: ObservableObject {
     /// close-confirmation check and the workspace icon picker.
     static let benignShells: Set<String> = ["zsh", "bash", "fish", "sh", "dash", "ksh", "login", "tmux"]
 
-    static func agentToken(forProcessName name: String) -> String? {
-        switch agentKind(named: name) {
-        case .claude: return "claude"
-        case .codex: return "codex"
-        case .opencode: return "opencode"
-        case .devin: return "devin"
-        case nil: return nil
-        }
+    /// Resolve a foreground-process name into the agent kind it corresponds
+    /// to (nil for benign shells / unrelated tools). Callers that need the
+    /// `lastAgent` string form go through `kind.rawValue`, which is the same
+    /// alphabet `sessionIds` is keyed by — guaranteeing the writer side and
+    /// the reader side can't drift on casing/spelling.
+    static func agentKind(forProcessName name: String) -> PaneAgentKind? {
+        agentKind(named: name)
     }
 
-    /// Cheap whitelist for a CLI-agent session id before we paste it into a
-    /// resume command (`claude --resume <id>`, `codex resume <id>`). The string
-    /// ends up on the pane's stdin, so a stray quote/newline/space would break
-    /// the command (or worse, smuggle extra input). Both Claude and Codex
-    /// session ids are UUIDs in practice; we keep the alphabet a touch wider
-    /// (alnum + `-`/`_`) to absorb minor format changes, then bound the length
-    /// so a corrupt payload can't wedge an unbounded string in.
+    /// Thin alias kept for backwards-compatible call sites. The actual spec
+    /// lives on `PaneAgentKind.isValid(sessionId:)` — single source of truth
+    /// shared with the OpenCode JS plugin's regex.
     static func isValidSessionId(_ s: String) -> Bool {
-        guard !s.isEmpty, s.count <= 128 else { return false }
-        return s.unicodeScalars.allSatisfy { sc in
-            (sc.value >= 0x30 && sc.value <= 0x39) ||  // 0-9
-            (sc.value >= 0x41 && sc.value <= 0x5A) ||  // A-Z
-            (sc.value >= 0x61 && sc.value <= 0x7A) ||  // a-z
-            sc == "-" || sc == "_"
-        }
+        PaneAgentKind.isValid(sessionId: s)
     }
 
     /// Classify a foreground-process name or a hook's agent token into an
