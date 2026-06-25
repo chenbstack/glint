@@ -47,12 +47,14 @@ enum ReleaseNotes {
     /// Newest first. Add a new entry at the top each beta.
     static let all: [ReleaseNote] = [
         ReleaseNote(
-            version: "0.1.24-beta.1",
+            version: "0.1.24",
             en: [
+                "Fixed a launch crash on macOS 15.x where the app would quit immediately after opening (#43). The Sparkle auto-updater no longer starts during SwiftUI's StateObject creation phase, which is what tripped the crash on older macOS versions.",
                 "Review Changes now has a keyboard shortcut — press ⌘⇧R from anywhere to open the diff window for the current workspace. The shortcut also shows on the git button's menu.",
                 "After each update, a What's New card summarizes what changed in the version. You can reopen it anytime from Settings ▸ About.",
             ],
             zh: [
+                "修复 macOS 15.x 上启动即闪退的问题(#43)。Sparkle 自动更新不再在 SwiftUI StateObject 创建阶段同步启动 —— 这正是老版本 macOS 上触发崩溃的根因。",
                 "「审阅改动」新增快捷键 —— 在任意位置按 ⌘⇧R 即可为当前工作区打开 diff 窗口,git 按钮菜单里也会标出这个快捷键。",
                 "每次更新后会弹出「更新内容」卡片,汇总这一版的变化;也可随时在 设置 ▸ 关于 中重新查看。",
             ]
