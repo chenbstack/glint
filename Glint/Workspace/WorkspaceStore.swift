@@ -784,10 +784,16 @@ final class WorkspaceStore: ObservableObject {
     /// presets are pre-rendered with their own padding and corner.
     /// Must run on the main thread; `didSet` and the launch restore both do.
     func applyAppIcon() {
+        // `NSApp` is `NSApplication!` (IUO). Touching it during @StateObject
+        // boxing at launch traps (#43), so guard like the dock-tile paths.
+        // Today's callers (the `appIconPreset` didSet and AppDelegate's
+        // main.async-deferred launch restore) land after NSApp is set, but a
+        // future init-time caller would otherwise hit the same trap.
+        guard let app = NSApp else { return }
         if let asset = appIconPreset.assetName {
-            NSApp.applicationIconImage = NSImage(named: asset)
+            app.applicationIconImage = NSImage(named: asset)
         } else {
-            NSApp.applicationIconImage = nil
+            app.applicationIconImage = nil
         }
     }
 
