@@ -319,10 +319,10 @@ enum AgentHookInstaller {
         }
     }
 
-    /// Pure POSIX sh. Claude and other agents inherit the pane route. Codex may
-    /// execute hooks in a shared app-server instead, so its events always use
-    /// the stable session identity from stdin and let Glint bind that session
-    /// to the pane that submitted the prompt.
+    /// Pure POSIX sh. Every agent (Claude, Codex, OpenCode, Devin) inherits
+    /// `$GLINT_PANE_ID` and `$GLINT_AGENT_SOCK` from the pane environment and
+    /// uses them to address Glint directly. Codex 0.142.0 verified via env
+    /// dump (`ps eww`) — hook subprocesses keep both vars.
     ///
     /// Uses `/usr/bin/nc` (absolute) not bare `nc`: Homebrew's GNU netcat
     /// (`/opt/homebrew/bin/nc`, netcat 0.7.1) shadows it and rejects `-U`
@@ -333,6 +333,12 @@ enum AgentHookInstaller {
     /// Argv[1] = hook event name (e.g. "PostToolUse").
     /// Argv[2] = agent kind ("claude" or "codex"); defaults to "claude" so
     /// existing Claude installs keep working without a script rewrite.
+    ///
+    /// We also pull `session_id` from the JSON payload on stdin and forward
+    /// it as `session_b64`, so restore-on-launch can use `--resume <id>`
+    /// instead of `--continue` (issue #45). When extraction fails (older CLI,
+    /// non-JSON payload) the field is omitted; the receiver tells "no id
+    /// captured" apart from "captured but empty".
     static let scriptBody: String = """
     #!/bin/sh
     # Glint CLI-agent hook reporter. argv: event, agent kind.
@@ -341,94 +347,30 @@ enum AgentHookInstaller {
     PANE="${GLINT_PANE_ID:-}"
     SOCK="${GLINT_AGENT_SOCK:-}"
 
-    # Stream a JSON line on stdin to a unix socket. Used by both the
-    # Claude/OpenCode/Devin route (which has PANE+SOCK in env) and the Codex
-    # route (which broadcasts to one or two well-known sockets). Always exits
-    # 0 — a missing socket or a `nc` failure is silently swallowed so a
-    # transient bridge outage can never block an agent hook.
-    emit_event() {
-      TARGET_SOCK="$1"
-      [ ! -S "$TARGET_SOCK" ] && return 0
-      /usr/bin/nc -U -w 1 "$TARGET_SOCK" >/dev/null 2>&1 || true
-    }
-
-    # Claude (and any future agent that inherits both env vars) takes the
-    # direct route. Codex never enters this branch even if it happens to
-    # inherit PANE+SOCK: keeping the trusted hook command identical for every
-    # Codex pane means Codex's per-command trust hash stays stable, so
-    # `codex trust` only fires once. The tradeoff: a Codex CLI build that
-    # could otherwise be addressed directly still pays the session-extraction
-    # roundtrip. Codex >= 0.130 (which carries session_id in the stdin
-    # payload) is required.
-    #
-    # We also try to pull session_id out of the stdin payload here. Claude
-    # passes a JSON object on stdin to every hook; capturing its session_id
-    # lets restore-on-launch use `claude --resume <id>` instead of
-    # `claude --continue`, so two Claude panes in the same workspace don't
-    # both collapse onto the most-recent session (issue #45). When extraction
-    # fails (older Claude, non-JSON, agents other than Claude that share this
-    # branch like OpenCode/Devin) we just drop the field — pane id alone is
-    # enough to drive every other downstream behavior.
-    if [ "$AGENT" != "codex" ] && [ -n "$PANE" ] && [ -n "$SOCK" ]; then
-      [ ! -S "$SOCK" ] && { cat >/dev/null 2>&1; exit 0; }
-      umask 077
-      TMP=$(/usr/bin/mktemp "${TMPDIR:-/tmp}/glint-hook.XXXXXX") || { cat >/dev/null 2>&1; exit 0; }
-      trap '/bin/rm -f "$TMP"' EXIT HUP INT TERM
-      cat >"$TMP"
-      SESSION=$(/usr/bin/plutil -extract session_id raw -o - "$TMP" 2>/dev/null || true)
-      /bin/rm -f "$TMP"
-      trap - EXIT HUP INT TERM
-      # Two direct printf|nc pipelines — no intermediate $() subshell. The
-      # session_b64 field is omitted (rather than emitted as empty) so the
-      # receiver tells "no id captured" apart from "captured but empty".
-      if [ -n "$SESSION" ]; then
-        SESSION_B64=$(printf '%s' "$SESSION" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
-        printf '{"pane":"%s","hook":"%s","agent":"%s","session_b64":"%s"}\\n' \\
-          "$PANE" "$HOOK" "$AGENT" "$SESSION_B64" | emit_event "$SOCK"
-      else
-        printf '{"pane":"%s","hook":"%s","agent":"%s"}\\n' \\
-          "$PANE" "$HOOK" "$AGENT" | emit_event "$SOCK"
-      fi
+    # Always exits 0 — a missing pane/socket or a `nc` failure is silently
+    # swallowed so a transient bridge outage can never block an agent hook.
+    if [ -z "$PANE" ] || [ -z "$SOCK" ] || [ ! -S "$SOCK" ]; then
+      cat >/dev/null 2>&1
       exit 0
     fi
 
-    # Codex's shared app-server lacks GLINT_* variables. Keep the configured
-    # hook command identical for every pane (so Codex can trust it once), and
-    # forward only routing metadata from the hook payload.
-    [ "$AGENT" != "codex" ] && { cat >/dev/null 2>&1; exit 0; }
     umask 077
     TMP=$(/usr/bin/mktemp "${TMPDIR:-/tmp}/glint-hook.XXXXXX") || { cat >/dev/null 2>&1; exit 0; }
     trap '/bin/rm -f "$TMP"' EXIT HUP INT TERM
     cat >"$TMP"
     SESSION=$(/usr/bin/plutil -extract session_id raw -o - "$TMP" 2>/dev/null || true)
-    CWD=$(/usr/bin/plutil -extract cwd raw -o - "$TMP" 2>/dev/null || true)
     /bin/rm -f "$TMP"
     trap - EXIT HUP INT TERM
-    if [ -z "$SESSION" ]; then
-      # No session_id — likely a Codex schema change (camelCase, nested
-      # field) or a payload we couldn't parse. Surface a one-line diagnostic
-      # on stderr so a user staring at a frozen pane has a thread to pull.
-      printf '[glint-hook] %s: missing session_id in payload — pane will not update\\n' "$HOOK" >&2
-      exit 0
-    fi
-    SESSION_B64=$(printf '%s' "$SESSION" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
-    CWD_B64=$(printf '%s' "$CWD" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
 
-    send_codex_event() {
-      printf '{"hook":"%s","agent":"codex","session_b64":"%s","cwd_b64":"%s"}\\n' \\
-        "$HOOK" "$SESSION_B64" "$CWD_B64" | emit_event "$1"
-    }
-
-    if [ -n "$SOCK" ] && [ -S "$SOCK" ]; then
-      send_codex_event "$SOCK"
+    if [ -n "$SESSION" ]; then
+      SESSION_B64=$(printf '%s' "$SESSION" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
+      printf '{"pane":"%s","hook":"%s","agent":"%s","session_b64":"%s"}\\n' \\
+        "$PANE" "$HOOK" "$AGENT" "$SESSION_B64" \\
+        | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
     else
-      # Codex app-server doesn't inherit GLINT_AGENT_SOCK. We don't know which
-      # Glint owns this session, so broadcast to both prod and debug sockets;
-      # whichever app is running picks it up. Both apps may try to bind the
-      # session — the receiver-side claim file (`tryClaimCodexSession`)
-      # serializes them so only one Glint actually owns each session.
-      send_codex_event "$HOME/.glint/run/agent.sock"
-      send_codex_event "$HOME/.glint/run/agent-debug.sock"
+      printf '{"pane":"%s","hook":"%s","agent":"%s"}\\n' \\
+        "$PANE" "$HOOK" "$AGENT" \\
+        | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
     fi
     exit 0
     """
@@ -447,9 +389,9 @@ enum AgentHookInstaller {
 ///       }
 ///     }
 ///
-/// Codex passes the entire hook payload on stdin. The shared reporter extracts
-/// only session/cwd routing metadata and forwards it with the event name to
-/// Glint's local socket.
+/// Codex passes the entire hook payload on stdin, same as Claude. The shared
+/// reporter pulls `session_id` out for restore-on-launch (#45) and forwards
+/// the event name to Glint's local socket using the pane env vars.
 enum CodexHookInstaller {
     /// Events Glint reacts to. Codex has no Notification event, but it does
     /// expose tool boundaries; PreToolUse is important for clearing a pending

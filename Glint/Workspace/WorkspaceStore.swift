@@ -499,29 +499,6 @@ final class WorkspaceStore: ObservableObject {
     /// status (thinking/permission/…) the 1s name poll can't know.
     /// Non-persistent.
     @Published var paneAgentState: [WorkspacePaneKey: PaneAgentState] = [:]
-    /// Codex 0.141+ runs hooks in a shared app-server, so hook processes no
-    /// longer inherit GLINT_PANE_ID. Bind its stable session id after the first
-    /// submitted prompt and use that route for the rest of the session.
-    private struct CodexSessionRoute {
-        var pane: WorkspacePaneKey
-        var lastSeen: Date
-    }
-    private static let codexSessionRouteTTL: TimeInterval = 12 * 60 * 60
-    private static let codexSessionRouteLimit = 256
-    private var codexSessionPanes: [String: CodexSessionRoute] = [:]
-    /// Each entry is a single Return timestamp; consumed within 10 s by the
-    /// next Codex `UserPromptSubmit` for binding. Prune is read-time only
-    /// because closed panes never clear their own entry — without a TTL
-    /// floor, Claude/shell panes that never bind a Codex session leak Date
-    /// values forever.
-    private var recentPaneReturns: [WorkspacePaneKey: Date] = [:]
-    private static let recentPaneReturnTTL: TimeInterval = 60
-    /// Maximum staleness for a `.needsPermission` status before a fresh
-    /// Return is treated as a real new-prompt submit again. Codex sometimes
-    /// fails to clear permission state (client died mid-tool, hook lost),
-    /// and the bare `status == .needsPermission` guard then silently
-    /// suppresses every following routing candidate from this pane.
-    private static let needsPermissionStaleAfter: TimeInterval = 5 * 60
 
     /// Drives the command-palette overlay. Toggled by the toolbar's ⌘
     /// button and the ⌘⇧P global shortcut. Mutually exclusive with the agent
@@ -1509,8 +1486,9 @@ final class WorkspaceStore: ObservableObject {
     /// Translate one hook from the AgentBridge into pane state.
     func handleAgentEvent(_ info: [AnyHashable: Any]?) {
         guard let info,
+              let paneStr = info["pane"] as? String,
               let hook = info["hook"] as? String,
-              let key = resolveAgentEventPane(info, hook: hook) else { return }
+              let key = Self.parsePaneKey(paneStr) else { return }
 
         let explicitKind = (info["agent"] as? String).flatMap(Self.agentKind(named:))
         let foregroundKind = surfaceViews[key]?.foregroundProcessName()
@@ -1523,14 +1501,13 @@ final class WorkspaceStore: ObservableObject {
         // the event and leave the pane looking like a bare shell.
         let kind = explicitKind ?? paneAgentState[key]?.kind ?? foregroundKind ?? polledKind ?? .claude
 
-        // Stash the per-pane session id whenever the hook carries one. Each
-        // agent ships its id by a different route — Claude/Devin push it on
-        // stdin (the shared reporter extracts it via plutil), Codex's
-        // app-server forwards it pre-decoded, and the OpenCode JS plugin
-        // walks event payloads — but by the time AgentBridge has decoded
-        // `session_b64` they all land here as `info["session"]`. Without
-        // this stash the restart path can only run `--continue`/`--last`,
-        // which collapses every same-cwd pane onto one session (#45).
+        // Stash the per-pane session id whenever the hook carries one. The
+        // shared reporter extracts it from each CLI's stdin payload via
+        // `plutil`, the OpenCode JS plugin walks event payloads — by the
+        // time AgentBridge has decoded `session_b64` they all land here as
+        // `info["session"]`. Without this stash the restart path can only
+        // run `--continue`/`--last`, which collapses every same-cwd pane
+        // onto one session (#45).
         if let sessionId = info["session"] as? String,
            Self.isValidSessionId(sessionId),
            let wsIdx = workspaces.firstIndex(where: { $0.id == key.workspace }),
@@ -1660,239 +1637,15 @@ final class WorkspaceStore: ObservableObject {
     func handlePaneReturn(_ info: [AnyHashable: Any]?) {
         guard let info,
               let paneStr = info["pane"] as? String,
-              let key = Self.parsePaneKey(paneStr) else { return }
-        // Permission approval is not a new prompt. Recording it as a submit
-        // candidate could make a different, newly-started Codex session bind
-        // to this pane if both events land within the routing window.
-        // Exception: a stale `.needsPermission` (Codex client died, or its
-        // clearing PostToolUse never arrived) would otherwise silently mask
-        // every subsequent real submit from this pane. Treat anything older
-        // than `needsPermissionStaleAfter` as expired.
-        let now = Date()
-        let perm = paneAgentState[key]
-        let permissionFresh = perm?.status == .needsPermission
-            && perm.map { now.timeIntervalSince($0.updatedAt) } ?? .infinity
-                < Self.needsPermissionStaleAfter
-        if !permissionFresh {
-            recentPaneReturns[key] = now
-        }
-        guard var state = paneAgentState[key],
+              let key = Self.parsePaneKey(paneStr),
+              var state = paneAgentState[key],
               state.status == .needsPermission else { return }
+        let now = Date()
         state.status = .tool
         state.updatedAt = now
         state.turnStartedAt = now
         paneAgentState[key] = state
         clearDockBadge(for: key)
-    }
-
-    /// Resolve direct pane-addressed hooks, or bind a shared Codex session on
-    /// its first submitted prompt. A unique cwd match covers `codex "prompt"`
-    /// and other launches that submit without a separate terminal Return.
-    /// Cross-instance correctness (prod + debug Glint both receiving the same
-    /// broadcast) is enforced by an atomic per-session claim file —
-    /// `tryClaimCodexSession` — so only one app owns each session.
-    private func resolveAgentEventPane(
-        _ info: [AnyHashable: Any],
-        hook: String,
-        now: Date = Date()
-    ) -> WorkspacePaneKey? {
-        if let pane = info["pane"] as? String,
-           let key = Self.parsePaneKey(pane) {
-            return key
-        }
-        guard (info["agent"] as? String) == "codex",
-              let session = info["session"] as? String,
-              !session.isEmpty else { return nil }
-
-        pruneCodexSessionRoutes(now: now)
-        pruneRecentPaneReturns(now: now)
-        if var route = codexSessionPanes[session] {
-            route.lastSeen = now
-            codexSessionPanes[session] = route
-            let key = route.pane
-            // Re-validate on every cache hit, not only UserPromptSubmit: if
-            // the Codex client in the pane has died (Ctrl-C, crash) and the
-            // foreground is now zsh, a trailing Stop/StopFailure from the
-            // shared app-server would otherwise write `.justCompleted` onto a
-            // shell pane and ring the completion chime.
-            if let view = surfaceViews[key], view.hasLiveSurface {
-                let kind = Self.codexRoutingCandidateKind(
-                    foregroundProcessName: view.foregroundProcessName(),
-                    polledProcessName: paneProcesses[key],
-                    stateKind: paneAgentState[key]?.kind
-                )
-                if kind == .codex {
-                    if hook == "UserPromptSubmit" {
-                        recentPaneReturns.removeValue(forKey: key)
-                    }
-                    return key
-                }
-            }
-            codexSessionPanes.removeValue(forKey: session)
-            Self.releaseCodexSessionClaim(session)
-        }
-        guard hook == "UserPromptSubmit" else { return nil }
-
-        let codexPanes = surfaceViews.compactMap { key, view -> WorkspacePaneKey? in
-            guard view.hasLiveSurface else { return nil }
-            // A known foreground process is authoritative even when it is not
-            // an agent. Falling through from "zsh" to stale hook state would
-            // incorrectly keep an exited Codex pane in the routing candidates.
-            let kind = Self.codexRoutingCandidateKind(
-                foregroundProcessName: view.foregroundProcessName(),
-                polledProcessName: paneProcesses[key],
-                stateKind: paneAgentState[key]?.kind
-            )
-            return kind == .codex ? key : nil
-        }
-        // Panes already routing for another Codex session must not be reused
-        // for a new one — a subsequent Return in a cwd-bound pane would
-        // otherwise silently steal an unrelated session that submits within
-        // the 10-second window.
-        let alreadyBound = Set(codexSessionPanes.values.map { $0.pane })
-        let unboundPanes = codexPanes.filter { !alreadyBound.contains($0) }
-        let recentlySubmitted = unboundPanes.compactMap { key -> (WorkspacePaneKey, Date)? in
-            guard let date = recentPaneReturns[key],
-                  now.timeIntervalSince(date) >= 0,
-                  now.timeIntervalSince(date) <= 10 else { return nil }
-            return (key, date)
-        }
-        let key: WorkspacePaneKey?
-        if let latest = recentlySubmitted.max(by: { $0.1 < $1.1 }) {
-            key = latest.0
-        } else if let cwd = info["cwd"] as? String, !cwd.isEmpty {
-            let normalized = Self.canonicalizeCwd(cwd)
-            // Only compare against cwds the shell has actually reported via
-            // OSC 7. The pane's initial `workingDirectory` would misroute
-            // anyone who `cd`'d before launching codex (first prompt fires
-            // before OSC 7 has populated cachedCwd) — better to give up than
-            // bind the wrong pane.
-            let matches = unboundPanes.filter { candidate in
-                guard let known = surfaceViews[candidate]?.cachedCwd else { return false }
-                return Self.canonicalizeCwd(known) == normalized
-            }
-            key = matches.count == 1 ? matches[0] : nil
-        } else {
-            key = nil
-        }
-        guard let key else {
-            NSLog("[glint] agent: could not route Codex session \(session)")
-            return nil
-        }
-        // Cross-instance claim. The hook script broadcasts to prod + debug
-        // sockets when GLINT_AGENT_SOCK isn't inherited, so both Glints would
-        // race to bind. Atomic O_EXCL claim file makes the first writer win;
-        // the loser drops the event silently for its own state.
-        guard Self.tryClaimCodexSession(session, now: now) else {
-            NSLog("[glint] agent: Codex session \(session) claimed by another Glint — skipping")
-            return nil
-        }
-        codexSessionPanes[session] = CodexSessionRoute(pane: key, lastSeen: now)
-        recentPaneReturns.removeValue(forKey: key)
-        return key
-    }
-
-    private func pruneCodexSessionRoutes(now: Date) {
-        codexSessionPanes = codexSessionPanes.filter {
-            now.timeIntervalSince($0.value.lastSeen) <= Self.codexSessionRouteTTL
-        }
-        let overflow = codexSessionPanes.count - Self.codexSessionRouteLimit
-        guard overflow > 0 else { return }
-        for (session, _) in codexSessionPanes
-            .sorted(by: { $0.value.lastSeen < $1.value.lastSeen })
-            .prefix(overflow) {
-            codexSessionPanes.removeValue(forKey: session)
-        }
-    }
-
-    private func pruneRecentPaneReturns(now: Date) {
-        recentPaneReturns = recentPaneReturns.filter {
-            now.timeIntervalSince($0.value) <= Self.recentPaneReturnTTL
-        }
-    }
-
-    /// Compare cwd paths by their canonical form so symlink prefixes don't
-    /// silently break routing — Darwin's `/tmp -> /private/tmp` and
-    /// `/var -> /private/var` are the most common cases, plus any
-    /// user-created project symlinks. `standardizedFileURL` alone only
-    /// folds `..`/`.`/duplicate slashes; symlinks need `resolvingSymlinksInPath`.
-    static func canonicalizeCwd(_ path: String) -> String {
-        URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
-    }
-
-    // MARK: cross-instance Codex session claims
-
-    /// Identity written into per-session claim files so this Glint can
-    /// recognize claims it already owns. Bundle id distinguishes prod vs
-    /// debug; pid lets a future process steal a stale claim after a crash.
-    private static var codexClaimToken: String {
-        "\(Bundle.main.bundleIdentifier ?? "glint"):\(ProcessInfo.processInfo.processIdentifier)"
-    }
-
-    private static let codexClaimsDir: String = {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return home.appendingPathComponent(".glint/run/codex-claims", isDirectory: true).path
-    }()
-
-    private static func codexClaimPath(for session: String) -> String {
-        // Session ids from Codex are UUIDs, but sanitize defensively.
-        let safe = session.unicodeScalars.map { scalar -> String in
-            if CharacterSet.alphanumerics.contains(scalar)
-                || scalar == "-" || scalar == "_" {
-                return String(scalar)
-            }
-            return "_"
-        }.joined()
-        return "\(codexClaimsDir)/\(safe).owner"
-    }
-
-    /// Atomically claim ownership of a Codex session id across Glint
-    /// instances. Returns true if this Glint already holds the claim or
-    /// successfully created/stole it (after the route TTL has expired on a
-    /// stale claim).
-    ///
-    /// `O_CREAT|O_EXCL` is the only file-creation primitive POSIX guarantees
-    /// to be atomic against concurrent creators on a local filesystem.
-    static func tryClaimCodexSession(_ session: String, now: Date) -> Bool {
-        try? FileManager.default.createDirectory(
-            atPath: codexClaimsDir,
-            withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700]
-        )
-        let path = codexClaimPath(for: session)
-        let token = codexClaimToken
-        let cPath = (path as NSString).fileSystemRepresentation
-        let fd = Darwin.open(cPath, O_WRONLY | O_CREAT | O_EXCL, 0o600)
-        if fd >= 0 {
-            token.withCString { ptr in _ = Darwin.write(fd, ptr, strlen(ptr)) }
-            Darwin.close(fd)
-            return true
-        }
-        guard let existing = try? String(contentsOfFile: path, encoding: .utf8) else {
-            // Unreadable claim — could be a permissions glitch or a tmpfs
-            // hiccup. Bias toward not stomping on a potential other owner.
-            return false
-        }
-        let owner = existing.trimmingCharacters(in: .whitespacesAndNewlines)
-        if owner == token { return true }
-        if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-           let mtime = attrs[.modificationDate] as? Date,
-           now.timeIntervalSince(mtime) > codexSessionRouteTTL {
-            try? token.write(toFile: path, atomically: true, encoding: .utf8)
-            return true
-        }
-        return false
-    }
-
-    /// Drop our claim when evicting a route. Only deletes the claim file when
-    /// it actually names this Glint, so a recovering process can't wipe a
-    /// peer instance's active claim by accident.
-    static func releaseCodexSessionClaim(_ session: String) {
-        let path = codexClaimPath(for: session)
-        guard let existing = try? String(contentsOfFile: path, encoding: .utf8) else { return }
-        if existing.trimmingCharacters(in: .whitespacesAndNewlines) == codexClaimToken {
-            try? FileManager.default.removeItem(atPath: path)
-        }
     }
 
     /// Clear any `.justCompleted` / `.failed` panes back to `.idle` — but
@@ -2128,17 +1881,6 @@ final class WorkspaceStore: ObservableObject {
         if lower.contains("opencode") { return .opencode }
         if lower.contains("devin") { return .devin }
         return nil
-    }
-
-    static func codexRoutingCandidateKind(
-        foregroundProcessName: String?,
-        polledProcessName: String?,
-        stateKind: PaneAgentKind?
-    ) -> PaneAgentKind? {
-        if let processName = foregroundProcessName ?? polledProcessName {
-            return agentKind(named: processName)
-        }
-        return stateKind
     }
 
     private static func isBenignShellProcessName(_ name: String) -> Bool {
