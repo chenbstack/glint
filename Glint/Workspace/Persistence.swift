@@ -93,11 +93,18 @@ enum Persistence {
                 do {
                     try repaired.write(to: url, options: [.atomic])
                 } catch {
-                    // Couldn't persist the repair (disk full/permissions).
-                    // Guard the original so the next autosave doesn't
-                    // overwrite the only copy with the stripped state.
-                    corruptUnmovablePath = url.path
-                    NSLog("[glint] couldn't persist repaired \(fileName); refusing to overwrite — original kept at \(url.path)")
+                    // Couldn't persist the repair (disk full/permissions) — but
+                    // the repaired state decoded fine and is now the in-memory
+                    // truth, so DON'T block further saves. A later autosave
+                    // carries this good state plus any new work, and an atomic
+                    // write that fails leaves the original intact (no worse
+                    // corruption). Setting corruptUnmovablePath here would
+                    // permanently drop EVERY subsequent edit until relaunch —
+                    // a worse outcome than overwriting a corrupt original we
+                    // already recovered from. The "preserve the only copy"
+                    // guard belongs only to the unreadable-file path below,
+                    // where no repair could be decoded at all.
+                    NSLog("[glint] couldn't persist repaired \(fileName) (\(error)); will retry on next save — original kept at \(url.path)")
                 }
                 return state
             }
