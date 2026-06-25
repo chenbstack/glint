@@ -103,6 +103,33 @@ index 000..111
         XCTAssertEqual(lines[1].newNum, 1)
     }
 
+    /// Meta headers NOT on the old allow-list (e.g. "dissimilarity index",
+    /// "GIT binary patch") must be skipped, not leaked through as a tinted
+    /// context line. Classification is by leading marker now, so any
+    /// unrecognized git header drops instead of rendering as content.
+    func testParseSkipsUnrecognizedMetaHeaders() {
+        let diff = """
+diff --git a/o b/n
+dissimilarity index 60%
+rename from o
+rename to n
+--- a/o
++++ b/n
+@@ -1,1 +1,1 @@
+-x
++y
+"""
+        let lines = DiffDocument.parse(diff)
+        // hunk + 1 del + 1 add; every meta header (diff / "dissimilarity
+        // index" / rename from / rename to / --- / +++) drops entirely.
+        XCTAssertEqual(lines.count, 3)
+        XCTAssertEqual(lines[0].kind, .hunk)
+        XCTAssertEqual(lines[1].kind, .del)
+        XCTAssertEqual(lines[1].text, "x")
+        XCTAssertEqual(lines[2].kind, .add)
+        XCTAssertEqual(lines[2].text, "y")
+    }
+
     func testParseEmptyYieldsEmpty() {
         XCTAssertTrue(DiffDocument.parse("").isEmpty)
     }

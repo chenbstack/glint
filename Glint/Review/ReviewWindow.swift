@@ -644,15 +644,14 @@ struct DiffDocument: Sendable {
                 out.append(DiffLine(id: id, kind: .hunk, text: line, oldNum: nil, newNum: nil)); id += 1
                 continue
             }
-            if line.hasPrefix("+++") || line.hasPrefix("---")
-                || line.hasPrefix("diff ") || line.hasPrefix("index ")
-                || line.hasPrefix("new file") || line.hasPrefix("deleted file")
-                || line.hasPrefix("old mode") || line.hasPrefix("new mode")
-                || line.hasPrefix("rename ") || line.hasPrefix("similarity")
-                || line.hasPrefix("copy ") || line.hasPrefix("Binary files")
-                || line.hasPrefix("\\ ") {       // "\ No newline at end of file"
-                continue
-            }
+            if line.hasPrefix("+++") || line.hasPrefix("---") { continue }
+            // Unified-diff content is marked by a leading char: '+', '-', or
+            // ' ' (context). File headers (+++/---, handled above) and every
+            // git meta line (diff/index/old mode/rename/similarity/…/ "\ No
+            // newline") start with something else — so classify by marker and
+            // skip anything unrecognized, rather than maintain an allow-list
+            // of meta prefixes that leaks a new header (e.g. "similarity
+            // index") through as a tinted context line.
             // Strip the leading marker char so code columns align and the +/-
             // gutter clutter is gone — add/delete is shown via tint, not text.
             let body = String(line.dropFirst())
@@ -662,10 +661,11 @@ struct DiffDocument: Sendable {
             } else if line.hasPrefix("-") {
                 out.append(DiffLine(id: id, kind: .del, text: body, oldNum: oldLine, newNum: nil)); id += 1
                 oldLine += 1
-            } else {
+            } else if line.hasPrefix(" ") {
                 out.append(DiffLine(id: id, kind: .context, text: body, oldNum: oldLine, newNum: newLine)); id += 1
                 oldLine += 1; newLine += 1
             }
+            // else: a meta line (diff/index/mode/rename/…/\ No newline) — skip.
         }
         return out
     }
