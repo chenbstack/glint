@@ -99,6 +99,126 @@ struct LocalGitRunner: GitRunner {
     }
 }
 
+/// Runs git over SSH against a captured destination, so `GitService`'s
+/// high-level methods work unchanged against a REMOTE repo — `cwd` is the
+/// remote path (a leading `~` is expanded against the remote `$HOME`). Reuses
+/// a per-target SSH `ControlMaster` so the status poll and the Review window
+/// don't each re-authenticate, and forces `BatchMode` so a missing key never
+/// hangs a background call (a host needing an interactive password degrades to
+/// empty results, same shape as a local non-repo). The remote title/host data
+/// that produces `target`/`cwd` is untrusted; this runner only ever runs
+/// read-only `git`, so the worst a spoofed title can do is query a repo on a
+/// host the user already SSHed to.
+struct SSHGitRunner: GitRunner {
+    let target: String
+    let port: Int?
+
+    /// Per-target ControlMaster socket so repeated calls share one authed
+    /// connection; `ControlPersist=10m` keeps it alive briefly after the last
+    /// call so a Review open right after a status poll reuses it.
+    private var controlPath: String {
+        var slug = target
+        if let port { slug += ":\(port)" }
+        let dash = Character("-")
+        let safe = String(slug.map { ($0.isLetter || $0.isNumber) ? $0 : dash })
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent("glint-ssh-\(safe).sock").path
+    }
+
+    func run(_ args: [String], cwd: String?) async throws -> GitResult {
+        let remoteCwd = try await resolveRemoteCwd(cwd)
+        let argv = Self.commandArgs(target: target, port: port,
+                                    controlPath: controlPath, cwd: remoteCwd, gitArgs: args)
+        return try await Self.spawn(argv)
+    }
+
+    /// Pure: the full `ssh … git -C <cwd> <args>` argv. Split out so the wire
+    /// format is unit-testable without spawning ssh.
+    static func commandArgs(target: String, port: Int?, controlPath: String,
+                            cwd: String?, gitArgs: [String]) -> [String] {
+        var a = ["-o", "BatchMode=yes",
+                 "-o", "ControlMaster=auto", "-o", "ControlPersist=10m",
+                 "-o", "ControlPath=\(controlPath)"]
+        if let port { a += ["-p", "\(port)"] }
+        a.append(target)
+        a.append("git")
+        if let cwd, !cwd.isEmpty { a += ["-C", cwd] }
+        a += gitArgs
+        return a
+    }
+
+    /// Expand a leading `~` against the remote `$HOME` (cached per target).
+    /// nil/empty cwd → nil (git runs in the remote login dir). Absolute paths
+    /// pass straight through.
+    private func resolveRemoteCwd(_ cwd: String?) async throws -> String? {
+        guard let cwd, !cwd.isEmpty else { return nil }
+        guard cwd.hasPrefix("~") else { return cwd }
+        let home = try await Self.remoteHome(target: target, port: port, controlPath: controlPath)
+        guard !home.isEmpty else { return cwd }   // couldn't resolve → best-effort passthrough
+        var rest = cwd
+        let leading: Set<Character> = ["~", "/"]
+        while let first = rest.first, leading.contains(first) { rest.removeFirst() }
+        return rest.isEmpty ? home : "\(home)/\(rest)"
+    }
+
+    // MARK: remote $HOME cache (serial-queue guarded: NSLock is unavailable in
+    // async contexts under Swift 6, and a blocking `.sync` read/write here is
+    // fine — the cache is tiny and the contention is one Review open at a time).
+    private static var homeCache: [String: String] = [:]
+    private static let homeQueue = DispatchQueue(label: "app.glint.git.sshhome")
+
+    private static func remoteHome(target: String, port: Int?, controlPath: String) async throws -> String {
+        let key = "\(target)#\(port.map(String.init) ?? "")"
+        if let cached = Self.homeQueue.sync(execute: { Self.homeCache[key] }) { return cached }
+        var a = ["-o", "BatchMode=yes", "-o", "ControlMaster=auto",
+                 "-o", "ControlPersist=10m", "-o", "ControlPath=\(controlPath)"]
+        if let port { a += ["-p", "\(port)"] }
+        // ssh runs this through the remote login shell, so `$HOME` expands
+        // remotely; printf gives the value with no trailing newline.
+        a += [target, "printf", "%s", "$HOME"]
+        let r = try await Self.spawn(a)
+        let home = r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        Self.homeQueue.sync { Self.homeCache[key] = home }
+        return home
+    }
+
+    /// Spawn `/usr/bin/ssh <args>` and capture stdout/stderr — mirrors
+    /// `LocalGitRunner`'s concurrent-read layout so neither fixed pipe buffer
+    /// can deadlock on large diff output.
+    private static func spawn(_ sshArgs: [String]) async throws -> GitResult {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<GitResult, Error>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let proc = Process()
+                proc.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+                proc.arguments = sshArgs
+                var env = ProcessInfo.processInfo.environment
+                env["GIT_TERMINAL_PROMPT"] = "0"
+                env["GIT_PAGER"] = "cat"
+                env["GIT_OPTIONAL_LOCKS"] = "0"
+                proc.environment = env
+                let outPipe = Pipe(), errPipe = Pipe()
+                proc.standardOutput = outPipe
+                proc.standardError = errPipe
+                do { try proc.run() } catch {
+                    cont.resume(throwing: GitError.launchFailed(error.localizedDescription))
+                    return
+                }
+                var outData = Data(), errData = Data()
+                let group = DispatchGroup()
+                let q = DispatchQueue(label: "app.glint.git.read", attributes: .concurrent)
+                q.async(group: group) { outData = outPipe.fileHandleForReading.readDataToEndOfFile() }
+                q.async(group: group) { errData = errPipe.fileHandleForReading.readDataToEndOfFile() }
+                group.wait()
+                proc.waitUntilExit()
+                cont.resume(returning: GitResult(
+                    exitCode: proc.terminationStatus,
+                    stdout: String(decoding: outData, as: UTF8.self),
+                    stderr: String(decoding: errData, as: UTF8.self)))
+            }
+        }
+    }
+}
+
 // MARK: - High-level git operations
 
 /// A single entry from `git worktree list --porcelain`.

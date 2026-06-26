@@ -371,6 +371,19 @@ final class GhosttyManager {
                 }
             }
 
+        case GHOSTTY_ACTION_SET_TITLE:
+            // ghostty forwards the shell's OSC 0/2 title verbatim and — unlike
+            // OSC 7 — does NOT host-validate it, so a remote shell's
+            // `user@host:path` title survives an SSH session. We don't use it
+            // for window titling (Glint sets its own); we mine it for the
+            // remote cwd that drives Review-over-SSH. `updateRemoteFromTitle`
+            // is a no-op unless the foreground process is `ssh`, so local
+            // titles can't pollute remote state.
+            if let view, let cstr = action.action.set_title.title {
+                let title = String(cString: cstr)
+                DispatchQueue.main.async { view.updateRemoteFromTitle(title) }
+            }
+
         case GHOSTTY_ACTION_MOUSE_SHAPE:
             let shape = action.action.mouse_shape
             DispatchQueue.main.async { view?.mouseShape = shape }

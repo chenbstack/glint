@@ -129,6 +129,17 @@ struct Pane: Identifiable, Codable {
     /// `restoreClaudeSession` / `restoreCodexSession`. Reflects the CURRENT
     /// state, not sticky: an agent that quit back to the shell clears it.
     var lastAgent: String?
+    /// Remote SSH context for Review-over-SSH — the ssh destination the user
+    /// typed, its port, the remote host (display only), and the remote cwd
+    /// mined from the terminal title. Transient (NOT persisted): re-derived
+    /// from the live surface on the 1s capture poll, so it's nil until the
+    /// remote shell's title reports a cwd. Mirrors `workingDirectory`'s
+    /// snapshot-from-surface pattern. Optional → defaults nil, so the custom
+    /// Codable below ignores them without a CodingKeys/init/encode change.
+    var remoteTarget: String?
+    var remotePort: Int?
+    var remoteHost: String?
+    var remotePath: String?
     /// Per-agent session id captured from hook events, keyed by
     /// `PaneAgentKind.rawValue` ("claude"/"codex"/"opencode"/"devin"). When
     /// set, restore-on-launch issues the agent's `--resume <id>` /
@@ -1575,6 +1586,20 @@ final class WorkspaceStore: ObservableObject {
                    workspaces[i].panes[paneID]?.workingDirectory != cwd {
                     workspaces[i].panes[paneID]?.workingDirectory = cwd
                 }
+                // Snapshot the remote SSH context (Review-over-SSH). Same
+                // write-only-on-change discipline as cwd — an unconditional
+                // write would fire objectWillChange every tick.
+                let rctx = view.remoteReviewContext
+                let rhost = view.remoteHost
+                if workspaces[i].panes[paneID]?.remoteTarget != rctx?.target
+                    || workspaces[i].panes[paneID]?.remotePort != rctx?.port
+                    || workspaces[i].panes[paneID]?.remotePath != rctx?.remotePath
+                    || workspaces[i].panes[paneID]?.remoteHost != rhost {
+                    workspaces[i].panes[paneID]?.remoteTarget = rctx?.target
+                    workspaces[i].panes[paneID]?.remotePort = rctx?.port
+                    workspaces[i].panes[paneID]?.remotePath = rctx?.remotePath
+                    workspaces[i].panes[paneID]?.remoteHost = rhost
+                }
                 if let name = view.foregroundProcessName() {
                     newProcesses[key] = name
                     // Track CURRENT claude/codex/opencode foreground so the
@@ -2752,8 +2777,11 @@ final class WorkspaceStore: ObservableObject {
     /// `revealAtRepoRoot` is on, else the focused pane's cwd — and always dives
     /// INTO the folder, so the button and the shortcut stay consistent.
     func revealWorktreeInFinder(_ id: UUID) {
-        guard let ws = workspaces.first(where: { $0.id == id }),
-              let root = ws.source.worktreePath ?? ws.source.repoRoot ?? effectiveGitPath(for: ws)
+        guard let ws = workspaces.first(where: { $0.id == id }) else { return }
+        // Remote SSH pane: nothing local to reveal — beep and stop before the
+        // local-root chain runs against a bogus path.
+        if remoteContext(for: ws) != nil { NSSound.beep(); return }
+        guard let root = ws.source.worktreePath ?? ws.source.repoRoot ?? effectiveGitPath(for: ws)
         else { return }
         let paneCwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
         Self.openInFinder((revealAtRepoRoot || paneCwd == nil) ? root : paneCwd!)
@@ -2769,6 +2797,9 @@ final class WorkspaceStore: ObservableObject {
             NSSound.beep()
             return
         }
+        // Remote SSH pane: there's no local directory to reveal — beep instead
+        // of diving into a bogus local path derived from the ssh process's cwd.
+        if remoteContext(for: ws) != nil { NSSound.beep(); return }
         let paneCwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
         // A bound workspace's gitPath is its root (worktree root for a worktree,
         // repo root for Local Repo) — already known. A plain workspace resolves
@@ -2798,6 +2829,46 @@ final class WorkspaceStore: ObservableObject {
     /// working-tree scope; for a worktree with a known base branch it also offers
     /// the whole-branch (`base...HEAD`) scope, so the segmented control appears.
     func openReview(for ws: Workspace) {
+        // Remote SSH pane: review the remote repo over SSH by swapping the
+        // GitRunner. `git -C <remotePath>` works from anywhere inside the repo,
+        // so the remote cwd is passed straight through as `repo`; `--show-prefix`
+        // gives the root-relative subdir for the file-list scope (no tilde math
+        // — git resolves it remotely).
+        if let rctx = remoteContext(for: ws) {
+            let runner = SSHGitRunner(target: rctx.target, port: rctx.port)
+            let remoteGit = GitService(runner: runner)
+            Task {
+                // Resolve the remote repo root once; `--show-prefix` gives the
+                // cwd's root-relative subdir for the cwd-scope branch. Honor
+                // `reviewAtRepoRoot` — whole root (on) vs focused-cwd subtree
+                // (off) — mirroring the local Review path so the toggle behaves
+                // the same over SSH.
+                async let rootA = remoteGit.repoRoot(at: rctx.remotePath)
+                let prefixR = try? await remoteGit.git(
+                    ["rev-parse", "--show-prefix"], cwd: rctx.remotePath, allowFailure: true)
+                let root = await (rootA ?? rctx.remotePath)
+                var subdir: String? = nil
+                if !reviewAtRepoRoot,
+                   let pr = prefixR, pr.ok {
+                    // Trim the trailing newline git always emits, then any
+                    // slashes. Root → "" → nil; a non-nil subdir (even "") makes
+                    // ReviewModel.reload's prefix filter drop every file.
+                    let pre = pr.stdout
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                    subdir = pre.isEmpty ? nil : pre
+                }
+                let rootName = (root as NSString).lastPathComponent
+                let label = subdir.map { "\(rootName)/\($0)" } ?? rootName
+                let title = rctx.host.map { "\($0) · \(label)" } ?? label
+                await MainActor.run {
+                    ReviewWindowController.shared.present(repo: root, title: title,
+                                                          subdir: subdir, scopes: [.workingTree],
+                                                          store: self, runner: runner)
+                }
+            }
+            return
+        }
         guard let cwd = ws.source.gitPath ?? effectiveGitPath(for: ws) else {
             NSSound.beep()
             return
@@ -2913,6 +2984,25 @@ final class WorkspaceStore: ObservableObject {
     /// what lets a *plain* workspace that's simply `cd`'d into a repo still
     /// surface git status and the tab's git button — no `.localWorktree` source
     /// required.
+    /// The focused pane's remote SSH context when it's a capturable SSH session
+    /// with a known remote path; else nil. The ssh `target` is authoritative
+    /// for transport (it's what the user typed — resolves `~/.ssh/config`
+    /// aliases/jumps via the user's own ssh); `remotePath` is mined from the
+    /// remote shell's terminal title; `host` is display-only. Resolved here
+    /// (not via `effectiveGitPath`) so the local status poll keeps ignoring
+    /// remote panes while Review still routes through SSH.
+    private func remoteContext(for ws: Workspace) -> (target: String, port: Int?, remotePath: String, host: String?)? {
+        guard let paneID = ws.selectedTab?.focusedPane else { return nil }
+        // Read the LIVE surface rather than the Pane snapshot. The snapshot
+        // (Pane.remotePath) lags up to the 1s capture poll, so pressing ⌘⇧R
+        // right after a remote `cd` would otherwise review the previous
+        // directory (e.g. `~` → "not a git repo" → empty Review). The surface's
+        // remotePath is updated immediately when the remote shell's title fires.
+        guard let view = surfaceViews[WorkspacePaneKey(workspace: ws.id, pane: paneID)],
+              let ctx = view.remoteReviewContext else { return nil }
+        return (ctx.target, ctx.port, ctx.remotePath, view.remoteHost)
+    }
+
     func effectiveGitPath(for ws: Workspace) -> String? {
         if let p = ws.source.gitPath { return p }
         return (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
@@ -2952,8 +3042,18 @@ final class WorkspaceStore: ObservableObject {
     func gitStatus(for id: UUID) -> GitStatus? { gitStatuses[id] }
 
     func refreshGitStatus(for id: UUID) async {
-        guard let ws = workspaces.first(where: { $0.id == id }),
-              let path = effectiveGitPath(for: ws) else {
+        guard let ws = workspaces.first(where: { $0.id == id }) else {
+            if gitStatuses[id] != nil { gitStatuses[id] = nil }
+            return
+        }
+        // Remote SSH pane: nothing local to poll, and remote status badges are
+        // out of scope for v1 (Review-over-SSH only). Skip before running local
+        // git against the ssh process's stale local cwd.
+        if remoteContext(for: ws) != nil {
+            if gitStatuses[id] != nil { gitStatuses[id] = nil }
+            return
+        }
+        guard let path = effectiveGitPath(for: ws) else {
             if gitStatuses[id] != nil { gitStatuses[id] = nil }
             return
         }

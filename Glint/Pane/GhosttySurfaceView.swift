@@ -43,6 +43,21 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// proc_pidinfo polling because it's event-driven.
     var cachedCwd: String?
 
+    /// Remote host/path parsed from the terminal title while the pane is an
+    /// SSH session (the remote shell prints `user@host:path` at each prompt;
+    /// ghostty surfaces title changes via `GHOSTTY_ACTION_SET_TITLE`, which —
+    /// unlike OSC 7 — is NOT host-validated, so it survives an SSH session).
+    /// STRICTLY separate from `cachedCwd`: this is untrusted, remote-sourced
+    /// data used only by the SSH review runner. It must never feed ⌘-click
+    /// file-open, Reveal in Finder, or the proc_pidinfo fallback — those stay
+    /// local (see `resolveFilePath` / `currentCwd`).
+    ///
+    /// Transient: intentionally absent from `CodingKeys`, so they are never
+    /// persisted and always re-derived from the live terminal title after
+    /// restart. If you touch Pane's `CodingKeys`, do not add these.
+    var remoteHost: String?
+    var remotePath: String?
+
     private var scrollbackEnabled: Bool {
         (UserDefaults.standard.object(forKey: "glint.restoreTerminalScrollback") as? Bool) ?? true
     }
@@ -798,6 +813,73 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             return (arg as NSString).lastPathComponent
         }
         return nil
+    }
+
+    // MARK: - Remote SSH context (Review-over-SSH)
+
+    /// Parse a `user@host:path` terminal title (bash's default `\u@\h:\w`)
+    /// into its parts. Returns nil for titles that carry no remote cwd — plain
+    /// zsh remotes, custom titles, full-screen apps that clear it — so Review
+    /// degrades to its no-path behavior instead of guessing. Static + internal
+    /// so the parser is directly unit-testable.
+    static func parseRemoteTitle(_ title: String) -> (user: String, host: String, path: String)? {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let at = t.firstIndex(of: "@") else { return nil }
+        let user = String(t[..<at])
+        guard !user.isEmpty, !user.contains(" ") else { return nil }
+        let rest = t[t.index(after: at)...]
+        guard let colon = rest.firstIndex(of: ":") else { return nil }
+        let host = String(rest[..<colon]).trimmingCharacters(in: .whitespaces)
+        let path = String(rest[rest.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+        guard !host.isEmpty,
+              host.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }),
+              !path.isEmpty else { return nil }
+        return (user, host, path)
+    }
+
+    /// Called from the `GHOSTTY_ACTION_SET_TITLE` handler. Records the remote
+    /// host/path only while the foreground process is `ssh`; clears them
+    /// otherwise so a finished SSH session can't leave stale remote data that
+    /// a later local Review would pick up.
+    func updateRemoteFromTitle(_ title: String?) {
+        guard foregroundProcessName() == "ssh",
+              let title, let parsed = Self.parseRemoteTitle(title) else {
+            if remoteHost != nil || remotePath != nil { remoteHost = nil; remotePath = nil }
+            return
+        }
+        remoteHost = parsed.host
+        remotePath = parsed.path
+    }
+
+    /// The ssh destination the user typed (`user@host`, plus `-p <port>` when
+    /// present), captured from the foreground ssh pid's argv. nil when the pane
+    /// isn't an SSH session or the argv can't be parsed — notably when ssh is
+    /// already running a one-shot remote command (a second non-flag token),
+    /// because appending `git` would then conflict with it.
+    func foregroundSshTarget() -> (target: String, port: Int?)? {
+        guard foregroundProcessName() == "ssh", let s = surface else { return nil }
+        let pid = ghostty_surface_foreground_pid(s)
+        guard pid > 0, let argv = Self.processArgv(pid: Int32(pid)), argv.count > 1 else { return nil }
+        var port: Int?
+        var destination: String?
+        var sawRemoteCommand = false
+        var i = 1   // skip argv[0] (the ssh binary path)
+        while i < argv.count {
+            let a = argv[i]
+            if a == "-p", i + 1 < argv.count { port = Int(argv[i + 1]); i += 2; continue }
+            if a.hasPrefix("-") { i += 1; continue }   // ignore -i/-l/-v/… best-effort
+            if destination == nil { destination = a } else { sawRemoteCommand = true }
+            i += 1
+        }
+        guard let destination, !sawRemoteCommand else { return nil }
+        return (destination, port)
+    }
+
+    /// Everything the SSH review runner needs, or nil when the focused pane
+    /// isn't a capturable SSH session with a known remote path.
+    var remoteReviewContext: (target: String, port: Int?, remotePath: String)? {
+        guard let ssh = foregroundSshTarget(), let path = remotePath, !path.isEmpty else { return nil }
+        return (ssh.target, ssh.port, path)
     }
 
     // MARK: - resize
