@@ -2513,15 +2513,17 @@ final class WorkspaceStore: ObservableObject {
         if let branchError { throw branchError }
     }
 
-    /// Open the workspace's bound root (worktree/repo) in Finder — dive INTO
-    /// the folder, unified with `revealCurrentInFinder`. Shared by every "Open
-    /// in Finder" entry point: the git popover button, the sidebar context
-    /// item, and the command palette.
+    /// Open the workspace's location in Finder — shared by every "Open in
+    /// Finder" entry point (git popover button, sidebar context item, command
+    /// palette). Mirrors the ⌘⇧F shortcut: the bound root (worktree/repo) when
+    /// `revealAtRepoRoot` is on, else the focused pane's cwd — and always dives
+    /// INTO the folder, so the button and the shortcut stay consistent.
     func revealWorktreeInFinder(_ id: UUID) {
         guard let ws = workspaces.first(where: { $0.id == id }),
-              let path = ws.source.worktreePath ?? ws.source.repoRoot ?? effectiveGitPath(for: ws)
+              let root = ws.source.worktreePath ?? ws.source.repoRoot ?? effectiveGitPath(for: ws)
         else { return }
-        Self.openInFinder(path)
+        let paneCwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
+        Self.openInFinder((revealAtRepoRoot || paneCwd == nil) ? root : paneCwd!)
     }
 
     /// Reveal the focused pane's current directory in Finder — the global ⌘⇧F
