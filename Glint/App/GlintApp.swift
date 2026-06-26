@@ -44,7 +44,14 @@ struct GlintApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        // Single-instance `Window` scene: it can never spawn a second window,
+        // so any external activation (a clicked macOS notification, a reopen)
+        // lands on the existing window instead of creating a new one. The
+        // UNUserNotificationCenterDelegate handles the pane switch.
+        // NB: `handlesExternalEvents` does NOT help here — it only routes
+        // URL-scheme / NSUserActivity events, and a local-notification click
+        // produces neither. WindowGroup would open a fresh window on reopen.
+        Window("Glint", id: "glint-main") {
             ContentView()
                 .environmentObject(workspaceStore)
                 .environmentObject(updater)

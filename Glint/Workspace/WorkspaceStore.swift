@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import AppKit
 import Darwin
+import UserNotifications
 
 // MARK: - Domain types
 
@@ -894,6 +895,21 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(soundOnError, forKey: "glint.soundOnError") }
     }
 
+    /// 在后台 agent 需要关注时(权限请求 / 完成 / 出错),除了 chime 之外再弹一个
+    /// 静默的 macOS 通知横幅。一个总开关覆盖三种状态。默认 off:横幅比 chime 更
+    /// 打扰、且需要系统授权,让用户主动开启。
+    @Published var systemNotificationOnAgentAttention: Bool =
+        (UserDefaults.standard.object(forKey: "glint.systemNotificationOnAgentAttention") as? Bool) ?? false {
+        didSet {
+            UserDefaults.standard.set(systemNotificationOnAgentAttention,
+                                      forKey: "glint.systemNotificationOnAgentAttention")
+            if systemNotificationOnAgentAttention {
+                // 用户首次开启时请求授权;系统级已拒绝则为空操作。
+                Task { try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) }
+            }
+        }
+    }
+
     /// Show a Dock badge count for background agent states that need a look.
     /// Unlike notification banners this stays quiet and carries no prompt or
     /// transcript text. Defaults to on because it is non-interruptive.
@@ -1606,6 +1622,11 @@ final class WorkspaceStore: ObservableObject {
                 break
             }
         }
+        // 通知比 chime 门更严:仅在整个 Glint 处于后台时弹(前台切到别的 workspace
+        // 不弹——横幅不该盖在用户正用的 app 上)。chime 走上面的 `!userIsWatching` 宽门。
+        if systemNotificationOnAgentAttention && !NSApp.isActive && oldStatus != state.status {
+            postAttentionNotification(status: state.status, key: key)
+        }
         syncDockBadge(for: key, oldStatus: oldStatus, newStatus: state.status, userIsWatching: userIsWatching)
     }
 
@@ -1680,6 +1701,34 @@ final class WorkspaceStore: ObservableObject {
         case .idle, .thinking, .tool, .compacting:
             return false
         }
+    }
+
+    /// 与 chime 镜像的静默横幅。title 用 workspace 名(数据、不翻译),body 走本地化。
+    /// userInfo 带定位(workspace + pane),点击通知时据此呼出 app 并切到该 pane。
+    private func postAttentionNotification(status: PaneAgentStatus, key: WorkspacePaneKey) {
+        let body: String
+        switch status {
+        case .needsPermission: body = String(localized: "Waiting for your approval")
+        case .justCompleted:   body = String(localized: "Agent finished its turn")
+        case .failed:          body = String(localized: "Agent's turn ended in an error")
+        default: return
+        }
+        let title = workspaces.first { $0.id == key.workspace }?.displayName
+            ?? String(localized: "Glint")
+        let c = UNMutableNotificationContent()
+        c.title = title
+        c.body = body
+        // 不设 soundName — chime 已覆盖声音,横幅只负责视觉。
+        c.userInfo = [
+            "workspace": key.workspace.uuidString,
+            "pane": String(key.pane.value),
+        ]
+        // Stable id per pane: a fresh banner replaces the stale one instead of
+        // stacking up in Notification Center, where — once the process exits —
+        // they become dead links that cold-launch a new instance on click.
+        let id = "glint.attention.\(key.workspace.uuidString).\(key.pane.value)"
+        let req = UNNotificationRequest(identifier: id, content: c, trigger: nil)
+        UNUserNotificationCenter.current().add(req)
     }
 
     private func syncDockBadge(for key: WorkspacePaneKey,
@@ -2010,6 +2059,21 @@ final class WorkspaceStore: ObservableObject {
         guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
         workspaces[i].tabs[t].focusedPane = id
         refreshGitStatusNow(for: workspaces[i].id)
+    }
+
+    /// 点击系统通知时呼出:切到 workspace、选中含该 pane 的 tab 并聚焦,
+    /// 同时清掉它的未读(justCompleted/failed)状态与 Dock 角标。
+    func revealPane(workspace: UUID, pane: PaneID) {
+        guard let wi = workspaces.firstIndex(where: { $0.id == workspace }) else { return }
+        selectedWorkspaceID = workspace
+        if let ti = workspaces[wi].tabs.firstIndex(where: { $0.root.leaves.contains(pane) }) {
+            workspaces[wi].selectedTabID = workspaces[wi].tabs[ti].id
+            workspaces[wi].tabs[ti].focusedPane = pane
+        }
+        let key = WorkspacePaneKey(workspace: workspace, pane: pane)
+        clearDockBadge(for: key)
+        acknowledgeCompletionIfNeeded(for: workspace)
+        refreshGitStatusNow(for: workspace)
     }
 
     // MARK: - external control (control.sock)

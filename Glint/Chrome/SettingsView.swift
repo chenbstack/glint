@@ -1275,6 +1275,12 @@ private struct AgentsPane: View {
                     .toggleStyle(.switch).labelsHidden()
             }
             SettingsDivider()
+            SettingsRow("Show macOS notification for agent attention",
+                        subtitle: "Pop a banner in Notification Center when a background agent needs approval, finishes, or fails. Silent — the chime stays the audio cue.") {
+                Toggle("", isOn: $store.systemNotificationOnAgentAttention)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
             SettingsRow("Sound on permission request",
                         subtitle: "Play a chime when an agent is waiting for your approval in a background workspace.") {
                 HStack(spacing: 10) {
