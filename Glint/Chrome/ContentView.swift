@@ -164,7 +164,12 @@ struct ContentView: View {
                       onDismiss: { store.dismissWhatsNew() }) {
             WhatsNewView(notes: store.whatsNewNotes)
         }
-        .onAppear { store.evaluateWhatsNewOnLaunch() }
+        .onAppear {
+            // Put launch keyboard focus in the terminal instead of the sidebar
+            // search field (see `assertTerminalFocusOnLaunch`).
+            store.assertTerminalFocusOnLaunch()
+            store.evaluateWhatsNewOnLaunch()
+        }
         .sheet(isPresented: $store.settingsOpen) {
             GlintSettingsView()
                 .environmentObject(store)

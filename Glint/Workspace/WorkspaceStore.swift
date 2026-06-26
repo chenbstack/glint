@@ -585,6 +585,68 @@ final class WorkspaceStore: ObservableObject {
         sidebarSearchFocusTick &+= 1
     }
 
+    /// One-shot: stays false until a launch focus claim actually succeeds, so
+    /// a claim that bailed (e.g. a modal was already up) isn't marked done.
+    /// The only call site is launch-time, so this flips at most once.
+    private var launchFocusClaimed = false
+
+    /// True while an in-window modal owns keyboard focus. These capture and
+    /// restore the first responder themselves, so the launch assertion must
+    /// not displace them.
+    private var modalOwnsFocus: Bool {
+        commandPaletteOpen || agentChooserIntent != nil
+            || !whatsNewNotes.isEmpty || settingsOpen || newWorkspaceSheetOpen
+    }
+
+    /// The already-minted surface for the focused pane of the selected
+    /// workspace, or nil if it hasn't been rendered yet. Non-minting — safe
+    /// to call from launch-time focus assertions that must NOT spawn a shell
+    /// as a side effect.
+    var currentFocusedSurfaceView: GhosttySurfaceView? {
+        guard let wsID = selectedWorkspaceID else { return nil }
+        return surfaceViews[WorkspacePaneKey(workspace: wsID, pane: currentFocusedPane)]
+    }
+
+    /// At launch, put keyboard focus in the focused pane's terminal instead of
+    /// the sidebar's search field. With no view explicitly claiming first
+    /// responder, AppKit's default key-view traversal hands the window's
+    /// initial focus to the sidebar search field (its field editor — an
+    /// `NSText` — becomes first responder). `PaneSurfaceRepresentable`'s ~1/s
+    /// focus sync then SKIPS, because it deliberately refuses to yank focus
+    /// away from an active text editor (so it can't steal focus from a search
+    /// box the user clicked), so the terminal never wins it back. This claims
+    /// the surface directly — bypassing that guard, which is safe because no
+    /// user clicked the search field at launch. Mirrors the command-palette's
+    /// focus-claim dance (#32).
+    ///
+    /// Launch-safety — this cannot break app launch:
+    ///  • It never touches launch-fragile singletons: the window comes from
+    ///    `surface.window` (held alive by the rendered pane), NOT
+    ///    `NSApp.keyWindow`, which can still be nil early in launch (the #43
+    ///    trap was the same shape of launch-time nil deref).
+    ///  • It runs only via `DispatchQueue.main.async` — strictly after the
+    ///    window is on screen and the run loop is turning, never inline in
+    ///    the launch path.
+    ///  • Every step is optional-guarded behind `[weak self]`; any nil or
+    ///    mid-teardown state degrades to a no-op rather than trapping.
+    ///  • Only first-responder APIs stable since macOS 10.0 are used (deploy
+    ///    target is 14.0), so there's no version-conditional behaviour.
+    /// No-ops once a modal that owns focus (palette, What's New, settings
+    /// sheet, …) is up.
+    func assertTerminalFocusOnLaunch() {
+        guard !launchFocusClaimed, !modalOwnsFocus else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  !self.launchFocusClaimed,
+                  let surface = self.currentFocusedSurfaceView,
+                  let window = surface.window,
+                  !self.modalOwnsFocus else { return }
+            if window.makeFirstResponder(surface) {
+                self.launchFocusClaimed = true
+            }
+        }
+    }
+
     /// Preferred UI language identifier. `"system"` follows the OS; any
     /// other value is a BCP-47 tag (e.g. `"en"`, `"zh-Hans"`). Persists
     /// across launches via UserDefaults so the choice survives quits.
