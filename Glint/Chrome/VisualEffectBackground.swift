@@ -102,6 +102,8 @@ struct GlassCapsuleFallback: View {
     let cornerRadius: CGFloat
     var tint: Color?
 
+    private var isDarkTheme: Bool { Theme.current.isDark }
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         ZStack {
@@ -115,25 +117,44 @@ struct GlassCapsuleFallback: View {
             // State pinned to `.active` so the material doesn't flash the
             // lighter `.inactive` palette during the first frames while
             // the window is still picking up key state.
-            VisualEffectBackground(material: .underPageBackground, state: .active)
-            // Light black wash — underPageBackground is already the
-            // darker stock material, so we only need a small nudge to
-            // keep the capsule reading as glass without flattening it
-            // into an opaque slab.
-            Color.black.opacity(0.3)
+            VisualEffectBackground(
+                material: isDarkTheme ? .underPageBackground : .hudWindow,
+                state: .active
+            )
+            if isDarkTheme {
+                // Light black wash — underPageBackground is already the
+                // darker stock material, so we only need a small nudge to
+                // keep the capsule reading as glass without flattening it
+                // into an opaque slab.
+                Color.black.opacity(0.3)
+            } else {
+                // Pre-26 vibrancy follows the system appearance, not Glint's
+                // theme. Pull light themes back toward the selected terminal
+                // background so a light Glint theme doesn't get a dark capsule
+                // on older macOS releases.
+                Theme.bgPane.opacity(0.78)
+                Color.white.opacity(0.12)
+            }
             if let tint {
-                tint.opacity(0.18)
+                tint.opacity(isDarkTheme ? 0.18 : 0.10)
             }
             // Faint top-down sheen so the upper edge catches "light" — the
             // single cheapest cue that says "glass surface" rather than
             // "translucent slab."
             LinearGradient(
-                colors: [Color.white.opacity(0.06), Color.white.opacity(0)],
+                colors: isDarkTheme
+                    ? [Color.white.opacity(0.06), Color.white.opacity(0)]
+                    : [Color.white.opacity(0.36), Color.white.opacity(0.04)],
                 startPoint: .top, endPoint: .center
             )
         }
         .clipShape(shape)
-        .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))
+        .overlay(
+            shape.strokeBorder(
+                isDarkTheme ? Color.white.opacity(0.10) : Color.black.opacity(0.10),
+                lineWidth: 0.5
+            )
+        )
     }
 }
 
