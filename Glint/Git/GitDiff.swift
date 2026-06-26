@@ -59,7 +59,15 @@ extension GitService {
     }
 
     /// Unified-diff text for one file under `scope` (empty string on failure).
-    func fileDiff(repo: String, scope: DiffScope, file: GitFileChange) async -> String {
+    /// `ignoreWhitespace` adds `--ignore-all-space` (indentation/whitespace-only
+    /// changes collapse to context) — a load-time flag, not a render filter.
+    func fileDiff(repo: String, scope: DiffScope, file: GitFileChange,
+                  ignoreWhitespace: Bool = false) async -> String {
+        // Huge -U makes git emit the entire file as context (clamped to file
+        // length), so "Show All" renders the whole file and "Changes Only"
+        // just filters context at render time. One load serves both states.
+        var args = ["diff", "--unified=1000000"]
+        if ignoreWhitespace { args.append("--ignore-all-space") }
         switch scope {
         case .workingTree:
             if file.kind == .untracked {
@@ -69,10 +77,12 @@ extension GitService {
                                        cwd: repo, allowFailure: true)
                 return r?.stdout ?? ""
             }
-            let r = try? await git(["diff", "HEAD", "--", file.path], cwd: repo, allowFailure: true)
+            let r = try? await git(args + ["HEAD", "--", file.path],
+                                   cwd: repo, allowFailure: true)
             return r?.stdout ?? ""
         case .branch(let base):
-            let r = try? await git(["diff", "\(base)...HEAD", "--", file.path], cwd: repo, allowFailure: true)
+            let r = try? await git(args + ["\(base)...HEAD", "--", file.path],
+                                   cwd: repo, allowFailure: true)
             return r?.stdout ?? ""
         }
     }

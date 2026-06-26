@@ -18,6 +18,15 @@ final class ReviewModel: ObservableObject {
     let availableScopes: [DiffScope]
 
     @Published var scope: DiffScope { didSet { Task { await reload() } } }
+    // Whitespace-only changes treated as non-changes (--ignore-all-space). A
+    // load-time flag (changes what git returns), so toggling it re-fetches the
+    // current file's diff rather than filtering at render time.
+    @Published var ignoreWhitespace: Bool = false {
+        didSet {
+            guard oldValue != ignoreWhitespace, let s = selected else { return }
+            Task { await select(s) }
+        }
+    }
     @Published var files: [GitFileChange] = []
     // Tree forest + dir-grouped list, rebuilt ONCE when `files` changes (in
     // reload). FileListView reads these instead of rebuilding/sorting on every
@@ -101,7 +110,7 @@ final class ReviewModel: ObservableObject {
         loadingDiff = true
         diffText = ""
         diff = .empty
-        let text = await git.fileDiff(repo: repo, scope: scope, file: f)
+        let text = await git.fileDiff(repo: repo, scope: scope, file: f, ignoreWhitespace: ignoreWhitespace)
         // A newer selection (or scope change) superseded this load — drop it.
         guard token == diffLoadToken else { return }
         // Parse off the main actor so a multi-thousand-line diff doesn't hitch
@@ -120,6 +129,11 @@ final class ReviewModel: ObservableObject {
 // bgPane content area (diff), inside a borderless dark window.
 struct ReviewView: View {
     @ObservedObject var model: ReviewModel
+    // Observe the store so a theme switch (themeRevision bump) re-runs body —
+    // that re-evaluates `.preferredColorScheme(Theme.colorScheme)` below, which
+    // is what lets adaptive colors (Color.secondary) and Theme colors update
+    // live instead of being frozen at open time.
+    @EnvironmentObject var store: WorkspaceStore
     // Manual split: HSplitView ignores idealWidth and lands on a 50/50 default.
     // A self-managed divider gives a narrow persisted default that drags freely
     // up to 60% of the window.
@@ -146,6 +160,7 @@ struct ReviewView: View {
         }
         .frame(minWidth: 780, minHeight: 480)
         .background(Theme.bgWindow)
+        .preferredColorScheme(Theme.colorScheme)
         .task { await model.reload() }
     }
 
@@ -179,6 +194,9 @@ struct ReviewView: View {
 // MARK: - File list
 
 enum FileListMode: String { case tree, list, combined }
+
+// Diff pane render mode: single unified column (default) or two-column split.
+enum DiffMode: String { case unified, split }
 
 private struct FileListView: View {
     @ObservedObject var model: ReviewModel
@@ -529,8 +547,32 @@ final class TreeNode {
 
 // MARK: - Diff pane
 
+// Plain icon button for the diff header and nav cluster — just a Theme.text3
+// glyph (same color as the main toolbar's settings gear), no hover well.
+private struct HeaderIconButton: View {
+    let symbol: String
+    let help: LocalizedStringKey
+    var size: CGFloat = 12.5
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: size, weight: .medium))
+                .frame(width: 24, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.secondary)
+        .help(help)
+    }
+}
+
 private struct DiffPaneView: View {
     @ObservedObject var model: ReviewModel
+    @AppStorage("glint.review.diffMode") private var modeRaw = DiffMode.unified.rawValue
+    @AppStorage("glint.review.diffShowContext") private var showContext = true
+    private var mode: DiffMode { DiffMode(rawValue: modeRaw) ?? .unified }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -555,7 +597,10 @@ private struct DiffPaneView: View {
         } else if model.diffText.isEmpty {
             hint(String(localized: "No diff for this file"))
         } else {
-            DiffContentView(doc: model.diff)
+            DiffContentView(doc: model.diff, mode: mode, showContext: showContext)
+                // Re-mount on file/mode/context change so the nav cursor and
+                // scroll reset cleanly (avoids needing DiffDocument: Equatable).
+                .id("\(model.selected?.path ?? "")|\(modeRaw)|\(showContext)|\(model.ignoreWhitespace)")
         }
     }
 
@@ -567,6 +612,9 @@ private struct DiffPaneView: View {
                 .lineLimit(1).truncationMode(.middle)
                 .textSelection(.enabled)
             Spacer(minLength: 8)
+            diffModeMenu
+            contextLinesMenu
+            ignoreWSMenu
             if !f.isBinary {
                 if f.additions > 0 {
                     Text("+\(f.additions)").foregroundStyle(Theme.green)
@@ -580,6 +628,72 @@ private struct DiffPaneView: View {
         .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 10)
         .frame(maxWidth: .infinity)
         .background(Theme.bgPane)
+    }
+
+    // Tooltip names the state a click will switch TO.
+    private var modeHelp: LocalizedStringKey { mode == .unified ? "Split" : "Unified" }
+    private var contextHelp: LocalizedStringKey { showContext ? "Changes Only" : "Show All" }
+    private var ignoreWSHelp: LocalizedStringKey { model.ignoreWhitespace ? "Show Whitespace" : "Ignore Whitespace" }
+
+    // Click opens a dropdown of the two options (checkmark on the current).
+    // Icon color/weight mirrors the main toolbar's settings gear (Theme.text3,
+    // .medium), sized up from the original 11.5 so it reads as clearly.
+    private var diffModeMenu: some View {
+        Menu {
+            Button { modeRaw = DiffMode.unified.rawValue } label: {
+                Label("Unified", systemImage: mode == .unified ? "checkmark" : "text.alignleft")
+            }
+            Button { modeRaw = DiffMode.split.rawValue } label: {
+                Label("Split", systemImage: mode == .split ? "checkmark" : "rectangle.split.2x1")
+            }
+        } label: {
+            Image(systemName: mode == .unified ? "text.alignleft" : "rectangle.split.2x1")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(modeHelp)
+    }
+
+    private var contextLinesMenu: some View {
+        Menu {
+            Button { showContext = true } label: {
+                Label("Show All", systemImage: showContext ? "checkmark" : "list.bullet")
+            }
+            Button { showContext = false } label: {
+                Label("Changes Only", systemImage: !showContext ? "checkmark" : "line.3.horizontal.decrease")
+            }
+        } label: {
+            Image(systemName: showContext ? "list.bullet" : "line.3.horizontal.decrease")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(contextHelp)
+    }
+
+    // Toggle --ignore-all-space (indentation/whitespace-only changes → context).
+    private var ignoreWSMenu: some View {
+        Menu {
+            Button { model.ignoreWhitespace = false } label: {
+                Label("Show Whitespace", systemImage: !model.ignoreWhitespace ? "checkmark" : "")
+            }
+            Button { model.ignoreWhitespace = true } label: {
+                Label("Ignore Whitespace", systemImage: model.ignoreWhitespace ? "checkmark" : "")
+            }
+        } label: {
+            Image(systemName: model.ignoreWhitespace ? "eye.slash" : "eye")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(ignoreWSHelp)
     }
 
     private func hint(_ s: String) -> some View {
@@ -603,18 +717,30 @@ struct DiffLine: Identifiable, Sendable {
     let newNum: Int?
 }
 
+// One side-by-side row. A hunk header spans both columns; a pair holds the
+// optional old (left) and new (right) line — context lines mirror to both
+// sides, dels land left-only, adds right-only, a del+add run pairs row-by-row.
+// Built once per file load alongside DiffDocument.lines.
+struct SplitRow: Identifiable, Sendable {
+    enum Body: Sendable { case hunk(String); case pair(left: DiffLine?, right: DiffLine?) }
+    let id: Int
+    let body: Body
+}
+
 // A fully-parsed diff: the lines plus the two gutter column widths. Built once
 // per file load (off-main) and cached in the model, so re-renders — e.g. every
 // frame of a splitter drag — never reparse.
 struct DiffDocument: Sendable {
     let lines: [DiffLine]
+    let splitRows: [SplitRow]
     let oldWidth: CGFloat
     let newWidth: CGFloat
 
-    static let empty = DiffDocument(lines: [], oldWidth: 0, newWidth: 0)
+    static let empty = DiffDocument(lines: [], splitRows: [], oldWidth: 0, newWidth: 0)
 
-    private init(lines: [DiffLine], oldWidth: CGFloat, newWidth: CGFloat) {
-        self.lines = lines; self.oldWidth = oldWidth; self.newWidth = newWidth
+    private init(lines: [DiffLine], splitRows: [SplitRow], oldWidth: CGFloat, newWidth: CGFloat) {
+        self.lines = lines; self.splitRows = splitRows
+        self.oldWidth = oldWidth; self.newWidth = newWidth
     }
 
     init(text: String) {
@@ -624,6 +750,7 @@ struct DiffDocument: Sendable {
         let maxOld = parsed.compactMap(\.oldNum).max() ?? 0
         let maxNew = parsed.compactMap(\.newNum).max() ?? 0
         self.init(lines: parsed,
+                  splitRows: Self.pair(parsed),
                   oldWidth: maxOld > 0 ? Self.colWidth(maxOld) : 0,
                   newWidth: maxNew > 0 ? Self.colWidth(maxNew) : 0)
     }
@@ -684,6 +811,45 @@ struct DiffDocument: Sendable {
         return out
     }
 
+    /// Build side-by-side rows from the flat line list for split view.
+    /// Context/hunk lines flush the pending change run; within one run
+    /// (context/hunk-bounded) all dels pair against all adds row-by-row,
+    /// leftover dels go left-only, leftover adds right-only. Greedy, not a
+    /// Myers realign — good enough; upgrade if misalignment shows on real diffs.
+    static func pair(_ lines: [DiffLine]) -> [SplitRow] {
+        var out: [SplitRow] = []
+        var id = 0
+        var dels: [DiffLine] = []
+        var adds: [DiffLine] = []
+
+        func flush() {
+            let paired = min(dels.count, adds.count)
+            for i in 0..<paired {
+                out.append(SplitRow(id: id, body: .pair(left: dels[i], right: adds[i]))); id += 1
+            }
+            for d in dels.dropFirst(paired) { out.append(SplitRow(id: id, body: .pair(left: d, right: nil))); id += 1 }
+            for a in adds.dropFirst(paired) { out.append(SplitRow(id: id, body: .pair(left: nil, right: a))); id += 1 }
+            dels.removeAll(); adds.removeAll()
+        }
+
+        for line in lines {
+            switch line.kind {
+            case .hunk:
+                flush()
+                out.append(SplitRow(id: id, body: .hunk(line.text))); id += 1
+            case .context:
+                flush()
+                out.append(SplitRow(id: id, body: .pair(left: line, right: line))); id += 1
+            case .del:
+                dels.append(line)
+            case .add:
+                adds.append(line)
+            }
+        }
+        flush()
+        return out
+    }
+
     /// `@@ -oldStart,oldCount +newStart,newCount @@ ...` → (oldStart, newStart).
     private static func parseHunk(_ line: String) -> (Int, Int) {
         var old = 0, new = 0
@@ -705,28 +871,131 @@ struct DiffDocument: Sendable {
 
 private struct DiffContentView: View {
     let doc: DiffDocument
+    let mode: DiffMode
+    let showContext: Bool
     private static let maxLines = 6000
+    @State private var cursor = -1   // index into changeAnchors; -1 = not yet jumped
 
     var body: some View {
-        let shown = doc.lines.prefix(Self.maxLines)
-        let oldW = doc.oldWidth, newW = doc.newWidth
-        ScrollView(.vertical) {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(shown) { line in
-                    row(line, oldW: oldW, newW: newW)
+        ScrollViewReader { proxy in
+            let anchors = changeAnchors
+            ZStack(alignment: .bottomTrailing) {
+                switch mode {
+                case .unified: unifiedBody()
+                case .split:   splitBody()
                 }
-                if doc.lines.count > Self.maxLines {
-                    Text("Diff truncated — \(doc.lines.count - Self.maxLines) more lines")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Theme.text3)
-                        .padding(.horizontal, 14).padding(.vertical, 10)
+                // Next/prev only matters in Show All (Changes Only already lists
+                // just changes), so hide the cluster — and its shortcuts — otherwise.
+                if showContext, !anchors.isEmpty {
+                    navCluster(proxy: proxy, anchors: anchors)
                 }
             }
         }
     }
 
+    // First-row id of each maximal run of changed lines — the anchors next/prev
+    // jumps between. Recomputed from the same filter the body renders.
+    private var changeAnchors: [Int] {
+        switch mode {
+        case .unified:
+            let f = showContext ? doc.lines : doc.lines.filter { $0.kind != .context }
+            return runStarts(f) { $0.kind == .add || $0.kind == .del }
+        case .split:
+            let f = showContext ? doc.splitRows : doc.splitRows.filter { !isContextPair($0) }
+            return runStarts(f) { isChangeRow($0) }
+        }
+    }
+
+    private func runStarts<T: Identifiable>(_ items: [T], isChange: (T) -> Bool) -> [Int] where T.ID == Int {
+        var out: [Int] = []
+        var prev = false
+        for it in items {
+            let c = isChange(it)
+            if c && !prev { out.append(it.id) }
+            prev = c
+        }
+        return out
+    }
+
+    private func isChangeRow(_ r: SplitRow) -> Bool {
+        if case .pair(let l, let rg) = r.body {
+            return (l?.kind == .add || l?.kind == .del) || (rg?.kind == .add || rg?.kind == .del)
+        }
+        return false
+    }
+
+    private func jump(proxy: ScrollViewProxy, anchors: [Int], delta: Int) {
+        guard !anchors.isEmpty else { return }
+        cursor = min(max(cursor + delta, 0), anchors.count - 1)
+        // Land ~2 lines above the change so it isn't flush against the top edge.
+        let target = offsetTarget(for: anchors[cursor], lead: 2)
+        // Instant scroll (no withAnimation): an animated scrollTo over a
+        // LazyVStack forces SwiftUI to realize every row between here and the
+        // target each frame — on a whole-file diff (up to 6000 lines) that
+        // hitched. Jump-nav is expected to snap, like VS Code's next-change.
+        proxy.scrollTo(target, anchor: .top)
+    }
+
+    /// id of the row `lead` lines above `anchorId` in the rendered list, clamped
+    /// to the top — so a jumped-to change shows a couple lines of lead context
+    /// instead of sitting right at the viewport edge.
+    private func offsetTarget(for anchorId: Int, lead: Int) -> Int {
+        let ids = filteredIds
+        guard let pos = ids.firstIndex(of: anchorId) else { return anchorId }
+        return ids[max(0, pos - lead)]
+    }
+
+    // ids of the filtered rows in render order (same filter the body renders),
+    // used to back the nav up a couple lines from a change.
+    private var filteredIds: [Int] {
+        switch mode {
+        case .unified: return (showContext ? doc.lines : doc.lines.filter { $0.kind != .context }).map(\.id)
+        case .split:   return (showContext ? doc.splitRows : doc.splitRows.filter { !isContextPair($0) }).map(\.id)
+        }
+    }
+
+    // Floating prev/next cluster, bottom-trailing — GitHub-style change navigation.
+    private func navCluster(proxy: ScrollViewProxy, anchors: [Int]) -> some View {
+        let at = min(max(cursor, 0), anchors.count - 1) + 1
+        return HStack(spacing: 2) {
+            HeaderIconButton(symbol: "chevron.up", help: "Previous change", size: 11) {
+                jump(proxy: proxy, anchors: anchors, delta: -1)
+            }
+            .keyboardShortcut(.upArrow, modifiers: .option)
+            Text("\(at)/\(anchors.count)")
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(Theme.text3)
+                .frame(width: 34)
+            HeaderIconButton(symbol: "chevron.down", help: "Next change", size: 11) {
+                jump(proxy: proxy, anchors: anchors, delta: 1)
+            }
+            .keyboardShortcut(.downArrow, modifiers: .option)
+        }
+        .padding(.horizontal, 6).padding(.vertical, 4)
+        .background(Capsule().fill(Theme.bgPane))
+        .overlay(Capsule().stroke(Theme.overlay(0.10), lineWidth: 1))
+        .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+        .padding(16)
+    }
+
+    // MARK: unified (single column)
+
     @ViewBuilder
-    private func row(_ line: DiffLine, oldW: CGFloat, newW: CGFloat) -> some View {
+    private func unifiedBody() -> some View {
+        let filtered = showContext ? doc.lines : doc.lines.filter { $0.kind != .context }
+        let oldW = doc.oldWidth, newW = doc.newWidth
+        ScrollView(.vertical) {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(prefix(filtered)) { line in
+                    unifiedRow(line, oldW: oldW, newW: newW).id(line.id)
+                }
+                truncationLabel(filtered.count)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func unifiedRow(_ line: DiffLine, oldW: CGFloat, newW: CGFloat) -> some View {
         if line.kind == .hunk {
             Text(line.text)
                 .font(.system(size: 10.5, weight: .medium, design: .monospaced))
@@ -760,6 +1029,96 @@ private struct DiffContentView: View {
             .overlay(alignment: .leading) {
                 Rectangle().fill(c.strip).frame(width: 2)
             }
+        }
+    }
+
+    // MARK: split (side-by-side)
+
+    @ViewBuilder
+    private func splitBody() -> some View {
+        let filtered = showContext ? doc.splitRows : doc.splitRows.filter { !isContextPair($0) }
+        let oldW = doc.oldWidth, newW = doc.newWidth
+        ScrollView(.vertical) {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(prefix(filtered)) { r in
+                    splitRow(r, oldW: oldW, newW: newW).id(r.id)
+                }
+                truncationLabel(filtered.count)
+            }
+        }
+    }
+
+    private func isContextPair(_ r: SplitRow) -> Bool {
+        if case .pair(let l, let rg) = r.body, let l, let rg {
+            return l.kind == .context && rg.kind == .context
+        }
+        return false
+    }
+
+    @ViewBuilder
+    private func splitRow(_ r: SplitRow, oldW: CGFloat, newW: CGFloat) -> some View {
+        switch r.body {
+        case .hunk(let text):
+            Text(text)
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(Theme.text3)
+                .lineLimit(1).truncationMode(.tail)
+                .padding(.leading, 14).padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.overlay(0.05))
+        case .pair(let left, let right):
+            // The colored halves are painted as the row's background so each
+            // fills the full row height (= max of the two sides) even when one
+            // side wraps and the other doesn't — no per-cell height trick needed.
+            let leftColor = left == nil ? Theme.overlay(0.025) : Self.tint(left!.kind).code
+            let rightColor = right == nil ? Theme.overlay(0.025) : Self.tint(right!.kind).code
+            HStack(alignment: .top, spacing: 0) {
+                sideContent(left, lineNo: left?.oldNum, width: oldW).frame(maxWidth: .infinity)
+                sideContent(right, lineNo: right?.newNum, width: newW).frame(maxWidth: .infinity)
+            }
+            .background(halfBackground(left: leftColor, right: rightColor))
+        }
+    }
+
+    @ViewBuilder
+    private func sideContent(_ line: DiffLine?, lineNo: Int?, width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            num(lineNo, width: width)
+            Text((line?.text).map { $0.isEmpty ? " " : $0 } ?? " ")
+                .font(.system(size: 11.5, design: .monospaced))
+                .foregroundStyle(line == nil ? Theme.text4 : Self.tint(line!.kind).fg)
+                .textSelection(.enabled)
+                .padding(.leading, 10).padding(.trailing, 10)
+                .padding(.vertical, 1.5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // Two equal-width color halves with a 1pt divider between, painted as the
+    // row background so it spans the full row height; each side colors through
+    // to its half of the divider.
+    private func halfBackground(left: Color, right: Color) -> some View {
+        HStack(spacing: 0) {
+            Rectangle().fill(left).frame(maxWidth: .infinity)
+            Rectangle().fill(Theme.overlay(0.05)).frame(width: 1)
+            Rectangle().fill(right).frame(maxWidth: .infinity)
+        }
+    }
+
+    // MARK: shared
+
+    /// Cap a line/row list at `maxLines`; returns the same array when under the cap.
+    private func prefix<T>(_ items: [T]) -> [T] {
+        items.count > Self.maxLines ? Array(items.prefix(Self.maxLines)) : items
+    }
+
+    @ViewBuilder
+    private func truncationLabel(_ total: Int) -> some View {
+        if total > Self.maxLines {
+            Text("Diff truncated — \(total - Self.maxLines) more lines")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.text3)
+                .padding(.horizontal, 14).padding(.vertical, 10)
         }
     }
 
@@ -823,15 +1182,19 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var model: ReviewModel?   // strong ref for the window's lifetime
 
-    func present(repo: String, title: String, subdir: String? = nil, scopes: [DiffScope]) {
+    func present(repo: String, title: String, subdir: String? = nil, scopes: [DiffScope], store: WorkspaceStore) {
         let model = ReviewModel(repo: repo, title: title, subdir: subdir, scopes: scopes)
         self.model = model
         let root = ReviewView(model: model)
             .frame(minWidth: 780, minHeight: 480)
-            .preferredColorScheme(.dark)
+            .environmentObject(store)
 
         let w = window ?? makeWindow()
         w.title = title
+        // Follow the selected theme's light/dark like the rest of the app. The
+        // old forced-dark left borderless-menu labels rendering white-on-light
+        // under a light theme (their adaptive label color keyed off colorScheme).
+        w.appearance = NSAppearance(named: Theme.current.isDark ? .darkAqua : .aqua)
         // Zero the hosting view's safe-area at the AppKit layer instead of with
         // SwiftUI's `.ignoresSafeArea()`. The modifier makes SwiftUI re-coordinate
         // the titlebar inset on every layout pass, which flickers while resizing

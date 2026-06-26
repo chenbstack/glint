@@ -2718,7 +2718,7 @@ final class WorkspaceStore: ObservableObject {
             // identity), so the title reflects what's actually reviewed.
             let title = subdir.map { "\(ws.displayName) · \($0)" } ?? ws.displayName
             ReviewWindowController.shared.present(repo: root, title: title,
-                                                  subdir: subdir, scopes: scopes)
+                                                  subdir: subdir, scopes: scopes, store: self)
             return
         }
         Task {
@@ -2731,7 +2731,7 @@ final class WorkspaceStore: ObservableObject {
             let reviewTitle = subdir.map { "\(rootName)/\($0)" } ?? rootName
             await MainActor.run {
                 ReviewWindowController.shared.present(repo: root, title: reviewTitle,
-                                                      subdir: subdir, scopes: scopes)
+                                                      subdir: subdir, scopes: scopes, store: self)
             }
         }
     }
