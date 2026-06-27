@@ -99,19 +99,21 @@ final class SyntaxHighlighterTests: XCTestCase {
         XCTAssertFalse(segments(attr).contains { $0.1 })
     }
 
-    /// Config formats (YAML/…) have no keywords and no type tinting: a key like
-    /// `if:` and a Capitalized value must not be tinted, while strings are.
-    /// Regression guard for the YAML-over-coloring bug.
-    func testConfigFormatDoesNotTintKeysOrTypes() {
-        let yaml = SyntaxLanguage.from(path: "f.yaml")
-        var state = SyntaxHighlighter.State()
-        let a = SyntaxHighlighter.highlight("if: runner == 'ubuntu'", language: yaml, state: &state)
-        let segs = segments(a)
-        XCTAssertFalse(segs.contains { $0.1 && $0.0.contains("if") })      // key not a keyword
-        XCTAssertTrue(segs.contains { $0.1 && $0.0.contains("ubuntu") })   // string tinted
-
+    /// TOML/INI (config) tint strings but not keys or Capitalized values;
+    /// YAML is fully uncolored (plain) — strings, numbers, comments all base.
+    func testConfigAndYAMLProfiles() {
+        let toml = SyntaxLanguage.from(path: "f.toml")
+        var s = SyntaxHighlighter.State()
+        let a = SyntaxHighlighter.highlight("if: runner == 'ubuntu'", language: toml, state: &s)
+        XCTAssertFalse(segments(a).contains { $0.1 && $0.0.contains("if") })      // key not a keyword
+        XCTAssertTrue(segments(a).contains { $0.1 && $0.0.contains("ubuntu") })   // string tinted
         var s2 = SyntaxHighlighter.State()
-        let b = SyntaxHighlighter.highlight("name: Ubuntu", language: yaml, state: &s2)
+        let b = SyntaxHighlighter.highlight("name: Ubuntu", language: toml, state: &s2)
         XCTAssertFalse(segments(b).contains { $0.1 && $0.0.contains("Ubuntu") })  // Capitalized value not a type
+
+        let yaml = SyntaxLanguage.from(path: "f.yaml")
+        var s3 = SyntaxHighlighter.State()
+        let c = SyntaxHighlighter.highlight("if: runner == 'ubuntu' # note", language: yaml, state: &s3)
+        XCTAssertTrue(segments(c).allSatisfy { !$0.1 })                           // YAML: nothing tinted
     }
 }

@@ -64,11 +64,13 @@ struct SyntaxLanguage: Sendable {
         (["rs", "rust"], rust),
         (["py", "pyi", "python", "rb", "ruby", "sh", "bash", "zsh", "fish",
           "cmake", "mk", "make"], script),
-        // Config/data formats: `#` comments + strings + numbers, but NO
-        // keywords and NO type tinting — YAML `if:`/`do:` keys and Capitalized
-        // values must not be tinted as code.
-        (["yaml", "yml", "toml", "ini", "cfg", "conf", "properties",
-          "dockerfile"], config),
+        // YAML is fully uncolored (plain) — its keys/values read as data, and
+        // any token coloring (keywords, types, even strings/numbers) reads as
+        // noise on a config diff.
+        (["yaml", "yml"], plain),
+        // Other config/data formats: `#` comments + strings + numbers, but no
+        // keywords and no type tinting.
+        (["toml", "ini", "cfg", "conf", "properties", "dockerfile"], config),
         (["sql"], sql),
         // Prose: don't treat ' / " as strings (apostrophes in English would
         // otherwise gulp whole sentences). Markdown tints only inline `code`.
