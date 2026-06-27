@@ -15,6 +15,14 @@ struct ContentView: View {
     /// search). Captured in the false→true transition below.
     @State private var prePaletteResponder: NSResponder?
     @State private var appActive = NSApp.isActive
+    /// Window-local left-click monitor that commits an in-flight rename when
+    /// the click lands outside its field. macOS keeps a focused TextField as
+    /// first responder on outside clicks, so the rename field's blur-to-commit
+    /// path (`onChange(nameFieldFocused)` → `commitRename()`) can't otherwise
+    /// fire — only Return would. Gated on `store.isRenaming` (see below) so it
+    /// acts *only* during a rename; the sidebar search and other fields are
+    /// untouched.
+    @State private var fieldDismissMonitor: Any?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -74,6 +82,8 @@ struct ContentView: View {
             }
         }
         .ignoresSafeArea()
+        .onAppear { installFieldDismissMonitor() }
+        .onDisappear { removeFieldDismissMonitor() }
         // Root stays clear so the sidebar and terminal each own their backing
         // layer — that's what lets the two opacity sliders act independently
         // (a single opaque root fill would block the terminal from showing the
@@ -254,6 +264,39 @@ struct ContentView: View {
             return owner
         }
         return responder
+    }
+
+    /// Installs the rename click-away monitor (see `fieldDismissMonitor`). The
+    /// `store.isRenaming` gate is the whole point of the narrowing: without it
+    /// the monitor would resign *any* focused text field (sidebar search, etc.)
+    /// on every outside click. Resolve `store` once at install time and capture
+    /// the reference — the monitor outlives any single view update, so we must
+    /// not reach back into `self`/the environment at event time.
+    private func installFieldDismissMonitor() {
+        guard fieldDismissMonitor == nil else { return }
+        let store = self.store
+        fieldDismissMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            guard store.isRenaming,
+                  let window = event.window ?? NSApp.keyWindow,
+                  let editor = window.firstResponder as? NSTextView,
+                  let superview = editor.superview else {
+                return event
+            }
+            let fieldRect = superview.convert(editor.frame, to: nil)
+            // Small tolerance so clicks on the field's padding still edit.
+            if fieldRect.insetBy(dx: -3, dy: -3).contains(event.locationInWindow) {
+                return event
+            }
+            window.makeFirstResponder(nil)
+            return event
+        }
+    }
+
+    private func removeFieldDismissMonitor() {
+        if let monitor = fieldDismissMonitor {
+            NSEvent.removeMonitor(monitor)
+            fieldDismissMonitor = nil
+        }
     }
 
     /// Sidebar 表面:暗色沿用主题平铺,亮色用 Codex 的中性白磨砂玻璃。
@@ -729,6 +772,7 @@ private struct TabChip: View {
                         DispatchQueue.main.async { nameFieldFocused = true }
                     }
                     .onChange(of: nameFieldFocused) { _, focused in
+                        store.isRenaming = focused
                         if !focused && isEditing { commitRename() }
                     }
             } else {
@@ -827,10 +871,12 @@ private struct TabChip: View {
     private func commitRename() {
         store.renameTab(tab.id, to: draftName)
         isEditing = false
+        store.isRenaming = false
     }
 
     private func cancelRename() {
         isEditing = false
+        store.isRenaming = false
     }
 
     /// Same condition as TabBar.glassCluster — chips restyle as segments

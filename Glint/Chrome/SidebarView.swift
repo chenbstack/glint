@@ -649,6 +649,7 @@ private struct WorkspaceCard: View {
                             DispatchQueue.main.async { nameFieldFocused = true }
                         }
                         .onChange(of: nameFieldFocused) { _, focused in
+                            store.isRenaming = focused
                             if !focused && isEditing { commitRename() }
                         }
                 } else {
@@ -793,10 +794,12 @@ private struct WorkspaceCard: View {
     private func commitRename() {
         store.renameWorkspace(ws.id, to: draftName)
         isEditing = false
+        store.isRenaming = false
     }
 
     private func cancelRename() {
         isEditing = false
+        store.isRenaming = false
     }
 
     private func workspaceIcon(active: Bool, status: PaneAgentStatus?) -> some View {
