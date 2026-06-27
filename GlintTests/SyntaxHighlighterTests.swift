@@ -98,4 +98,20 @@ final class SyntaxHighlighterTests: XCTestCase {
                                                 state: &state)
         XCTAssertFalse(segments(attr).contains { $0.1 })
     }
+
+    /// Config formats (YAML/…) have no keywords and no type tinting: a key like
+    /// `if:` and a Capitalized value must not be tinted, while strings are.
+    /// Regression guard for the YAML-over-coloring bug.
+    func testConfigFormatDoesNotTintKeysOrTypes() {
+        let yaml = SyntaxLanguage.from(path: "f.yaml")
+        var state = SyntaxHighlighter.State()
+        let a = SyntaxHighlighter.highlight("if: runner == 'ubuntu'", language: yaml, state: &state)
+        let segs = segments(a)
+        XCTAssertFalse(segs.contains { $0.1 && $0.0.contains("if") })      // key not a keyword
+        XCTAssertTrue(segs.contains { $0.1 && $0.0.contains("ubuntu") })   // string tinted
+
+        var s2 = SyntaxHighlighter.State()
+        let b = SyntaxHighlighter.highlight("name: Ubuntu", language: yaml, state: &s2)
+        XCTAssertFalse(segments(b).contains { $0.1 && $0.0.contains("Ubuntu") })  // Capitalized value not a type
+    }
 }

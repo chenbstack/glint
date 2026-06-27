@@ -63,8 +63,12 @@ struct SyntaxLanguage: Sendable {
         (["go", "golang"], go),
         (["rs", "rust"], rust),
         (["py", "pyi", "python", "rb", "ruby", "sh", "bash", "zsh", "fish",
-          "yaml", "yml", "toml", "ini", "cfg", "conf", "properties", "cmake",
-          "mk", "make", "dockerfile"], script),
+          "cmake", "mk", "make"], script),
+        // Config/data formats: `#` comments + strings + numbers, but NO
+        // keywords and NO type tinting — YAML `if:`/`do:` keys and Capitalized
+        // values must not be tinted as code.
+        (["yaml", "yml", "toml", "ini", "cfg", "conf", "properties",
+          "dockerfile"], config),
         (["sql"], sql),
         // Prose: don't treat ' / " as strings (apostrophes in English would
         // otherwise gulp whole sentences). Markdown tints only inline `code`.
@@ -148,6 +152,14 @@ struct SyntaxLanguage: Sendable {
             "when", "until", "unless", "function", "echo", "export", "local",
             "source", "unset", "set", "alias",
         ])
+
+    /// Config/data formats (YAML, TOML, INI, …): `#` comments, strings, and
+    /// numbers only. No keyword set and no type tinting, so keys like `if:`/
+    /// `do:` and Capitalized values aren't tinted as code.
+    private static let config = SyntaxLanguage(
+        lineComments: ["#"], blockComment: nil, tripleStrings: [],
+        stringQuotes: ["\"", "'"], escapes: true, keywords: [],
+        highlightTypes: false)
 
     private static let sql = SyntaxLanguage(
         lineComments: ["--"], blockComment: blockC, tripleStrings: [],
