@@ -522,6 +522,12 @@ final class WorkspaceStore: ObservableObject {
     /// of-the-OS.
     @Published var settingsOpen: Bool = false
 
+    /// True while a workspace (sidebar) or tab (tab bar) rename field is the
+    /// focused first responder. Gates the click-away dismissal monitor in
+    /// `ContentView` so it resigns *only* during an actual rename — the sidebar
+    /// search and other text fields stay on macOS's default focus behavior.
+    @Published var isRenaming: Bool = false
+
     /// Hand-authored "What's New" notes to show in the centered card overlay.
     /// Non-empty ⇒ the card is up (one entry on manual open, possibly several
     /// when catching up across skipped versions). See `ReleaseNotes.swift`.
