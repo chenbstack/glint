@@ -22,6 +22,7 @@
 		3932A4CFEFF6FB81AE283645 /* AgentHookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */; };
 		3CB9F41E3B1CB4A8790D9159 /* GhosttyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC6FFB5185C403F6F44A1687 /* GhosttyManager.swift */; };
 		419DDD815048044125F5FE91 /* ReviewWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E982534C8CF6270BCF39106 /* ReviewWindow.swift */; };
+		456D76955277C3299291BF60 /* SyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8037A4E0001A21E3224DD798 /* SyntaxHighlighter.swift */; };
 		47BB527385B84454ABF8FC40 /* themes.json in Resources */ = {isa = PBXBuildFile; fileRef = 6860F8F626EFDB9A289FC727 /* themes.json */; };
 		4971664CE7FBF0629C8DD709 /* ReleaseNotes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 407B3A9D15F4B9E613DA1CF8 /* ReleaseNotes.swift */; };
 		49DF8EE59313B7CFE29DA303 /* PaneTreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E646AABA8ADCE8A2A5C6F55 /* PaneTreeView.swift */; };
@@ -59,6 +60,7 @@
 		F5AE37B67B17DD61B652E5B6 /* ReviewDiffParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CFFB91CE5C44976A6961F1F /* ReviewDiffParsingTests.swift */; };
 		F6AFF715FCE5357CEB07683D /* SettingsSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */; };
 		F7ABF70CD455143BF89B89B3 /* SafeJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E2B9ADF809766CE4278047 /* SafeJSON.swift */; };
+		FAB0828152636BBBBC5989CD /* SyntaxHighlighterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FAD36B4BDB22AB47353C569 /* SyntaxHighlighterTests.swift */; };
 		FCB67525DF16A4DCF9B2AF7A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 376568363043C189904E4E0A /* Localizable.xcstrings */; };
 		FE527C4220DD46528255F14E /* ModalOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C11B3335E47DDAF77A883064 /* ModalOverlay.swift */; };
 		FEBC3158CB471E9ABDF931BB /* CodexUsageReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */; };
@@ -97,6 +99,7 @@
 		38E3B385162995D0F1F5B72D /* CodexHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHome.swift; sourceTree = "<group>"; };
 		39F54835E4A44EC88236EFBE /* GitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitService.swift; sourceTree = "<group>"; };
 		3E2E78BBA22734DD486C760B /* Glint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glint.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3FAD36B4BDB22AB47353C569 /* SyntaxHighlighterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlighterTests.swift; sourceTree = "<group>"; };
 		407B3A9D15F4B9E613DA1CF8 /* ReleaseNotes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotes.swift; sourceTree = "<group>"; };
 		41DDB9C7B5A277B7924270A3 /* PaneAgentState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneAgentState.swift; sourceTree = "<group>"; };
 		4408F9761E584DE2AB6630E2 /* UpdaterController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterController.swift; sourceTree = "<group>"; };
@@ -112,6 +115,7 @@
 		712159D2C27AD5B865820384 /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
 		797C4E86D052EF8A68DD9B39 /* PaneSessionIdMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSessionIdMigrationTests.swift; sourceTree = "<group>"; };
 		7CB74659D174004C620D538A /* GlintApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintApp.swift; sourceTree = "<group>"; };
+		8037A4E0001A21E3224DD798 /* SyntaxHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlighter.swift; sourceTree = "<group>"; };
 		81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GhosttyKit.xcframework; path = Vendor/GhosttyKit.xcframework; sourceTree = "<group>"; };
 		829D894CF747D6BC08667239 /* AgentPaneSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPaneSummary.swift; sourceTree = "<group>"; };
 		83E4DF4C5180D50C381B4976 /* WorkspaceIconKindTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceIconKindTests.swift; sourceTree = "<group>"; };
@@ -186,6 +190,7 @@
 				797C4E86D052EF8A68DD9B39 /* PaneSessionIdMigrationTests.swift */,
 				51DE2D7740BD03498A936B62 /* PersistenceRecoveryTests.swift */,
 				2CFFB91CE5C44976A6961F1F /* ReviewDiffParsingTests.swift */,
+				3FAD36B4BDB22AB47353C569 /* SyntaxHighlighterTests.swift */,
 				83E4DF4C5180D50C381B4976 /* WorkspaceIconKindTests.swift */,
 			);
 			path = GlintTests;
@@ -257,6 +262,7 @@
 			isa = PBXGroup;
 			children = (
 				9E982534C8CF6270BCF39106 /* ReviewWindow.swift */,
+				8037A4E0001A21E3224DD798 /* SyntaxHighlighter.swift */,
 			);
 			path = Review;
 			sourceTree = "<group>";
@@ -426,6 +432,7 @@
 				3194A1545E36E400BC2C33E6 /* PaneSessionIdMigrationTests.swift in Sources */,
 				E80809A987A07731FF35D01D /* PersistenceRecoveryTests.swift in Sources */,
 				F5AE37B67B17DD61B652E5B6 /* ReviewDiffParsingTests.swift in Sources */,
+				FAB0828152636BBBBC5989CD /* SyntaxHighlighterTests.swift in Sources */,
 				C748DE21F23B49B2FFD73DC7 /* WorkspaceIconKindTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -465,6 +472,7 @@
 				F6AFF715FCE5357CEB07683D /* SettingsSafety.swift in Sources */,
 				EF3ACBA990526130228FAD0B /* SettingsView.swift in Sources */,
 				CD30F5E1B78B3C46C9990FD6 /* SidebarView.swift in Sources */,
+				456D76955277C3299291BF60 /* SyntaxHighlighter.swift in Sources */,
 				7FC12666816053BEB64079CB /* Theme.swift in Sources */,
 				692D1A7D490E07D796535EAA /* UpdaterController.swift in Sources */,
 				D3D6CF13B67D30E9DA557F83 /* UsageStore.swift in Sources */,
