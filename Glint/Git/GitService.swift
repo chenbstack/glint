@@ -142,6 +142,16 @@ struct SSHGitRunner: GitRunner {
 
     /// Pure: the full `ssh … git -C <cwd> <args>` argv. Split out so the wire
     /// format is unit-testable without spawning ssh.
+    ///
+    /// **`cwd` is single-quoted on purpose.** `Process` passes our argv to
+    /// `/usr/bin/ssh` without a shell, but ssh joins the remote-command portion
+    /// with spaces and hands it to the REMOTE LOGIN SHELL, which re-parses the
+    /// whole thing — so an unquoted `;` / `$(…)` / backtick / space in `cwd`
+    /// would execute arbitrary remote code in the user's authenticated session.
+    /// `cwd` is sourced from the remote shell's terminal title (attacker-
+    /// controllable by anyone who can set `PS1`/`PROMPT_COMMAND` on the remote),
+    /// so this matters. POSIX single-quoting passes every byte through
+    /// literally; embedded `'` is closed-escaped-reopened (`'\''`).
     static func commandArgs(target: String, port: Int?, controlPath: String,
                             cwd: String?, gitArgs: [String]) -> [String] {
         var a = ["-o", "BatchMode=yes",
@@ -150,9 +160,17 @@ struct SSHGitRunner: GitRunner {
         if let port { a += ["-p", "\(port)"] }
         a.append(target)
         a.append("git")
-        if let cwd, !cwd.isEmpty { a += ["-C", cwd] }
+        if let cwd, !cwd.isEmpty { a += ["-C", shellQuote(cwd)] }
         a += gitArgs
         return a
+    }
+
+    /// POSIX shell single-quote. Every byte passes literally; embedded `'` is
+    /// terminated, backslash-escaped, and reopened so the result is one
+    /// re-parse-safe shell word. Use for any value derived from untrusted
+    /// remote-shell data that ssh will hand to the remote login shell.
+    static func shellQuote(_ s: String) -> String {
+        return "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     /// Expand a leading `~` against the remote `$HOME` (cached per target).

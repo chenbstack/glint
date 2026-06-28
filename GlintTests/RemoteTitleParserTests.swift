@@ -58,4 +58,28 @@ final class RemoteTitleParserTests: XCTestCase {
         // a real hostname, so reject rather than mis-parse.
         XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@ho st:/x"))
     }
+
+    /// Path is restricted to a POSIX-path allowlist as belt-and-suspenders for
+    /// the single-quoting at the SSH-runner layer: shell metacharacters in the
+    /// title (which a malicious remote PS1 can set verbatim) must never reach
+    /// the wire — `;`, `$(…)`, backticks, `&`, `|`, spaces, etc. all reject.
+    /// Letters / digits / `._-/~` pass.
+    func testPathRejectsShellMetacharacters() {
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x;rm -rf ~"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x$(whoami)"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x`id`"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x&y"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x|y"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x y"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x\"y\""))
+    }
+
+    /// Confirm legitimate POSIX paths still parse — leading `~`, absolute,
+    /// nested, dotfiles, hyphens, underscores, digits. Otherwise the
+    /// allowlist would over-reject and silently kill Review on normal hosts.
+    func testPathAllowsTypicalPosixPaths() {
+        XCTAssertNotNil(GhosttySurfaceView.parseRemoteTitle("u@host:~/.config/nvim"))
+        XCTAssertNotNil(GhosttySurfaceView.parseRemoteTitle("u@host:/var/log/nginx-2026.log"))
+        XCTAssertNotNil(GhosttySurfaceView.parseRemoteTitle("u@host:/srv/app_v2/dist"))
+    }
 }

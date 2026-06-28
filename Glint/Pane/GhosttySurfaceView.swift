@@ -822,6 +822,17 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// zsh remotes, custom titles, full-screen apps that clear it — so Review
     /// degrades to its no-path behavior instead of guessing. Static + internal
     /// so the parser is directly unit-testable.
+    ///
+    /// **Security:** the title is forwarded verbatim from the remote shell via
+    /// `GHOSTTY_ACTION_SET_TITLE` (NOT host-validated), so it's attacker-
+    /// controllable by anyone who can set the remote `PS1`/`PROMPT_COMMAND`.
+    /// `path` ultimately becomes the `<cwd>` in `ssh user@host git -C <cwd>`,
+    /// and ssh hands the remote command to the LOGIN SHELL which re-parses it
+    /// — so an unquoted `;`/`$()`/backtick in `path` would execute arbitrary
+    /// remote code in the user's authenticated session. Reject anything outside
+    /// a strict POSIX-path allowlist: letters, digits, and `._-/~`. (Real
+    /// defense is the single-quoting in `SSHGitRunner.commandArgs`; this is
+    /// belt-and-suspenders so obvious junk never reaches the wire.)
     static func parseRemoteTitle(_ title: String) -> (user: String, host: String, path: String)? {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let at = t.firstIndex(of: "@") else { return nil }
@@ -833,7 +844,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         let path = String(rest[rest.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
         guard !host.isEmpty,
               host.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }),
-              !path.isEmpty else { return nil }
+              !path.isEmpty,
+              path.allSatisfy({ $0.isLetter || $0.isNumber
+                                || $0 == "." || $0 == "-" || $0 == "_"
+                                || $0 == "/" || $0 == "~" })
+        else { return nil }
         return (user, host, path)
     }
 
