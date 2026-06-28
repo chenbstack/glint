@@ -124,11 +124,6 @@ extension AgentLaunchItem {
     /// codex's own default, so it launches bare with no override.
     private static func codexCommand(for home: CodexHome) -> String {
         guard home.resolvedURL != CodexHome.default.resolvedURL else { return "codex" }
-        return "CODEX_HOME=\(shellQuoted(home.resolvedURL.path)) codex"
-    }
-
-    private static func shellQuoted(_ path: String) -> String {
-        if !path.contains("'") { return "'\(path)'" }
-        return "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
+        return "CODEX_HOME=\(posixShellQuoted(home.resolvedURL.path)) codex"
     }
 }

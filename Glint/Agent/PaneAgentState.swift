@@ -67,7 +67,7 @@ enum PaneAgentKind: String, Codable {
         case .claude:
             return validated.map { "claude --resume \($0)\n" } ?? "claude --continue\n"
         case .codex:
-            let prefix = codexHome.map { "CODEX_HOME=\(Self.shellQuoted($0)) " } ?? ""
+            let prefix = codexHome.map { "CODEX_HOME=\(posixShellQuoted($0)) " } ?? ""
             return validated.map { "\(prefix)codex resume \($0)\n" }
                 ?? "\(prefix)codex resume --last\n"
         case .opencode:
@@ -75,14 +75,6 @@ enum PaneAgentKind: String, Codable {
         case .devin:
             return validated.map { "devin --resume \($0)\n" } ?? "devin --continue\n"
         }
-    }
-
-    /// Single-quote a path for shell assignment. Matches the launch-side
-    /// quoting in `AgentLaunchItem.codexCommand`, so the persisted home
-    /// round-trips byte-for-byte into the resume command.
-    private static func shellQuoted(_ path: String) -> String {
-        if !path.contains("'") { return "'\(path)'" }
-        return "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 }
 

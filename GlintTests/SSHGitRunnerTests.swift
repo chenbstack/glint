@@ -8,11 +8,8 @@ import XCTest
 final class SSHGitRunnerTests: XCTestCase {
 
     func testBasicArgv() {
-        // Production `cwd` reaches commandArgs already `~`-expanded by
-        // `resolveRemoteCwd` (so the remote login shell sees a literal absolute
-        // path, not a metachar that needs re-expansion). The unit test reflects
-        // that: a normal absolute path lands single-quoted, with the rest of
-        // the argv untouched.
+        // Absolute cwd lands single-quoted; a non-flag gitArg ("status") is
+        // also quoted because the remote login shell re-parses every token.
         let a = SSHGitRunner.commandArgs(target: "deploy@prod-server", port: nil,
                                          controlPath: "/tmp/x.sock",
                                          cwd: "/home/deploy/code/api", gitArgs: ["status"])
@@ -21,7 +18,7 @@ final class SSHGitRunnerTests: XCTestCase {
             "-o", "ControlMaster=auto", "-o", "ControlPersist=10m",
             "-o", "ControlPath=/tmp/x.sock",
             "deploy@prod-server",
-            "git", "-C", "'/home/deploy/code/api'", "status"
+            "git", "-C", "'/home/deploy/code/api'", "'status'"
         ])
     }
 
@@ -43,8 +40,8 @@ final class SSHGitRunnerTests: XCTestCase {
                                          controlPath: "/tmp/x.sock",
                                          cwd: nil, gitArgs: ["status"])
         let gitIndex = a.firstIndex(of: "git")!
-        // Immediately after `git` come the git args, with no `-C` injected.
-        XCTAssertEqual(a[gitIndex + 1], "status")
+        // Immediately after `git` come the git args (quoted), with no `-C` injected.
+        XCTAssertEqual(a[gitIndex + 1], "'status'")
         XCTAssertFalse(a.contains("-C"))
     }
 
@@ -78,7 +75,63 @@ final class SSHGitRunnerTests: XCTestCase {
     /// A `'` inside cwd must be closed-escaped-reopened (`'\''`) so the wrapper
     /// single-quote isn't terminated mid-payload. POSIX-portable construction.
     func testShellQuoteEscapesEmbeddedSingleQuote() {
-        let q = SSHGitRunner.shellQuote("a'b")
-        XCTAssertEqual(q, "'a'\\''b'")
+        XCTAssertEqual(posixShellQuoted("a'b"), "'a'\\''b'")
+    }
+
+    /// A leading `~` (or `~user`) MUST stay unquoted so the remote login shell
+    /// performs tilde expansion against the user's actual `$HOME` — otherwise
+    /// `~/proj` would land at a literal directory called `~`. Everything after
+    /// the tilde segment is single-quoted so spaces/metachars are still safe.
+    func testCommandArgsPreservesLeadingTildeUnquoted() {
+        let a = SSHGitRunner.commandArgs(target: "h", port: nil,
+                                         controlPath: "/tmp/x.sock",
+                                         cwd: "~/code/api", gitArgs: ["status"])
+        let gitIndex = a.firstIndex(of: "git")!
+        XCTAssertEqual(a[gitIndex + 1], "-C")
+        XCTAssertEqual(a[gitIndex + 2], "~'/code/api'")
+    }
+
+    /// `~admin/proj` must expand to admin's home (not the login user's), so the
+    /// whole `~admin` prefix stays unquoted as one shell tilde-prefix word.
+    func testTildeUserPreserved() {
+        let a = SSHGitRunner.commandArgs(target: "h", port: nil,
+                                         controlPath: "/x", cwd: "~admin/proj", gitArgs: [])
+        let gitIndex = a.firstIndex(of: "git")!
+        XCTAssertEqual(a[gitIndex + 2], "~admin'/proj'")
+    }
+
+    /// Bare `~` (no slash) means `$HOME` — keep it unquoted with nothing
+    /// appended; quoting it would yield a literal directory `~`.
+    func testBareTildeUnquoted() {
+        let a = SSHGitRunner.commandArgs(target: "h", port: nil,
+                                         controlPath: "/x", cwd: "~", gitArgs: [])
+        let gitIndex = a.firstIndex(of: "git")!
+        XCTAssertEqual(a[gitIndex + 2], "~")
+    }
+
+    /// gitArgs themselves are re-parsed by the remote shell, so every one
+    /// (flags included) must round-trip as a single token. A revision spec
+    /// like `main^{commit}` contains shell metachars that would otherwise
+    /// blow up — must be quoted at the wire layer.
+    func testGitArgsAreShellQuoted() {
+        let a = SSHGitRunner.commandArgs(target: "h", port: nil,
+                                         controlPath: "/x", cwd: nil,
+                                         gitArgs: ["log", "--format=%H %s", "main^{commit}"])
+        let gitIndex = a.firstIndex(of: "git")!
+        XCTAssertEqual(Array(a[(gitIndex + 1)...]),
+                       ["'log'", "'--format=%H %s'", "'main^{commit}'"])
+    }
+
+    /// Belt-and-suspenders: if a `~`-prefix segment ever DID contain a shell
+    /// metachar (the title allowlist should keep this from happening, but
+    /// `quoteRemoteCwd` re-validates so the safety doesn't depend on a caller),
+    /// fall back to fully single-quoting the whole path — losing tilde
+    /// expansion but never letting a metachar reach the remote shell.
+    func testTildeWithMetacharsFallsBackToFullQuote() {
+        let a = SSHGitRunner.commandArgs(target: "h", port: nil,
+                                         controlPath: "/x",
+                                         cwd: "~bad;rm/proj", gitArgs: [])
+        let gitIndex = a.firstIndex(of: "git")!
+        XCTAssertEqual(a[gitIndex + 2], "'~bad;rm/proj'")
     }
 }

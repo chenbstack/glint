@@ -59,19 +59,26 @@ final class RemoteTitleParserTests: XCTestCase {
         XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@ho st:/x"))
     }
 
-    /// Path is restricted to a POSIX-path allowlist as belt-and-suspenders for
-    /// the single-quoting at the SSH-runner layer: shell metacharacters in the
-    /// title (which a malicious remote PS1 can set verbatim) must never reach
-    /// the wire — `;`, `$(…)`, backticks, `&`, `|`, spaces, etc. all reject.
-    /// Letters / digits / `._-/~` pass.
+    /// Path is restricted to a metachar-free allowlist as belt-and-suspenders
+    /// for the single-quoting at the SSH-runner layer: a malicious remote `PS1`
+    /// could set the title to anything, but the obvious-injection set must
+    /// never reach the wire. Spaces, `@`, `()`, `+`, `=`, `,` are NOT
+    /// metachars (they're literal inside POSIX single quotes) and parse — see
+    /// the `Allows…` tests below for the legitimate uses they cover.
     func testPathRejectsShellMetacharacters() {
         XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x;rm -rf ~"))
         XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x$(whoami)"))
         XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x`id`"))
         XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x&y"))
         XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x|y"))
-        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x y"))
         XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x\"y\""))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x>y"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x<y"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x*y"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x?y"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x[y]"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x\\y"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/x'y'"))
     }
 
     /// Confirm legitimate POSIX paths still parse — leading `~`, absolute,
@@ -81,5 +88,46 @@ final class RemoteTitleParserTests: XCTestCase {
         XCTAssertNotNil(GhosttySurfaceView.parseRemoteTitle("u@host:~/.config/nvim"))
         XCTAssertNotNil(GhosttySurfaceView.parseRemoteTitle("u@host:/var/log/nginx-2026.log"))
         XCTAssertNotNil(GhosttySurfaceView.parseRemoteTitle("u@host:/srv/app_v2/dist"))
+    }
+
+    /// `@` appears in real-world paths (npm scopes like `node_modules/@types`,
+    /// git refs, email-named directories) and is shell-safe (not a metachar).
+    /// The previous allowlist over-rejected this; loosen to accept.
+    func testPathAllowsAtSign() {
+        let r = GhosttySurfaceView.parseRemoteTitle("u@host:/srv/app/node_modules/@types/node")
+        XCTAssertEqual(r?.path, "/srv/app/node_modules/@types/node")
+    }
+
+    /// Spaces inside a path are legitimate (Documents folder, "My Project"),
+    /// and SSHGitRunner's single-quoting handles them safely. The previous
+    /// allowlist over-rejected; titles like `~/My Code` now parse.
+    func testPathAllowsSpace() {
+        let r = GhosttySurfaceView.parseRemoteTitle("u@host:~/My Code/api")
+        XCTAssertEqual(r?.path, "~/My Code/api")
+    }
+
+    /// CJK and other Unicode characters in the path must parse — CLAUDE.md
+    /// mandates i18n / zh-Hans support, and remote users routinely cd into
+    /// directories with non-ASCII names. `Character.isLetter` is Unicode-wide
+    /// so the allowlist accepts these by design.
+    func testPathAllowsCJK() {
+        let r = GhosttySurfaceView.parseRemoteTitle("u@host:~/项目/网站")
+        XCTAssertEqual(r?.path, "~/项目/网站")
+    }
+
+    /// `..` traversal in the path is rejected even when every character is
+    /// otherwise allowlist-clean. The path drives the breadcrumb / Review
+    /// window header, and a `..`-laced title would let a malicious remote
+    /// misrepresent where Review is operating.
+    func testPathRejectsDotDotTraversal() {
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:/srv/app/../etc"))
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@host:~/../root"))
+    }
+
+    /// Host is ASCII-only (RFC 1123). A non-ASCII host name is never a real
+    /// DNS-resolvable hostname and indicates a malformed title — fail closed
+    /// rather than mis-route the ssh.
+    func testHostRejectsNonAscii() {
+        XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@主机:/x"))
     }
 }

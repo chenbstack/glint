@@ -824,15 +824,26 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// so the parser is directly unit-testable.
     ///
     /// **Security:** the title is forwarded verbatim from the remote shell via
-    /// `GHOSTTY_ACTION_SET_TITLE` (NOT host-validated), so it's attacker-
-    /// controllable by anyone who can set the remote `PS1`/`PROMPT_COMMAND`.
-    /// `path` ultimately becomes the `<cwd>` in `ssh user@host git -C <cwd>`,
-    /// and ssh hands the remote command to the LOGIN SHELL which re-parses it
-    /// — so an unquoted `;`/`$()`/backtick in `path` would execute arbitrary
-    /// remote code in the user's authenticated session. Reject anything outside
-    /// a strict POSIX-path allowlist: letters, digits, and `._-/~`. (Real
-    /// defense is the single-quoting in `SSHGitRunner.commandArgs`; this is
-    /// belt-and-suspenders so obvious junk never reaches the wire.)
+    /// `GHOSTTY_ACTION_SET_TITLE` (NOT host-validated, unlike OSC 7), so it's
+    /// attacker-controllable by anyone who can set the remote `PS1` /
+    /// `PROMPT_COMMAND`. `path` ultimately becomes the `<cwd>` in
+    /// `ssh user@host git -C <cwd>`, and ssh hands the remote command to the
+    /// LOGIN SHELL which re-parses it — so an unquoted `;` / `$(…)` / backtick
+    /// in `path` would execute arbitrary remote code in the user's
+    /// authenticated session. The real defense is the single-quoting in
+    /// `SSHGitRunner.commandArgs`; this allowlist is belt-and-suspenders so
+    /// obvious junk never reaches the wire.
+    ///
+    /// Path: accept any Unicode letter/digit (so CJK paths like `~/项目` work
+    /// — see CLAUDE.md i18n rule) plus `._-/~@+=,()` and ASCII space, then
+    /// reject any `..` segment so an attacker can't escape the project root
+    /// in the rendered breadcrumb / Review window header. `;`, `$`, backtick,
+    /// `&`, `|`, `<`, `>`, `*`, `?`, `[`, `]`, `{`, `}`, `\`, `"`, `'` all
+    /// still reject — that's the metachar set we care about.
+    ///
+    /// Host: ASCII-only allowlist (letters/digits/`.-_`) per RFC 1123. A
+    /// CJK / non-ASCII host means it's not a real DNS name and we'd rather
+    /// fail closed than mis-route the ssh.
     static func parseRemoteTitle(_ title: String) -> (user: String, host: String, path: String)? {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let at = t.firstIndex(of: "@") else { return nil }
@@ -842,13 +853,26 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         guard let colon = rest.firstIndex(of: ":") else { return nil }
         let host = String(rest[..<colon]).trimmingCharacters(in: .whitespaces)
         let path = String(rest[rest.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
-        guard !host.isEmpty,
-              host.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }),
-              !path.isEmpty,
-              path.allSatisfy({ $0.isLetter || $0.isNumber
-                                || $0 == "." || $0 == "-" || $0 == "_"
-                                || $0 == "/" || $0 == "~" })
-        else { return nil }
+        guard !host.isEmpty, !path.isEmpty else { return nil }
+        let hostOk = host.unicodeScalars.allSatisfy { s in
+            let v = s.value
+            return (v >= 0x30 && v <= 0x39)            // 0-9
+                || (v >= 0x41 && v <= 0x5A)            // A-Z
+                || (v >= 0x61 && v <= 0x7A)            // a-z
+                || v == 0x2E || v == 0x2D || v == 0x5F // . - _
+        }
+        guard hostOk else { return nil }
+        let pathAllowed: Set<Character> = [".", "-", "_", "/", "~", "@", "+", "=", ",", "(", ")", " "]
+        let pathOk = path.allSatisfy { c in
+            c.isLetter || c.isNumber || pathAllowed.contains(c)
+        }
+        guard pathOk else { return nil }
+        // Reject `..` traversal anywhere in the path. The path is just a UI
+        // breadcrumb / Review header, but a `..`-laced title would still let
+        // a malicious remote misrepresent where Review is operating.
+        for seg in path.split(separator: "/", omittingEmptySubsequences: false) {
+            if seg == ".." { return nil }
+        }
         return (user, host, path)
     }
 
@@ -1501,22 +1525,14 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// Shared by drag-drop and ⌘V/right-click paste of Finder files.
     @discardableResult
     private func injectFileURLs(_ urls: [URL], into s: ghostty_surface_t) -> Bool {
-        let joined = urls.map { shellQuote($0.path) }.joined(separator: " ")
-        // shellQuote keeps quoting intact, but a filename can legally embed
+        let joined = urls.map { posixShellQuoted($0.path) }.joined(separator: " ")
+        // Quoting preserves filenames intact, but a filename can legally embed
         // a newline — gate on the actual injected string, same as paste.
         guard confirmUnsafeTextInjection(joined) else { return false }
         joined.withCString { ptr in
             ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
         }
         return true
-    }
-
-    /// Single-quote a path, escaping embedded single quotes as `'\''`.
-    /// Matches what `printf %q` would do for POSIX shells (good enough for
-    /// zsh/bash; fish users can adjust their shell anyway).
-    private func shellQuote(_ path: String) -> String {
-        if !path.contains("'") { return "'\(path)'" }
-        return "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
     // MARK: - ⌘-click to open files
@@ -1845,7 +1861,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         let pb = NSPasteboard.general
         guard let pngData = imagePNGData(from: pb) else { return false }
         guard let path = persistPastedImage(pngData) else { return false }
-        let quoted = shellQuote(path)
+        let quoted = posixShellQuoted(path)
         quoted.withCString { ptr in
             ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
         }

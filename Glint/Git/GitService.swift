@@ -100,20 +100,37 @@ struct LocalGitRunner: GitRunner {
     }
 }
 
+/// POSIX shell single-quote: every byte passes through literally; an embedded
+/// `'` is terminated, backslash-escaped, and reopened so the result is exactly
+/// one re-parse-safe shell word. Use for any value that will be re-parsed by a
+/// shell (a local `sh -c` command line, the remote-command portion of an ssh
+/// invocation, anything written into a script). One canonical implementation
+/// so all the call sites stay byte-equivalent.
+func posixShellQuoted(_ s: String) -> String {
+    if !s.contains("'") { return "'\(s)'" }
+    return "'\(s.replacingOccurrences(of: "'", with: "'\\''"))'"
+}
+
 /// Runs git over SSH against a captured destination, so `GitService`'s
-/// high-level methods work unchanged against a REMOTE repo — `cwd` is the
-/// remote path (a leading `~` is expanded against the remote `$HOME`). Reuses
-/// a per-target SSH `ControlMaster` so the status poll and the Review window
-/// don't each re-authenticate, and forces `BatchMode` so a missing key never
-/// hangs a background call (a host needing an interactive password degrades to
-/// empty results, same shape as a local non-repo). The remote title/host data
-/// that produces `target`/`cwd` is untrusted; this runner only ever runs
-/// read-only `git`, so the worst a spoofed title can do is query a repo on a
-/// host the user already SSHed to.
+/// high-level methods work unchanged against a REMOTE repo. `cwd` is the
+/// remote path; the runner POSIX-quotes it (and every `gitArg`) before
+/// handing it to ssh so the remote login shell — which re-parses the entire
+/// remote-command portion ssh sends it — sees one literal token per element.
+/// A leading `~` in `cwd` is preserved UNQUOTED so the remote shell performs
+/// tilde expansion against the user's actual `$HOME` (no local round-trip to
+/// resolve `$HOME` first; no cache to poison).
+///
+/// Reuses a per-target SSH `ControlMaster` so the status poll and the Review
+/// window don't each re-authenticate, and forces `BatchMode` so a missing key
+/// never hangs a background call (a host needing an interactive password
+/// degrades to empty results, same shape as a local non-repo). The remote
+/// title/host data that produces `target`/`cwd` is untrusted (anyone who can
+/// set the remote `PS1`/`PROMPT_COMMAND` controls it); this runner only ever
+/// runs read-only `git`, so the worst a spoofed title can do is query a repo
+/// on a host the user already SSHed to.
 struct SSHGitRunner: GitRunner {
     let target: String
     let port: Int?
-
     /// Per-target ControlMaster socket so repeated calls share one authed
     /// connection; `ControlPersist=10m` keeps it alive briefly after the last
     /// call so a Review open right after a status poll reuses it.
@@ -124,34 +141,39 @@ struct SSHGitRunner: GitRunner {
     /// the second ssh would tunnel through the first's connection — i.e. land
     /// on the wrong host. Hashing is also short enough to fit comfortably under
     /// macOS's 104-byte unix socket path limit even for long ssh aliases.
-    private var controlPath: String {
+    let controlPath: String
+
+    init(target: String, port: Int?) {
+        self.target = target
+        self.port = port
         var slug = target
         if let port { slug += ":\(port)" }
         let digest = SHA256.hash(data: Data(slug.utf8))
         let safe = digest.prefix(8).map { String(format: "%02x", $0) }.joined()
-        return FileManager.default.temporaryDirectory
+        self.controlPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("glint-ssh-\(safe).sock").path
     }
 
     func run(_ args: [String], cwd: String?) async throws -> GitResult {
-        let remoteCwd = try await resolveRemoteCwd(cwd)
         let argv = Self.commandArgs(target: target, port: port,
-                                    controlPath: controlPath, cwd: remoteCwd, gitArgs: args)
+                                    controlPath: controlPath, cwd: cwd, gitArgs: args)
         return try await Self.spawn(argv)
     }
 
     /// Pure: the full `ssh … git -C <cwd> <args>` argv. Split out so the wire
     /// format is unit-testable without spawning ssh.
     ///
-    /// **`cwd` is single-quoted on purpose.** `Process` passes our argv to
-    /// `/usr/bin/ssh` without a shell, but ssh joins the remote-command portion
-    /// with spaces and hands it to the REMOTE LOGIN SHELL, which re-parses the
-    /// whole thing — so an unquoted `;` / `$(…)` / backtick / space in `cwd`
-    /// would execute arbitrary remote code in the user's authenticated session.
-    /// `cwd` is sourced from the remote shell's terminal title (attacker-
-    /// controllable by anyone who can set `PS1`/`PROMPT_COMMAND` on the remote),
-    /// so this matters. POSIX single-quoting passes every byte through
-    /// literally; embedded `'` is closed-escaped-reopened (`'\''`).
+    /// **Every element after `target` is POSIX-quoted on purpose.** `Process`
+    /// passes our argv to `/usr/bin/ssh` without a shell, but ssh joins the
+    /// remote-command portion with spaces and hands the resulting string to
+    /// the REMOTE LOGIN SHELL, which re-parses it. So any unquoted `;` /
+    /// `$(…)` / backtick / space in any element (cwd OR gitArg) would execute
+    /// arbitrary remote code in the user's authenticated session. Callers may
+    /// thread remote-derived data through both, so both layers must quote.
+    ///
+    /// `cwd` is handled specially: a leading `~` (or `~user`) is kept unquoted
+    /// so the remote shell can perform tilde expansion, and the rest of the
+    /// path is single-quoted — see `quoteRemoteCwd`.
     static func commandArgs(target: String, port: Int?, controlPath: String,
                             cwd: String?, gitArgs: [String]) -> [String] {
         var a = ["-o", "BatchMode=yes",
@@ -160,52 +182,40 @@ struct SSHGitRunner: GitRunner {
         if let port { a += ["-p", "\(port)"] }
         a.append(target)
         a.append("git")
-        if let cwd, !cwd.isEmpty { a += ["-C", shellQuote(cwd)] }
-        a += gitArgs
+        if let cwd, !cwd.isEmpty { a += ["-C", quoteRemoteCwd(cwd)] }
+        a += gitArgs.map(posixShellQuoted)
         return a
     }
 
-    /// POSIX shell single-quote. Every byte passes literally; embedded `'` is
-    /// terminated, backslash-escaped, and reopened so the result is one
-    /// re-parse-safe shell word. Use for any value derived from untrusted
-    /// remote-shell data that ssh will hand to the remote login shell.
-    static func shellQuote(_ s: String) -> String {
-        return "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
-
-    /// Expand a leading `~` against the remote `$HOME` (cached per target).
-    /// nil/empty cwd → nil (git runs in the remote login dir). Absolute paths
-    /// pass straight through.
-    private func resolveRemoteCwd(_ cwd: String?) async throws -> String? {
-        guard let cwd, !cwd.isEmpty else { return nil }
-        guard cwd.hasPrefix("~") else { return cwd }
-        let home = try await Self.remoteHome(target: target, port: port, controlPath: controlPath)
-        guard !home.isEmpty else { return cwd }   // couldn't resolve → best-effort passthrough
-        var rest = cwd
-        let leading: Set<Character> = ["~", "/"]
-        while let first = rest.first, leading.contains(first) { rest.removeFirst() }
-        return rest.isEmpty ? home : "\(home)/\(rest)"
-    }
-
-    // MARK: remote $HOME cache (serial-queue guarded: NSLock is unavailable in
-    // async contexts under Swift 6, and a blocking `.sync` read/write here is
-    // fine — the cache is tiny and the contention is one Review open at a time).
-    private static var homeCache: [String: String] = [:]
-    private static let homeQueue = DispatchQueue(label: "app.glint.git.sshhome")
-
-    private static func remoteHome(target: String, port: Int?, controlPath: String) async throws -> String {
-        let key = "\(target)#\(port.map(String.init) ?? "")"
-        if let cached = Self.homeQueue.sync(execute: { Self.homeCache[key] }) { return cached }
-        var a = ["-o", "BatchMode=yes", "-o", "ControlMaster=auto",
-                 "-o", "ControlPersist=10m", "-o", "ControlPath=\(controlPath)"]
-        if let port { a += ["-p", "\(port)"] }
-        // ssh runs this through the remote login shell, so `$HOME` expands
-        // remotely; printf gives the value with no trailing newline.
-        a += [target, "printf", "%s", "$HOME"]
-        let r = try await Self.spawn(a)
-        let home = r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        Self.homeQueue.sync { Self.homeCache[key] = home }
-        return home
+    /// Quote `cwd` for inclusion as `git -C <quoted>` in the remote command.
+    /// Single-quotes everything EXCEPT a leading `~` (or `~user`) segment,
+    /// which is left unquoted so the remote login shell performs tilde
+    /// expansion. Bash's default `\w` PS1 prints `~/proj` for the user's home
+    /// — keeping that working is the whole point of the carve-out.
+    ///
+    /// Examples (assuming remote `$HOME=/home/deploy`):
+    ///   `~/proj`         → `~'/proj'`          → `/home/deploy/proj`
+    ///   `~admin/proj`    → `~admin'/proj'`     → admin's `$HOME` + `/proj`
+    ///   `~`              → `~`                  → `/home/deploy`
+    ///   `/abs/path`      → `'/abs/path'`       → literal
+    ///   `/srv/has space` → `'/srv/has space'`  → literal (space safe in quotes)
+    ///
+    /// The tilde-prefix carve-out is only safe when it has no shell metachars
+    /// itself; the title path allowlist guarantees this, but we re-validate
+    /// here so the safety doesn't rely on a caller in a different file.
+    static func quoteRemoteCwd(_ cwd: String) -> String {
+        guard cwd.hasPrefix("~") else { return posixShellQuoted(cwd) }
+        let slash = cwd.firstIndex(of: "/")
+        let tildePart = String(cwd[..<(slash ?? cwd.endIndex)])
+        let safe = tildePart.allSatisfy {
+            $0 == "~" || $0 == "_" || $0 == "-"
+                || ($0 >= "a" && $0 <= "z")
+                || ($0 >= "A" && $0 <= "Z")
+                || ($0 >= "0" && $0 <= "9")
+        }
+        guard safe else { return posixShellQuoted(cwd) }
+        guard let slash else { return tildePart }
+        return tildePart + posixShellQuoted(String(cwd[slash...]))
     }
 
     /// Spawn `/usr/bin/ssh <args>` and capture stdout/stderr — mirrors
