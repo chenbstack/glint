@@ -1330,7 +1330,7 @@ private struct AgentsPane: View {
             }
             SettingsDivider()
             SettingsRow("Show macOS notification for agent attention",
-                        subtitle: "Pop a banner in Notification Center when a background agent needs approval, finishes, or fails. Silent — the chime stays the audio cue.") {
+                        subtitle: "Only fires while Glint is in the background. Pops a banner in Notification Center when an agent needs approval, finishes, or fails. Silent — the chime stays the audio cue.") {
                 Toggle("", isOn: $store.systemNotificationOnAgentAttention)
                     .toggleStyle(.switch).labelsHidden()
             }
