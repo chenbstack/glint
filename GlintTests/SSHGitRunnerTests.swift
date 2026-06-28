@@ -134,4 +134,17 @@ final class SSHGitRunnerTests: XCTestCase {
         let gitIndex = a.firstIndex(of: "git")!
         XCTAssertEqual(a[gitIndex + 2], "'~bad;rm/proj'")
     }
+
+    /// Dotted corp usernames (LDAP/AD `admin.user`) are the most common
+    /// `~user`-form Review hits in the wild. Must stay UNQUOTED so the remote
+    /// shell tilde-expands them; previously `.` wasn't in the carve-out
+    /// allowlist, so the path silently fell through to literal quoting and
+    /// every dotted-user Review showed "Not a git repository".
+    func testTildeDottedUsernamePreserved() {
+        let a = SSHGitRunner.commandArgs(target: "h", port: nil,
+                                         controlPath: "/x",
+                                         cwd: "~admin.user/proj", gitArgs: [])
+        let gitIndex = a.firstIndex(of: "git")!
+        XCTAssertEqual(a[gitIndex + 2], "~admin.user'/proj'")
+    }
 }

@@ -130,4 +130,21 @@ final class RemoteTitleParserTests: XCTestCase {
     func testHostRejectsNonAscii() {
         XCTAssertNil(GhosttySurfaceView.parseRemoteTitle("u@主机:/x"))
     }
+
+    /// IPv6 literal hosts come wrapped in `[…]` so the inner `:` separators
+    /// don't get confused with the host/path delimiter. The parser consumes
+    /// up to the matching `]` first, otherwise it splits at the first inner
+    /// `:` and the host comes out as `[` (which fails the allowlist).
+    func testIPv6BracketedHost() {
+        let r = GhosttySurfaceView.parseRemoteTitle("deploy@[::1]:/srv/app")
+        XCTAssertEqual(r?.user, "deploy")
+        XCTAssertEqual(r?.host, "::1")
+        XCTAssertEqual(r?.path, "/srv/app")
+    }
+
+    func testIPv6FullLiteral() {
+        let r = GhosttySurfaceView.parseRemoteTitle("ci@[fe80::1ff:fe23:4567:890a]:~/build")
+        XCTAssertEqual(r?.host, "fe80::1ff:fe23:4567:890a")
+        XCTAssertEqual(r?.path, "~/build")
+    }
 }

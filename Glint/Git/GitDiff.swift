@@ -39,10 +39,25 @@ extension GitService {
                 nameStatus: (try? await names)?.stdout ?? "",
                 numstat: (try? await nums)?.stdout ?? "")
             if let u = try? await untrk, u.ok {
-                for path in u.stdout.split(separator: "\0", omittingEmptySubsequences: true) {
-                    let p = String(path)
+                let paths = u.stdout.split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
+                // Count adds per untracked file via the runner so the right
+                // file is read — under SSH Review, `repo` is a REMOTE path so
+                // a local FileManager read would either return 0 or, worse,
+                // read a coincidentally-same-path LOCAL file. `git diff
+                // --no-index --numstat /dev/null <path>` runs in the runner's
+                // cwd (local or remote) and prints "<adds>\t<dels>\t<path>"
+                // for text, "-\t-\t<path>" for binary (which becomes 0).
+                let counts = await withTaskGroup(of: (String, Int).self) { group in
+                    for p in paths {
+                        group.addTask { (p, await self.untrackedAddCount(repo: repo, relPath: p)) }
+                    }
+                    var dict: [String: Int] = [:]
+                    for await (p, n) in group { dict[p] = n }
+                    return dict
+                }
+                for p in paths {
                     map[p] = GitFileChange(path: p, kind: .untracked,
-                                           additions: Self.lineCount(repo: repo, relPath: p),
+                                           additions: counts[p] ?? 0,
                                            deletions: 0, isBinary: false)
                 }
             }
@@ -124,15 +139,17 @@ extension GitService {
         return out
     }
 
-    /// Best-effort newline count of an untracked file. Skips reading anything
-    /// over 512 KB or non-UTF8 (binary) so a huge/binary untracked file can't
-    /// stall or balloon the file list.
-    private static func lineCount(repo: String, relPath: String) -> Int {
-        let full = (repo as NSString).appendingPathComponent(relPath)
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: full),
-              let size = attrs[.size] as? Int, size <= 512 * 1024,
-              let text = try? String(contentsOfFile: full, encoding: .utf8) else { return 0 }
-        if text.isEmpty { return 0 }
-        return text.reduce(0) { $1 == "\n" ? $0 + 1 : $0 } + (text.hasSuffix("\n") ? 0 : 1)
+    /// `+N` line count for an untracked file in the runner's repo (local or
+    /// remote). Uses `git diff --no-index --numstat /dev/null <path>` so the
+    /// SSH runner counts the REMOTE file rather than reading a same-pathed
+    /// LOCAL file via FileManager. Returns 0 for binary (numstat prints `-`)
+    /// and on any error — the Review file list degrades to a missing badge,
+    /// never to a wrong one.
+    private func untrackedAddCount(repo: String, relPath: String) async -> Int {
+        guard let r = try? await git(["diff", "--no-index", "--numstat", "/dev/null", relPath],
+                                     cwd: repo, allowFailure: true) else { return 0 }
+        let parts = r.stdout.split(separator: "\n").first?.split(separator: "\t", maxSplits: 2)
+        if let parts, parts.count == 3, let n = Int(parts[0]) { return n }
+        return 0
     }
 }

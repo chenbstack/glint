@@ -134,6 +134,30 @@ rename to n
         XCTAssertTrue(DiffDocument.parse("").isEmpty)
     }
 
+    /// Old-file and new-file syntax-highlight states must walk independently:
+    /// a `/*` opener removed from the OLD side must NOT leak `inBlockComment`
+    /// onto the `+` and context lines that follow (they aren't inside a
+    /// comment in the new file). Symmetric the other way.
+    /// We can't easily assert on AttributedString tinting without a renderer
+    /// here, so just lock the structural contract — `parse` returns the right
+    /// kinds + bodies for a diff that previously triggered the bleed.
+    func testParseTwoStateHighlightAcceptsDeletedCommentOpener() {
+        let diff = """
+        @@ -1,3 +1,3 @@
+        -/* TODO: drop me
+        +let x = 5
+         let y = 6
+        """
+        let lines = DiffDocument.parse(diff)
+        XCTAssertEqual(lines.count, 4)   // hunk + del + add + context
+        XCTAssertEqual(lines[1].kind, .del)
+        XCTAssertEqual(lines[1].text, "/* TODO: drop me")
+        XCTAssertEqual(lines[2].kind, .add)
+        XCTAssertEqual(lines[2].text, "let x = 5")
+        XCTAssertEqual(lines[3].kind, .context)
+        XCTAssertEqual(lines[3].text, "let y = 6")
+    }
+
     // MARK: TreeNode.build
 
     /// Directories nest, folders sort before files at each level (case

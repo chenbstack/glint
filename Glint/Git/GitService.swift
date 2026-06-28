@@ -203,12 +203,21 @@ struct SSHGitRunner: GitRunner {
     /// The tilde-prefix carve-out is only safe when it has no shell metachars
     /// itself; the title path allowlist guarantees this, but we re-validate
     /// here so the safety doesn't rely on a caller in a different file.
+    /// Allowed in the `~user` part: ASCII alnum + `_`/`-`/`.` — covers the
+    /// common corp LDAP/AD `admin.user` form that bash's `getpwnam` resolves
+    /// fine. Other chars the path allowlist accepts (space, `+`, `,`, `()`,
+    /// `=`, `@`, CJK letters, …) are valid POSIX usernames in theory but
+    /// either bash won't tilde-expand them or they cross into metachar
+    /// territory once the carve-out is unquoted, so we keep the conservative
+    /// fallback to fully single-quoting the whole path. Net effect for those:
+    /// no tilde expansion — but no Review breakage either, since the path
+    /// allowlist was loosened to UNQUOTED rendering, not "must be unquoted."
     static func quoteRemoteCwd(_ cwd: String) -> String {
         guard cwd.hasPrefix("~") else { return posixShellQuoted(cwd) }
         let slash = cwd.firstIndex(of: "/")
         let tildePart = String(cwd[..<(slash ?? cwd.endIndex)])
         let safe = tildePart.allSatisfy {
-            $0 == "~" || $0 == "_" || $0 == "-"
+            $0 == "~" || $0 == "_" || $0 == "-" || $0 == "."
                 || ($0 >= "a" && $0 <= "z")
                 || ($0 >= "A" && $0 <= "Z")
                 || ($0 >= "0" && $0 <= "9")

@@ -830,11 +830,18 @@ struct DiffDocument: Sendable {
         var out: [DiffLine] = []
         var oldLine = 0, newLine = 0
         var id = 0
-        // Syntax state carried across lines within a hunk so a block comment /
-        // triple string opened on an earlier line keeps tinting its body. Reset
-        // at each @@ header. ponytail: single stream — a deleted line inside an
-        // old-file block comment borrows the new-file state and may mis-tint.
-        var hlState = SyntaxHighlighter.State()
+        // TWO highlight states walk in parallel — one for the old-file timeline
+        // (`-` lines + context), one for the new-file timeline (`+` lines +
+        // context). A single shared state lets a multi-line construct opened
+        // on a `-` line (e.g. removing `/* TODO`) tint the following `+` /
+        // context lines as comment continuation even though those lines aren't
+        // inside any comment in the new file — visually hiding real code under
+        // gray. Mirror: a `+` opener bleeding into following `-` lines.
+        // Context lines advance BOTH states (they exist in both versions) and
+        // render through the NEW state, which is what the file looks like
+        // post-diff and what the user is reviewing. Reset both at each @@.
+        var oldState = SyntaxHighlighter.State()
+        var newState = SyntaxHighlighter.State()
         // Normalize CRLF / lone CR to LF before splitting. Swift treats "\r\n" as
         // a single Character (extended grapheme cluster), so split(separator: "\n")
         // never matches it and silently merges every CRLF-terminated line into one
@@ -850,7 +857,8 @@ struct DiffDocument: Sendable {
             // the diff's final newline; real blank context lines are " ".
             if line.isEmpty { continue }
             if line.hasPrefix("@@") {
-                hlState = SyntaxHighlighter.State()   // new hunk → tint from a clean slate
+                oldState = SyntaxHighlighter.State()   // new hunk → tint from a clean slate
+                newState = SyntaxHighlighter.State()
                 (oldLine, newLine) = parseHunk(line)
                 out.append(DiffLine(id: id, kind: .hunk, text: line,
                                     attributed: AttributedString(line), oldNum: nil, newNum: nil)); id += 1
@@ -868,15 +876,21 @@ struct DiffDocument: Sendable {
             // gutter clutter is gone — add/delete is shown via tint, not text.
             let body = String(line.dropFirst())
             if line.hasPrefix("+") {
-                let attr = SyntaxHighlighter.highlight(body, language: language, state: &hlState)
+                let attr = SyntaxHighlighter.highlight(body, language: language, state: &newState)
                 out.append(DiffLine(id: id, kind: .add, text: body, attributed: attr, oldNum: nil, newNum: newLine)); id += 1
                 newLine += 1
             } else if line.hasPrefix("-") {
-                let attr = SyntaxHighlighter.highlight(body, language: language, state: &hlState)
+                let attr = SyntaxHighlighter.highlight(body, language: language, state: &oldState)
                 out.append(DiffLine(id: id, kind: .del, text: body, attributed: attr, oldNum: oldLine, newNum: nil)); id += 1
                 oldLine += 1
             } else if line.hasPrefix(" ") {
-                let attr = SyntaxHighlighter.highlight(body, language: language, state: &hlState)
+                // Context exists in both versions: advance oldState too so a
+                // subsequent `-` line sees the right state, but render through
+                // newState (the post-diff view).
+                var oldAdvance = oldState
+                _ = SyntaxHighlighter.highlight(body, language: language, state: &oldAdvance)
+                oldState = oldAdvance
+                let attr = SyntaxHighlighter.highlight(body, language: language, state: &newState)
                 out.append(DiffLine(id: id, kind: .context, text: body, attributed: attr, oldNum: oldLine, newNum: newLine)); id += 1
                 oldLine += 1; newLine += 1
             }
@@ -1327,11 +1341,17 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
 
         let w = window ?? makeWindow()
         w.title = title
-        // Sink fires synchronously with the current value on subscribe (@Published
-        // behavior), so this also seeds the open-time appearance — no need to set
-        // it separately. The same sink handles every subsequent theme switch.
-        themeCancellable = store.$themeRevision.sink { [weak self] _ in
-            self?.window?.appearance = NSAppearance(named: Theme.current.isDark ? .darkAqua : .aqua)
+        // The sink fires synchronously with the current value on subscribe
+        // (@Published behavior) — but only on `w`, the local NSWindow we just
+        // created. Capture `w` directly in the closure so the synchronous
+        // first fire applies the open-time appearance BEFORE `self.window`
+        // has been assigned below. Previously this closed over `self?.window`
+        // which was still nil on the first present() of the session, so the
+        // initial open used AppKit's system appearance instead of the user's
+        // Theme pick. Subsequent opens reused the cached `window` ivar and
+        // looked correct, masking the bug.
+        themeCancellable = store.$themeRevision.sink { [weak w] _ in
+            w?.appearance = NSAppearance(named: Theme.current.isDark ? .darkAqua : .aqua)
         }
         // Zero the hosting view's safe-area at the AppKit layer instead of with
         // SwiftUI's `.ignoresSafeArea()`. The modifier makes SwiftUI re-coordinate

@@ -412,6 +412,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // process_output renders bytes as child output (history), NOT as input —
         // it must never go through text_input or the shell would execute it.
         payload.withCString { ghostty_surface_process_output(s, $0, UInt(strlen($0))) }
+        markScrollbackDirty()
     }
 
     /// Snapshot the pane's current scrollback to disk as colored text (ANSI SGR).
@@ -426,6 +427,16 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// queue, which also drops the frame early when the grid hasn't changed.
     func flushScrollbackToDisk() {
         guard let id = scrollbackID, let s = surface else { return }
+        // Per-pane dirty bit. Without it the 5s flush serializes every live
+        // pane's full grid (viewport + 3000 scrollback rows × per-cell color/
+        // attrs) on MainActor under the renderer-state lock every tick, even
+        // for occluded background tabs that haven't seen activity in minutes
+        // — adding linear-in-tabs main-thread cost to every flush. We can't
+        // catch arbitrary process output (no cheap "grid changed" signal in
+        // the C API), but covering user input + our own writes + foreground-
+        // pid changes catches the common idle case (a finished Claude/Codex
+        // turn) and lets idle panes settle to zero cost.
+        guard scrollbackNeedsFlush else { return }
         let json = ghostty_surface_render_grid_json(s, "", 0, 0, UInt(maxScrollbackLines))
         defer { ghostty_string_free(json) }
         guard let ptr = json.ptr, json.len > 0 else { return }
@@ -433,7 +444,36 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         ScrollbackArchive.writeRendered(id: id, gridJSON: data, maxLines: maxScrollbackLines,
                                         priorHistory: restoredHistory,
                                         restoreMarker: Self.restoreMarkerText)
+        scrollbackNeedsFlush = false
+        scrollbackLastFlushedPid = (ghostty_surface_foreground_pid(s) > 0)
+            ? pid_t(ghostty_surface_foreground_pid(s)) : 0
     }
+
+    /// Set whenever something touches the grid we know about: user input
+    /// (text_input), our own writes (process_output, scrollback restore), or
+    /// a foreground-pid flip noticed by the cwd poller. Starts true so the
+    /// FIRST flush of a session always runs (captures the restored history).
+    /// Cleared at the tail of a successful flush.
+    private var scrollbackNeedsFlush = true
+    private var scrollbackLastFlushedPid: pid_t = 0
+
+    /// Called by the per-store flush loop right before `flushScrollbackToDisk`.
+    /// Marks the pane dirty when its foreground process changed since the last
+    /// successful flush, so a user `cd`ing or a TUI launching shows up even if
+    /// no keystroke was sent in between (cwd polling already notices these
+    /// every tick — we just piggy-back the signal).
+    func noteForegroundPidForScrollback() {
+        guard let s = surface else { return }
+        let pid = pid_t(ghostty_surface_foreground_pid(s))
+        guard pid > 0 else { return }
+        if pid != scrollbackLastFlushedPid { scrollbackNeedsFlush = true }
+    }
+
+    /// Mark the pane's scrollback dirty so the next flush serializes the grid.
+    /// Called from every place we write to the terminal (user input, paste,
+    /// drop, scrollback restore, programmatic injection).
+    @inline(__always)
+    fileprivate func markScrollbackDirty() { scrollbackNeedsFlush = true }
 
     /// The dim epilogue echoed after restored history. Shared by `restoreScrollback`
     /// (writes it) and `flushScrollbackToDisk` (locates it in the grid to split
@@ -849,17 +889,40 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         guard let at = t.firstIndex(of: "@") else { return nil }
         let user = String(t[..<at])
         guard !user.isEmpty, !user.contains(" ") else { return nil }
-        let rest = t[t.index(after: at)...]
-        guard let colon = rest.firstIndex(of: ":") else { return nil }
-        let host = String(rest[..<colon]).trimmingCharacters(in: .whitespaces)
-        let path = String(rest[rest.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+        let rest = String(t[t.index(after: at)...])
+        // Host/path split. IPv6 literals can include colons inside `[...]`
+        // (e.g. `user@[::1]:/path`), so when the host starts with `[` we
+        // consume up to its matching `]` first and look for the `:` after it.
+        // Splitting on the first `:` would otherwise misread host as `[` and
+        // fail allowlist immediately.
+        let host: String
+        let path: String
+        if rest.hasPrefix("["),
+           let close = rest.firstIndex(of: "]"),
+           rest.index(after: close) < rest.endIndex,
+           rest[rest.index(after: close)] == ":" {
+            host = String(rest[rest.index(after: rest.startIndex)..<close])
+                .trimmingCharacters(in: .whitespaces)
+            path = String(rest[rest.index(close, offsetBy: 2)...])
+                .trimmingCharacters(in: .whitespaces)
+        } else {
+            guard let colon = rest.firstIndex(of: ":") else { return nil }
+            host = String(rest[..<colon]).trimmingCharacters(in: .whitespaces)
+            path = String(rest[rest.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+        }
         guard !host.isEmpty, !path.isEmpty else { return nil }
+        // Host allowlist: ASCII alnum + `.`/`-`/`_` (RFC 1123) plus `:` so an
+        // IPv6 literal we just unbracketed (`::1`, `fe80::1`) passes. We've
+        // already required brackets in the title, so a bare colon here can
+        // only come from the IPv6 path above — a plain-DNS host can't contain
+        // one. Non-ASCII hosts still fail closed (not a real DNS name).
         let hostOk = host.unicodeScalars.allSatisfy { s in
             let v = s.value
             return (v >= 0x30 && v <= 0x39)            // 0-9
                 || (v >= 0x41 && v <= 0x5A)            // A-Z
                 || (v >= 0x61 && v <= 0x7A)            // a-z
                 || v == 0x2E || v == 0x2D || v == 0x5F // . - _
+                || v == 0x3A                            // :  (IPv6)
         }
         guard hostOk else { return nil }
         let pathAllowed: Set<Character> = [".", "-", "_", "/", "~", "@", "+", "=", ",", "(", ")", " "]
@@ -905,14 +968,32 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         var i = 1   // skip argv[0] (the ssh binary path)
         while i < argv.count {
             let a = argv[i]
+            // ssh short flags that consume the next argv slot. Without this set,
+            // every option-arg (-i key, -l user, -o k=v, -L tunnel, …) advanced
+            // the index by 1 and its VALUE was then taken as the destination —
+            // making `ssh -i ~/.ssh/id_rsa user@server` silently fail to
+            // capture, after which `openReview` would fall through to the
+            // LOCAL repo with no diagnostic. Lifted from `man ssh(1)`'s short-
+            // flag synopsis; bundled-arg forms like `-llogin` are treated as
+            // single tokens by ssh itself, so a `hasPrefix("-")` skip is still
+            // correct for those.
             if a == "-p", i + 1 < argv.count { port = Int(argv[i + 1]); i += 2; continue }
-            if a.hasPrefix("-") { i += 1; continue }   // ignore -i/-l/-v/… best-effort
+            if Self.sshFlagsTakingArg.contains(a), i + 1 < argv.count { i += 2; continue }
+            if a.hasPrefix("-") { i += 1; continue }
             if destination == nil { destination = a } else { sawRemoteCommand = true }
             i += 1
         }
         guard let destination, !sawRemoteCommand else { return nil }
         return (destination, port)
     }
+
+    /// ssh(1) short flags that take a separate argument. Used to skip the
+    /// value slot when parsing the foreground ssh argv so the destination
+    /// isn't misidentified as the flag's argument.
+    private static let sshFlagsTakingArg: Set<String> = [
+        "-B", "-b", "-c", "-D", "-E", "-e", "-F", "-I", "-i", "-J",
+        "-L", "-l", "-m", "-O", "-o", "-Q", "-R", "-S", "-W", "-w"
+    ]
 
     /// Everything the SSH review runner needs, or nil when the focused pane
     /// isn't a capturable SSH session with a known remote path.
@@ -1088,6 +1169,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
                         ghostty_surface_text_input(s, cptr, 1)
                     }
                 }
+                markScrollbackDirty()
             } else {
                 pasteClipboardText(into: s)
             }
@@ -1532,6 +1614,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         joined.withCString { ptr in
             ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
         }
+        markScrollbackDirty()
         return true
     }
 
@@ -1790,6 +1873,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
                     ghostty_surface_text_input(s, cptr, UInt(bp.count))
                 }
             }
+            markScrollbackDirty()
         }
     }
 
@@ -1865,6 +1949,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         quoted.withCString { ptr in
             ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
         }
+        markScrollbackDirty()
         return true
     }
 
@@ -1947,6 +2032,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
                     ghostty_surface_text_input(s, cptr, 1)
                 }
             }
+            markScrollbackDirty()
         } else {
             pasteClipboardText(into: s)
         }
@@ -2010,6 +2096,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             // which ghostty's renderer shows as a white-background highlight.
             ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
         }
+        markScrollbackDirty()
         // Explicitly clear any residual preedit (commit doesn't always wipe
         // it, leaving underlined ghost text trailing the real input).
         ghostty_surface_preedit(s, nil, 0)

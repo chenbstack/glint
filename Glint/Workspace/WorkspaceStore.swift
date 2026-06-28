@@ -1342,10 +1342,20 @@ final class WorkspaceStore: ObservableObject {
         self.sidebarCollapsed = loaded.sidebarCollapsed
         Self.current = self
 
-        // Debounced autosave: any @Published change → save 0.5s later.
-        saveCancellable = objectWillChange
-            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
-            .sink { [weak self] _ in self?.persist() }
+        // Debounced autosave: only persistable @Published fields trigger a save.
+        // Wiring this to bare `objectWillChange` re-encodes on every transient
+        // hook event (paneAgentState/paneProcesses/UI-only flags) — none of
+        // which are part of PersistedState — so the disk write does nothing but
+        // burn CPU and IO during active agent turns. Subscribe to the actual
+        // persisted publishers instead, drop the synthetic initial value, and
+        // map each one to Void so they merge into a single sink.
+        saveCancellable = Publishers.MergeMany(
+            $workspaces.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $selectedWorkspaceID.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $sidebarCollapsed.dropFirst().map { _ in () }.eraseToAnyPublisher()
+        )
+        .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
+        .sink { [weak self] _ in self?.persist() }
 
         // Sweep live surface cwds every second so a crash/quit still leaves
         // recent dirs persisted. The closure captures self weakly so the
@@ -1567,7 +1577,15 @@ final class WorkspaceStore: ObservableObject {
     /// feature is off. Each view only writes when it has new bytes.
     func flushScrollback() {
         guard restoreTerminalScrollback else { return }
-        for view in surfaceViews.values { view.flushScrollbackToDisk() }
+        for view in surfaceViews.values {
+            // Mark dirty when the pane's foreground pid changed since the last
+            // flush — catches the "user `cd`'d / launched a TUI / agent
+            // exited" case where no keystroke would have flipped the bit but
+            // the grid clearly evolved. Cheap (a single sysctl read; the cwd
+            // sweep just did the same one) and idempotent.
+            view.noteForegroundPidForScrollback()
+            view.flushScrollbackToDisk()
+        }
     }
 
     func captureCwdsFromLiveSurfaces() {
@@ -1605,27 +1623,39 @@ final class WorkspaceStore: ObservableObject {
                     // Track CURRENT claude/codex/opencode foreground so the
                     // next launch can optionally `--continue` / `resume --last`
                     // (gated by the per-agent setting). Cleared the moment the
-                    // foreground is a non-agent shell/tool, so we don't auto-
-                    // resume on a pane the user explicitly exited from. A *nil*
-                    // foreground (no live surface / transient empty pid) is
-                    // unknown, not an exit — leave the hint alone so a momentary
-                    // read gap doesn't drop a still-live session's resume hint.
+                    // foreground is a benign shell — i.e. the user actually
+                    // exited the agent — NOT when a tool subprocess (vim, git,
+                    // rg, npm, …) briefly fronts the foreground pid mid-turn.
+                    // Without this guard, a `Bash(vim …)` from inside a live
+                    // Claude/Codex turn would wipe lastAgent + sessionIds, and
+                    // a quit during the vim window would persist an empty map
+                    // → restart loses the #45 multi-pane resume entirely. A
+                    // *nil* foreground (no live surface / transient empty pid)
+                    // is unknown, not an exit — leave the hint alone.
                     let agentKind = Self.agentKind(forProcessName: name)
                     let agentToken = agentKind?.rawValue
-                    if workspaces[i].panes[paneID]?.lastAgent != agentToken {
-                        workspaces[i].panes[paneID]?.lastAgent = agentToken
+                    let foregroundIsExit = agentKind == nil && Self.isBenignShellProcessName(name)
+                    // Update lastAgent when foreground is a known agent OR the
+                    // pane is genuinely back at a shell. A transient tool
+                    // subprocess leaves lastAgent (and sessionIds below)
+                    // untouched.
+                    if agentKind != nil || foregroundIsExit {
+                        if workspaces[i].panes[paneID]?.lastAgent != agentToken {
+                            workspaces[i].panes[paneID]?.lastAgent = agentToken
+                        }
                     }
                     // A session id is only meaningful while its agent is the
-                    // foreground. Drop any entry whose key isn't the current
-                    // foreground (agent==nil clears them all) so a future
-                    // restart can't try to resume a session the user has
-                    // moved on from; the next hook event for a re-launched
-                    // agent repopulates its own slot. Comparing against
-                    // `agentKind?.rawValue` (not a free-form String) is what
-                    // structurally guarantees the writer here and the reader
-                    // at `surfaceView`'s `pane.sessionIds[kind.rawValue]`
-                    // can't drift on spelling.
-                    if let existing = workspaces[i].panes[paneID]?.sessionIds,
+                    // foreground. Filter to the current foreground (or wipe
+                    // when foreground is a shell, i.e. agent exited) so a
+                    // future restart can't try to resume a session the user
+                    // has moved on from. Comparing against `agentKind?.rawValue`
+                    // (not a free-form String) is what structurally guarantees
+                    // the writer here and the reader at `surfaceView`'s
+                    // `pane.sessionIds[kind.rawValue]` can't drift on spelling.
+                    // SKIPPED when the foreground is a transient tool subproc
+                    // (same reason as lastAgent above).
+                    if (agentKind != nil || foregroundIsExit),
+                       let existing = workspaces[i].panes[paneID]?.sessionIds,
                        !existing.isEmpty {
                         let kept = existing.filter { $0.key == agentToken }
                         if kept.count != existing.count {
@@ -1714,12 +1744,19 @@ final class WorkspaceStore: ObservableObject {
         let foregroundKind = surfaceViews[key]?.foregroundProcessName()
             .flatMap(Self.agentKind(named:))
         let polledKind = paneProcesses[key].flatMap(Self.agentKind(named:))
-        // Fall back to .claude when nothing resolves: the hook wrapper's own
-        // AGENT arg defaults to "claude" when unset (AgentBridge then omits the
-        // empty token), so an unresolvable kind means "a hook fired for a pane
-        // we can't otherwise classify" — better to show an agent than to drop
-        // the event and leave the pane looking like a bare shell.
-        let kind = explicitKind ?? paneAgentState[key]?.kind ?? foregroundKind ?? polledKind ?? .claude
+        // `resolvedKind` is best-guess identification for THIS event; nil when
+        // we genuinely don't know which CLI fired. We still process the event
+        // (status badge, detail text, kind = .claude as a safe display default
+        // — see `kind` below), but a nil resolvedKind MUST NOT be used to key a
+        // sessionId write: stashing a Codex/OpenCode/Devin uuid under "claude"
+        // sticks until the next poll tick (~1s race window) and a quit in that
+        // window persists a misrouted resume map — restart would run
+        // `claude --resume <foreign-uuid>` and fail. Every Glint-installed
+        // reporter sets `agent` already, so this nil-path is normally
+        // unreachable; the guard is defense-in-depth for future agent
+        // integrations whose installer forgets the AGENT arg.
+        let resolvedKind: PaneAgentKind? = explicitKind ?? paneAgentState[key]?.kind ?? foregroundKind ?? polledKind
+        let kind = resolvedKind ?? .claude
 
         // Stash the per-pane session id whenever the hook carries one. The
         // shared reporter extracts it from each CLI's stdin payload via
@@ -1727,12 +1764,14 @@ final class WorkspaceStore: ObservableObject {
         // time AgentBridge has decoded `session_b64` they all land here as
         // `info["session"]`. Without this stash the restart path can only
         // run `--continue`/`--last`, which collapses every same-cwd pane
-        // onto one session (#45).
-        if let sessionId = info["session"] as? String,
+        // onto one session (#45). Skip the write when `resolvedKind` is nil
+        // (see above) so we never cross-contaminate sessionIds.
+        if let resolvedKind,
+           let sessionId = info["session"] as? String,
            Self.isValidSessionId(sessionId),
            let wsIdx = workspaces.firstIndex(where: { $0.id == key.workspace }),
-           workspaces[wsIdx].panes[key.pane]?.sessionIds[kind.rawValue] != sessionId {
-            workspaces[wsIdx].panes[key.pane]?.sessionIds[kind.rawValue] = sessionId
+           workspaces[wsIdx].panes[key.pane]?.sessionIds[resolvedKind.rawValue] != sessionId {
+            workspaces[wsIdx].panes[key.pane]?.sessionIds[resolvedKind.rawValue] = sessionId
         }
 
         // Note: we deliberately do NOT force-write paneProcesses here. The
