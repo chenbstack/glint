@@ -4679,13 +4679,13 @@
         }
       }
     },
-    "Pop a banner in Notification Center when a background agent needs approval, finishes, or fails. Silent — the chime stays the audio cue.": {
+    "Only fires while Glint is in the background. Pops a banner in Notification Center when an agent needs approval, finishes, or fails. Silent — the chime stays the audio cue.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "后台 agent 需要批准、完成或出错时,在通知中心弹出横幅。静默——声音仍由提示音负责。"
+            "value": "仅在 Glint 处于后台时触发。agent 需要批准、完成或出错时在通知中心弹出横幅。静默——声音仍由提示音负责。"
           }
         }
       }
