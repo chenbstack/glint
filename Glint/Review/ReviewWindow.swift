@@ -612,6 +612,11 @@ private struct DiffPaneView: View {
     @ObservedObject var model: ReviewModel
     @AppStorage("glint.review.diffMode") private var modeRaw = DiffMode.unified.rawValue
     @AppStorage("glint.review.diffShowContext") private var showContext = true
+    // Context lines around each change, applied only in Changes Only mode
+    // (showContext == false): 0 = pure changes only, N = N lines around each
+    // change. Render-time over the whole-file load, so +/- is instant with no
+    // git re-fetch. Persisted globally → carries across Review sessions.
+    @AppStorage("glint.review.contextLines") private var contextLines = 0
     private var mode: DiffMode { DiffMode(rawValue: modeRaw) ?? .unified }
 
     var body: some View {
@@ -643,7 +648,7 @@ private struct DiffPaneView: View {
             // indication that the filter is what hid everything.
             hint(String(localized: "No changes after filter"))
         } else {
-            DiffContentView(doc: model.diff, mode: mode, showContext: showContext)
+            DiffContentView(doc: model.diff, mode: mode, showContext: showContext, contextLines: contextLines)
                 // Re-mount on FILE or DATA change only (path / ignoreWhitespace
                 // both change the underlying diff). Mode and showContext are
                 // pure render filters on the same data — keep the view, reset
@@ -663,6 +668,9 @@ private struct DiffPaneView: View {
             Spacer(minLength: 8)
             diffModeMenu
             contextLinesMenu
+            if !showContext {
+                contextStepper
+            }
             ignoreWSMenu
             if !f.isBinary {
                 if f.additions > 0 {
@@ -709,6 +717,25 @@ private struct DiffPaneView: View {
             ],
             help: contextHelp
         )
+    }
+
+    // Adjusts contextLines — the Changes-Only window size: 0 = pure changes, N =
+    // N lines around each change. No upper bound; large N just converges toward
+    // the whole file, which Show All covers explicitly. Hidden in Show All.
+    private var contextLabel: String { "\(contextLines)" }
+    private func stepContext(_ delta: Int) {
+        contextLines = max(0, contextLines + delta)
+    }
+
+    private var contextStepper: some View {
+        HStack(spacing: 1) {
+            HeaderIconButton(symbol: "minus", help: "Fewer context lines", size: 10) { stepContext(-1) }
+            Text(contextLabel)
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color.secondary)
+                .frame(width: 30)
+            HeaderIconButton(symbol: "plus", help: "More context lines", size: 10) { stepContext(1) }
+        }
     }
 
     // Toggle --ignore-all-space (indentation/whitespace-only changes → context).
@@ -878,6 +905,38 @@ struct DiffDocument: Sendable {
         return out
     }
 
+    /// From a whole-file diff (`--unified=1000000`), keep each maximal change run
+    /// plus up to `n` lines of context around it — a render-time re-derival of
+    /// `git diff --unified=n` so adjusting n is instant (no re-fetch). `n < 0`
+    /// returns everything (whole file); 0 drops all context (changes only). Runs
+    /// whose context windows overlap merge into one visible block, matching git's
+    /// own hunk merging; hunk headers are always kept.
+    static func windowed(_ lines: [DiffLine], context n: Int) -> [DiffLine] {
+        if n < 0 { return lines }
+        let count = lines.count
+        var keep = [Bool](repeating: false, count: count)
+        var i = 0
+        while i < count {
+            if lines[i].kind == .add || lines[i].kind == .del {
+                // Back-fill up to n context lines immediately before this run.
+                var b = i - 1, back = n
+                while b >= 0, back > 0, lines[b].kind == .context { keep[b] = true; b -= 1; back -= 1 }
+                // Keep the whole contiguous change run, then up to n context after.
+                var j = i
+                while j < count, lines[j].kind == .add || lines[j].kind == .del { keep[j] = true; j += 1 }
+                var f = j, fwd = n
+                while f < count, fwd > 0, lines[f].kind == .context { keep[f] = true; f += 1; fwd -= 1 }
+                i = f          // a following run's back-fill reclaims any gap, idempotently
+            } else {
+                i += 1
+            }
+        }
+        var out: [DiffLine] = []
+        out.reserveCapacity(count)
+        for (idx, line) in lines.enumerated() where keep[idx] || line.kind == .hunk { out.append(line) }
+        return out
+    }
+
     /// `@@ -oldStart,oldCount +newStart,newCount @@ ...` → (oldStart, newStart).
     private static func parseHunk(_ line: String) -> (Int, Int) {
         var old = 0, new = 0
@@ -901,6 +960,7 @@ private struct DiffContentView: View {
     let doc: DiffDocument
     let mode: DiffMode
     let showContext: Bool
+    let contextLines: Int
     private static let maxLines = 6000
     @State private var cursor = -1   // index into RenderPlan.anchors; -1 = not yet jumped
 
@@ -948,7 +1008,9 @@ private struct DiffContentView: View {
     private var renderPlan: RenderPlan {
         switch mode {
         case .unified:
-            let filtered = showContext ? doc.lines : doc.lines.filter { $0.kind != .context }
+            // Show All renders the whole file; Changes Only windows each change
+            // run with `contextLines` of context (render-time, no re-fetch).
+            let filtered = showContext ? doc.lines : DiffDocument.windowed(doc.lines, context: contextLines)
             let capped = filtered.prefix(Self.maxLines)
             var anchors: [Int] = []
             var ids: [Int] = []
@@ -962,7 +1024,11 @@ private struct DiffContentView: View {
             }
             return RenderPlan(kind: .unified(capped), anchors: anchors, ids: ids, totalCount: filtered.count)
         case .split:
-            let filtered = showContext ? doc.splitRows : doc.splitRows.filter { !Self.isContextPair($0) }
+            // windowed keeps a `[DiffLine]` mask, so re-pair after windowing in
+            // Changes Only; Show All uses the pre-paired whole-file rows.
+            let filtered = showContext
+                ? doc.splitRows
+                : DiffDocument.pair(DiffDocument.windowed(doc.lines, context: contextLines))
             let capped = filtered.prefix(Self.maxLines)
             var anchors: [Int] = []
             var ids: [Int] = []
@@ -981,13 +1047,6 @@ private struct DiffContentView: View {
     private static func isChangeRow(_ r: SplitRow) -> Bool {
         if case .pair(let l, let rg) = r.body {
             return (l?.kind == .add || l?.kind == .del) || (rg?.kind == .add || rg?.kind == .del)
-        }
-        return false
-    }
-
-    private static func isContextPair(_ r: SplitRow) -> Bool {
-        if case .pair(let l, let rg) = r.body, let l, let rg {
-            return l.kind == .context && rg.kind == .context
         }
         return false
     }

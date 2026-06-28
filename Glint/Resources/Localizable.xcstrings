@@ -67,6 +67,28 @@
         }
       }
     },
+    "Fewer context lines": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "减少上下文行数"
+          }
+        }
+      }
+    },
+    "More context lines": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "增加上下文行数"
+          }
+        }
+      }
+    },
     "Show Whitespace": {
       "extractionState": "manual",
       "localizations": {
