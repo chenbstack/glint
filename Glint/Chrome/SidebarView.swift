@@ -1030,30 +1030,16 @@ private struct WorkspaceCard: View {
     /// the parent VStack.
     private func cardBackground(active: Bool) -> some View {
         let fill: Color = {
-            // 选中态走 accent wash + 左侧 indicator 双语言 —— wash 16% 改 10%,
-            // Codex 风的"轻选中":重在 indicator 条说话,wash 只是淡淡的色温
-            // 信号,不抢戏。idle 行裸,hover 行极淡黑/白 wash。
+            // 选中态只用 accent wash,不再叠左侧 indicator 条 —— wash 在浅色下
+            // 微弱但仍可读,加竖条反而抢戏。idle 裸,hover 极淡黑/白 wash。
             if active { return store.accent.opacity(0.10) }
             if isHovered { return Theme.overlay(0.04) }
             return .clear
         }()
-        return ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(fill)
-            // 选中态加一根 3pt 宽 accent 左竖条,挤进 2pt 让它"嵌"在 card 内边而
-            // 不是贴外缘 —— 亮色下仅靠 16% accent 底色对比太弱,加这条左指示条
-            // 后扫一眼就分得清当前选的是谁(暗色下也只是更明确,不冲突)。
-            if active {
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(store.accent)
-                    .frame(width: 3)
-                    .padding(.vertical, 6)
-                    .padding(.leading, 2)
-                    .transition(.opacity)
-            }
-        }
-        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: active)
-        .animation(.easeOut(duration: 0.16), value: isHovered)
+        return RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(fill)
+            .animation(.spring(response: 0.28, dampingFraction: 0.85), value: active)
+            .animation(.easeOut(duration: 0.16), value: isHovered)
     }
 
     /// One-shot green celebration driven by `justCompletedFlash`: a faint
