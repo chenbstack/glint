@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 // MARK: - Out-of-band git
@@ -116,11 +117,18 @@ struct SSHGitRunner: GitRunner {
     /// Per-target ControlMaster socket so repeated calls share one authed
     /// connection; `ControlPersist=10m` keeps it alive briefly after the last
     /// call so a Review open right after a status poll reuses it.
+    ///
+    /// Hashed (not sanitized) on purpose: a naive `[^A-Za-z0-9] → "-"` slug
+    /// collapses `deploy.prod.server` / `deploy-prod-server` / `deploy_prod_server`
+    /// into the same path, so two distinct destinations would share a mux and
+    /// the second ssh would tunnel through the first's connection — i.e. land
+    /// on the wrong host. Hashing is also short enough to fit comfortably under
+    /// macOS's 104-byte unix socket path limit even for long ssh aliases.
     private var controlPath: String {
         var slug = target
         if let port { slug += ":\(port)" }
-        let dash = Character("-")
-        let safe = String(slug.map { ($0.isLetter || $0.isNumber) ? $0 : dash })
+        let digest = SHA256.hash(data: Data(slug.utf8))
+        let safe = digest.prefix(8).map { String(format: "%02x", $0) }.joined()
         return FileManager.default.temporaryDirectory
             .appendingPathComponent("glint-ssh-\(safe).sock").path
     }

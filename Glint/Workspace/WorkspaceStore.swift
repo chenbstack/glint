@@ -2869,6 +2869,16 @@ final class WorkspaceStore: ObservableObject {
             }
             return
         }
+        // ssh foreground but no parsed remote cwd yet (no title fired, or the
+        // remote shell's prompt doesn't print user@host:path). Beep instead of
+        // falling through to the local-cwd branch, which would silently Review
+        // the LOCAL directory the user happened to be in when they ran ssh.
+        if let paneID = ws.selectedTab?.focusedPane,
+           let view = surfaceViews[WorkspacePaneKey(workspace: ws.id, pane: paneID)],
+           view.foregroundSshTarget() != nil {
+            NSSound.beep()
+            return
+        }
         guard let cwd = ws.source.gitPath ?? effectiveGitPath(for: ws) else {
             NSSound.beep()
             return
