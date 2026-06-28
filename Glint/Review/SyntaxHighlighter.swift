@@ -30,6 +30,10 @@ struct SyntaxLanguage: Sendable {
     /// Markdown fences a sub-language (```lang blocks); only the markdown
     /// profile sets this, switching to that language's profile inside a fence.
     var parsesFencedCode: Bool = false
+    /// SQL keywords are conventionally written either UPPER or lower; match
+    /// without regard to case. The `keywords` set is then expected to hold
+    /// one canonical casing (uppercase, by SQL convention).
+    var caseInsensitiveKeywords: Bool = false
 
     /// Resolve a profile from a path's extension. nil for unknown → caller
     /// colors strings + numbers only (no comment/keyword tinting), so nothing
@@ -175,7 +179,7 @@ struct SyntaxLanguage: Sendable {
             "KEY", "FOREIGN", "REFERENCES", "DEFAULT", "CONSTRAINT", "UNIQUE",
             "CHECK", "CASE", "WHEN", "THEN", "ELSE", "END", "BEGIN", "COMMIT",
             "ROLLBACK", "TRUE", "FALSE",
-        ])
+        ], caseInsensitiveKeywords: true)
 
     /// Markdown: only backtick inline `code` and fenced code blocks are tinted;
     /// prose (including apostrophes like "it's") is left alone, and `#`
@@ -421,7 +425,10 @@ enum SyntaxHighlighter {
                     if isLetter(d) || isDigit(d) || d == "_" { j += 1 } else { break }
                 }
                 let word = slice(i, j)
-                if keywords.contains(word) {
+                let hit = lang.caseInsensitiveKeywords
+                    ? keywords.contains(word.uppercased())
+                    : keywords.contains(word)
+                if hit {
                     runs.append((word, Theme.accentBright))
                 } else if lang.highlightTypes && isUpper(c) {
                     runs.append((word, Theme.cyan))

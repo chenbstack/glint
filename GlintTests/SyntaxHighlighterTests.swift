@@ -99,6 +99,26 @@ final class SyntaxHighlighterTests: XCTestCase {
         XCTAssertFalse(segments(attr).contains { $0.1 })
     }
 
+    /// SQL keywords are conventionally written either UPPER or lower; both
+    /// must tint. Without case-insensitive lookup, a modern lowercase-style
+    /// SQL file would have zero keywords highlighted.
+    func testSQLKeywordsCaseInsensitive() {
+        let sql = SyntaxLanguage.from(path: "f.sql")
+        var s1 = SyntaxHighlighter.State()
+        let upper = SyntaxHighlighter.highlight("SELECT id FROM users WHERE active",
+                                                language: sql, state: &s1)
+        XCTAssertTrue(segments(upper).contains { $0.1 && $0.0 == "SELECT" })
+        XCTAssertTrue(segments(upper).contains { $0.1 && $0.0 == "FROM" })
+        XCTAssertTrue(segments(upper).contains { $0.1 && $0.0 == "WHERE" })
+
+        var s2 = SyntaxHighlighter.State()
+        let lower = SyntaxHighlighter.highlight("select id from users where active",
+                                                language: sql, state: &s2)
+        XCTAssertTrue(segments(lower).contains { $0.1 && $0.0 == "select" })
+        XCTAssertTrue(segments(lower).contains { $0.1 && $0.0 == "from" })
+        XCTAssertTrue(segments(lower).contains { $0.1 && $0.0 == "where" })
+    }
+
     /// TOML/INI (config) tint strings but not keys or Capitalized values;
     /// YAML is fully uncolored (plain) — strings, numbers, comments all base.
     func testConfigAndYAMLProfiles() {
