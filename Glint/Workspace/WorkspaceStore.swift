@@ -2908,7 +2908,8 @@ final class WorkspaceStore: ObservableObject {
                 // the same over SSH.
                 async let rootA = remoteGit.repoRoot(at: rctx.remotePath)
                 let prefixR = try? await remoteGit.git(
-                    ["rev-parse", "--show-prefix"], cwd: rctx.remotePath, allowFailure: true)
+                    ["rev-parse", "--show-prefix"], cwd: rctx.remotePath,
+                    allowFailure: true, timeout: .poll)
                 let root = await (rootA ?? rctx.remotePath)
                 var subdir: String? = nil
                 if !reviewAtRepoRoot,
