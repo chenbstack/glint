@@ -17,6 +17,8 @@ final class SSHGitRunnerTests: XCTestCase {
             "-o", "BatchMode=yes",
             "-o", "ControlMaster=auto", "-o", "ControlPersist=10m",
             "-o", "ControlPath=/tmp/x.sock",
+            "-o", "ConnectTimeout=10",
+            "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3",
             "deploy@prod-server",
             "git", "-C", "'/home/deploy/code/api'", "'status'"
         ])

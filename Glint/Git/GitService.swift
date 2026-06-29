@@ -46,57 +46,109 @@ protocol GitRunner: Sendable {
     /// Run `git args` with the runner's notion of `cwd`. Never throws on a
     /// non-zero git exit (that's a normal signal, e.g. "branch missing"); only
     /// throws if the process itself couldn't be launched.
-    func run(_ args: [String], cwd: String?) async throws -> GitResult
+    ///
+    /// `timeout` (seconds) is a hard ceiling: a wedged git/ssh is SIGTERM'd at
+    /// the deadline (then SIGKILL'd after a 2s grace) so it can't pin dispatch
+    /// threads forever. `nil` = no Process-level deadline — for mutating ops
+    /// that must NOT be interrupted mid-flight (e.g. `git apply`, which writes
+    /// the working tree non-atomically); the SSH runner's ConnectTimeout still
+    /// bounds the connect phase. Read/poll callers pass a short ceiling.
+    func run(_ args: [String], cwd: String?, timeout: TimeInterval?) async throws -> GitResult
+
+    /// True when `cwd` resolves on a REMOTE host (the SSH runner), so file
+    /// bytes can't be `FileManager`-read — only fetched via a `git` command.
+    /// Lets local fast paths skip a subprocess: e.g. counting untracked-file
+    /// lines by reading the file instead of one `git diff --no-index` spawn
+    /// per file (N untracked files × 4-wide concurrency sat on the Review
+    /// file-list critical path). Defaults to local; `SSHGitRunner` overrides.
+    var isRemote: Bool { get }
+}
+
+extension GitRunner {
+    var isRemote: Bool { false }
+}
+
+/// env flags shared by both runners: never block on a credential prompt, never
+/// invoke a pager, never take index.lock just to read status.
+private func gitQuietEnv() -> [String: String] {
+    var env = ProcessInfo.processInfo.environment
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GIT_PAGER"] = "cat"
+    env["GIT_OPTIONAL_LOCKS"] = "0"
+    return env
+}
+
+/// Spawn `executable arguments` with `cwd`/`env`, drain both pipes concurrently
+/// (so neither fixed pipe buffer can deadlock on large output), and enforce an
+/// optional hard `timeout`. On the deadline: SIGTERM, then SIGKILL after a 2s
+/// grace — a process wedged in uninterruptible I/O (hung NFS/SMB, a stuck ssh
+/// master) ignores SIGTERM, so escalation is what actually delivers the
+/// "no call pins threads forever" guarantee. `kill(pid, 0)` is the kernel truth
+/// (`Process.isRunning` can lag the reap) and no-ops once the process has exited.
+private func captureProcess(executable: String, arguments: [String], cwd: String?,
+                            env: [String: String], timeout: TimeInterval?) async throws -> GitResult {
+    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<GitResult, Error>) in
+        DispatchQueue.global(qos: .userInitiated).async {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: executable)
+            proc.arguments = arguments
+            if let cwd, !cwd.isEmpty {
+                proc.currentDirectoryURL =
+                    URL(fileURLWithPath: (cwd as NSString).expandingTildeInPath)
+            }
+            proc.environment = env
+
+            let outPipe = Pipe(), errPipe = Pipe()
+            proc.standardOutput = outPipe
+            proc.standardError = errPipe
+            do {
+                try proc.run()
+            } catch {
+                cont.resume(throwing: GitError.launchFailed(error.localizedDescription))
+                return
+            }
+
+            var outData = Data(), errData = Data()
+            let group = DispatchGroup()
+            let q = DispatchQueue(label: "app.glint.git.read", attributes: .concurrent)
+            q.async(group: group) { outData = outPipe.fileHandleForReading.readDataToEndOfFile() }
+            q.async(group: group) { errData = errPipe.fileHandleForReading.readDataToEndOfFile() }
+
+            var watchdog: DispatchWorkItem?
+            if let timeout {
+                let pid = proc.processIdentifier
+                let w = DispatchWorkItem {
+                    guard pid > 0 else { return }
+                    if kill(pid, 0) == 0 { kill(pid, SIGTERM) }
+                    DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(2)) {
+                        if kill(pid, 0) == 0 { kill(pid, SIGKILL) }
+                    }
+                }
+                DispatchQueue.global().asyncAfter(
+                    deadline: .now() + .milliseconds(Int(timeout * 1000)), execute: w)
+                watchdog = w
+            }
+            group.wait()
+            proc.waitUntilExit()
+            watchdog?.cancel()
+
+            cont.resume(returning: GitResult(
+                exitCode: proc.terminationStatus,
+                stdout: String(decoding: outData, as: UTF8.self),
+                stderr: String(decoding: errData, as: UTF8.self)))
+        }
+    }
 }
 
 /// Runs git as a local subprocess. The app is non-sandboxed, so this is
-/// unrestricted. Reads both pipes concurrently so neither pipe's fixed buffer
-/// can deadlock on large output, and disables interactive prompts/pagers so a
-/// stray credential/pager prompt can never hang a background call.
+/// unrestricted. Pipe handling + the timeout watchdog live in the shared
+/// `captureProcess`; this just supplies the local executable + cwd + quiet-env.
 struct LocalGitRunner: GitRunner {
     var gitPath: String = "/usr/bin/git"
 
-    func run(_ args: [String], cwd: String?) async throws -> GitResult {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<GitResult, Error>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let proc = Process()
-                proc.executableURL = URL(fileURLWithPath: gitPath)
-                proc.arguments = args
-                if let cwd, !cwd.isEmpty {
-                    proc.currentDirectoryURL =
-                        URL(fileURLWithPath: (cwd as NSString).expandingTildeInPath)
-                }
-                var env = ProcessInfo.processInfo.environment
-                env["GIT_TERMINAL_PROMPT"] = "0"   // never block on a credential prompt
-                env["GIT_PAGER"] = "cat"            // never invoke a pager
-                env["GIT_OPTIONAL_LOCKS"] = "0"     // don't take index.lock just to read status
-                proc.environment = env
-
-                let outPipe = Pipe(), errPipe = Pipe()
-                proc.standardOutput = outPipe
-                proc.standardError = errPipe
-
-                do {
-                    try proc.run()
-                } catch {
-                    cont.resume(throwing: GitError.launchFailed(error.localizedDescription))
-                    return
-                }
-
-                var outData = Data(), errData = Data()
-                let group = DispatchGroup()
-                let q = DispatchQueue(label: "app.glint.git.read", attributes: .concurrent)
-                q.async(group: group) { outData = outPipe.fileHandleForReading.readDataToEndOfFile() }
-                q.async(group: group) { errData = errPipe.fileHandleForReading.readDataToEndOfFile() }
-                group.wait()
-                proc.waitUntilExit()
-
-                cont.resume(returning: GitResult(
-                    exitCode: proc.terminationStatus,
-                    stdout: String(decoding: outData, as: UTF8.self),
-                    stderr: String(decoding: errData, as: UTF8.self)))
-            }
-        }
+    func run(_ args: [String], cwd: String?, timeout: TimeInterval?) async throws -> GitResult {
+        try await captureProcess(executable: gitPath, arguments: args,
+                                 cwd: cwd, env: gitQuietEnv(), timeout: timeout)
     }
 }
 
@@ -154,10 +206,15 @@ struct SSHGitRunner: GitRunner {
             .appendingPathComponent("glint-ssh-\(safe).sock").path
     }
 
-    func run(_ args: [String], cwd: String?) async throws -> GitResult {
+    var isRemote: Bool { true }
+
+    func run(_ args: [String], cwd: String?, timeout: TimeInterval?) async throws -> GitResult {
         let argv = Self.commandArgs(target: target, port: port,
                                     controlPath: controlPath, cwd: cwd, gitArgs: args)
-        return try await Self.spawn(argv)
+        // cwd is baked into the remote `git -C` argv; the local Process just
+        // runs ssh from the app's cwd, so no local cwd here.
+        return try await captureProcess(executable: "/usr/bin/ssh", arguments: argv,
+                                        cwd: nil, env: gitQuietEnv(), timeout: timeout)
     }
 
     /// Pure: the full `ssh … git -C <cwd> <args>` argv. Split out so the wire
@@ -178,7 +235,14 @@ struct SSHGitRunner: GitRunner {
                             cwd: String?, gitArgs: [String]) -> [String] {
         var a = ["-o", "BatchMode=yes",
                  "-o", "ControlMaster=auto", "-o", "ControlPersist=10m",
-                 "-o", "ControlPath=\(controlPath)"]
+                 "-o", "ControlPath=\(controlPath)",
+                 // Bound the connection so a dead/unreachable host fails fast
+                 // instead of parking the call on the OS's ~75s TCP default.
+                 // BatchMode only blocks password PROMPTS — not DNS / connect /
+                 // key-exchange / a silent remote, which otherwise hung Review
+                 // and stacked dispatch threads until the 64-thread ceiling.
+                 "-o", "ConnectTimeout=10",
+                 "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3"]
         if let port { a += ["-p", "\(port)"] }
         a.append(target)
         a.append("git")
@@ -227,41 +291,6 @@ struct SSHGitRunner: GitRunner {
         return tildePart + posixShellQuoted(String(cwd[slash...]))
     }
 
-    /// Spawn `/usr/bin/ssh <args>` and capture stdout/stderr — mirrors
-    /// `LocalGitRunner`'s concurrent-read layout so neither fixed pipe buffer
-    /// can deadlock on large diff output.
-    private static func spawn(_ sshArgs: [String]) async throws -> GitResult {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<GitResult, Error>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let proc = Process()
-                proc.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-                proc.arguments = sshArgs
-                var env = ProcessInfo.processInfo.environment
-                env["GIT_TERMINAL_PROMPT"] = "0"
-                env["GIT_PAGER"] = "cat"
-                env["GIT_OPTIONAL_LOCKS"] = "0"
-                proc.environment = env
-                let outPipe = Pipe(), errPipe = Pipe()
-                proc.standardOutput = outPipe
-                proc.standardError = errPipe
-                do { try proc.run() } catch {
-                    cont.resume(throwing: GitError.launchFailed(error.localizedDescription))
-                    return
-                }
-                var outData = Data(), errData = Data()
-                let group = DispatchGroup()
-                let q = DispatchQueue(label: "app.glint.git.read", attributes: .concurrent)
-                q.async(group: group) { outData = outPipe.fileHandleForReading.readDataToEndOfFile() }
-                q.async(group: group) { errData = errPipe.fileHandleForReading.readDataToEndOfFile() }
-                group.wait()
-                proc.waitUntilExit()
-                cont.resume(returning: GitResult(
-                    exitCode: proc.terminationStatus,
-                    stdout: String(decoding: outData, as: UTF8.self),
-                    stderr: String(decoding: errData, as: UTF8.self)))
-            }
-        }
-    }
 }
 
 // MARK: - High-level git operations
@@ -293,11 +322,30 @@ struct GitStatus: Equatable {
 struct GitService {
     var runner: GitRunner = LocalGitRunner()
 
+    /// Ceiling for mutating git ops (worktree add/remove, branch -D, fetch,
+    /// `git apply`). Generous on purpose: these are user-initiated, and `git
+    /// apply` writes the working tree NON-atomically — a 30s ceiling could
+    /// SIGTERM it mid-flight (or SIGTERM the `git diff --output` feeding it,
+    /// leaving a truncated patch that then half-applies). Still bounded so a
+    /// wedged op can't pin threads literally forever. Read/poll callers keep
+    /// the short 30s default.
+    private static let writeTimeout: TimeInterval = 180
+
+    /// Ceiling for READ ops that can move a lot of data: `git diff` — especially
+    /// `fileDiff`'s `--unified=1000000`, which emits the whole file as context —
+    /// and `--numstat`, particularly over SSH. The 30s `git()` default fits tiny
+    /// probes (status poll, rev-parse, `ls-files` enumeration) but is too tight
+    /// for a large-file diff over a slow link, where it would SIGTERM mid-stream
+    /// and silently yield a blank/truncated result. Internal so GitDiff's read
+    /// callers can opt up; status/poll callers keep the short default.
+    static let readTimeout: TimeInterval = 120
+
     /// Run git, throwing `commandFailed` on a non-zero exit unless `allowFailure`
     /// (used for the many "exit code IS the answer" probes like branch-exists).
     @discardableResult
-    func git(_ args: [String], cwd: String?, allowFailure: Bool = false) async throws -> GitResult {
-        let r = try await runner.run(args, cwd: cwd)
+    func git(_ args: [String], cwd: String?, allowFailure: Bool = false,
+             timeout: TimeInterval? = 30) async throws -> GitResult {
+        let r = try await runner.run(args, cwd: cwd, timeout: timeout)
         if !r.ok && !allowFailure {
             throw GitError.commandFailed(args: args, exitCode: r.exitCode, stderr: r.stderr)
         }
@@ -404,7 +452,7 @@ struct GitService {
         // `--` ends option parsing: without it a path or base ref beginning with
         // `-` (e.g. `--detach`) would be read by git as an option, not a value.
         args += ["--", expanded, base]
-        try await git(args, cwd: repo)
+        try await git(args, cwd: repo, timeout: Self.writeTimeout)
 
         let list = try await worktrees(repo: repo)
         return list.first { ($0.path as NSString).standardizingPath == (expanded as NSString).standardizingPath }
@@ -428,13 +476,15 @@ struct GitService {
         //    `git apply` silently fails. Letting git own the file keeps it exact.
         let patch = NSTemporaryDirectory() + "glint-carry-\(UUID().uuidString).patch"
         defer { try? FileManager.default.removeItem(atPath: patch) }
-        try await git(["diff", "HEAD", "--binary", "--output=\(patch)"], cwd: base)
+        try await git(["diff", "HEAD", "--binary", "--output=\(patch)"], cwd: base,
+                      timeout: Self.writeTimeout)
         // `--output` writes an empty file when there are no tracked changes;
         // skip the apply in that case (and avoid a needless subprocess).
         let attrs = try? FileManager.default.attributesOfItem(atPath: patch)
         let patchSize = (attrs?[.size] as? Int) ?? 0
         if patchSize > 0 {
-            try await git(["apply", "--whitespace=nowarn", "--", patch], cwd: wt)
+            try await git(["apply", "--whitespace=nowarn", "--", patch], cwd: wt,
+                          timeout: Self.writeTimeout)
         }
 
         // 2) Untracked, non-ignored files (build artifacts stay out via
@@ -458,19 +508,19 @@ struct GitService {
         var args = ["worktree", "remove"]
         if force { args.append("--force") }
         args += ["--", (path as NSString).expandingTildeInPath]   // `--`: path may start with `-`
-        try await git(args, cwd: repo)
+        try await git(args, cwd: repo, timeout: Self.writeTimeout)
     }
 
     func deleteBranch(repo: String, name: String, force: Bool) async throws {
-        try await git(["branch", force ? "-D" : "-d", "--", name], cwd: repo)   // `--`: name may start with `-`
+        try await git(["branch", force ? "-D" : "-d", "--", name], cwd: repo, timeout: Self.writeTimeout)   // `--`: name may start with `-`
     }
 
     func prune(repo: String) async throws {
-        try await git(["worktree", "prune"], cwd: repo)
+        try await git(["worktree", "prune"], cwd: repo, timeout: Self.writeTimeout)
     }
 
     func fetch(repo: String, remote: String = "origin") async throws {
-        try await git(["fetch", remote, "--prune"], cwd: repo)
+        try await git(["fetch", remote, "--prune"], cwd: repo, timeout: Self.writeTimeout)
     }
 
     // MARK: status
