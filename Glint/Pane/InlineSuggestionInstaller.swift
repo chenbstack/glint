@@ -175,9 +175,7 @@ enum InlineSuggestionInstaller {
         let block = """
         \(beginSentinel)
         # Managed by Glint. Toggle in Settings → Terminal → Command suggestions.
-        # To opt out manually, delete this whole block (or run
-        #   sed -i '' '/\(beginSentinel)/,/\(endSentinel)/d' ~/.zshrc
-        # ).
+        # To opt out manually, delete this whole block.
         [ -f "$HOME/.config/glint/inline-suggestions.zsh" ] && source "$HOME/.config/glint/inline-suggestions.zsh"
         \(endSentinel)
         """

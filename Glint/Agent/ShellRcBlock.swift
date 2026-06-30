@@ -51,9 +51,14 @@ enum ShellRcBlock {
 
     /// Find the block's full span — `begin` sentinel through `end` sentinel,
     /// including the trailing newline if any. Both sentinels must sit at the
-    /// start of their own line; this stops us from matching the sentinel
-    /// substring embedded in a user's own comment, heredoc, or another
-    /// tool's docs.
+    /// start of their own line, which stops us from matching the sentinel
+    /// substring embedded in a user's comment, heredoc, or another tool's
+    /// docs — and from a block body that itself quotes the sentinels (an
+    /// earlier managed block embedded an opt-out `sed` command containing
+    /// both sentinels). To survive that, after a line-anchored `begin` we
+    /// keep scanning past `end` matches that aren't at the start of their
+    /// own line until we find one that is, instead of trusting the nearest
+    /// `end` hit.
     static func locate(in text: String,
                        begin: String,
                        end: String) -> Range<String.Index>? {
@@ -62,14 +67,19 @@ enum ShellRcBlock {
               let r = text.range(of: begin, range: cursor..<text.endIndex) {
             let beginAtLineStart = r.lowerBound == text.startIndex ||
                 text[text.index(before: r.lowerBound)] == "\n"
-            if beginAtLineStart,
-               let endR = text.range(of: end, range: r.upperBound..<text.endIndex),
-               text[text.index(before: endR.lowerBound)] == "\n" {
-                var upper = endR.upperBound
-                if upper < text.endIndex, text[upper] == "\n" {
-                    upper = text.index(after: upper)
+            if beginAtLineStart {
+                var scan = r.upperBound
+                while scan < text.endIndex,
+                      let endR = text.range(of: end, range: scan..<text.endIndex) {
+                    if text[text.index(before: endR.lowerBound)] == "\n" {
+                        var upper = endR.upperBound
+                        if upper < text.endIndex, text[upper] == "\n" {
+                            upper = text.index(after: upper)
+                        }
+                        return r.lowerBound..<upper
+                    }
+                    scan = endR.upperBound
                 }
-                return r.lowerBound..<upper
             }
             cursor = r.upperBound
         }
