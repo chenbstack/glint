@@ -201,6 +201,10 @@ struct ReviewView: View {
 
 enum FileListMode: String { case tree, list, combined }
 
+// List-mode ordering: by path (default, matches git's order) or by working-tree
+// modification time (most-recent first; nil mtimes sink to the bottom).
+enum FileSort: String { case path, modified }
+
 // Diff pane render mode: single unified column (default) or two-column split.
 enum DiffMode: String { case unified, split }
 
@@ -208,9 +212,39 @@ private struct FileListView: View {
     @ObservedObject var model: ReviewModel
     @AppStorage("glint.review.fileListMode") private var modeRaw = FileListMode.tree.rawValue
     @AppStorage("glint.glassEffect") private var glass = true
+    // Persisted across Review sessions: hide brand-new files (added + untracked)
+    // to focus the list on edits to existing files, and the list-mode ordering.
+    @AppStorage("glint.review.hideNewFiles") private var hideNewFiles = false
+    @AppStorage("glint.review.sortMode") private var sortRaw = FileSort.path.rawValue
     @State private var collapsed: Set<String> = []   // collapsed folder paths
+    @State private var query = ""                    // filename filter text
 
     private var mode: FileListMode { FileListMode(rawValue: modeRaw) ?? .tree }
+    private var sort: FileSort { FileSort(rawValue: sortRaw) ?? .path }
+
+    // Filter is active when hiding new files or typing a query. When inactive the
+    // view uses the model's prebuilt tree/combined (the fast path — no per-render
+    // rebuild); when active it rebuilds from `displayedFiles`. Filtering is
+    // user-initiated and transient, so the rebuild cost only lands while a filter
+    // is on, never during steady-state review (hover/selection).
+    private var activeFilter: Bool { hideNewFiles || !query.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    private var displayedFiles: [GitFileChange] {
+        var fs = model.files
+        if hideNewFiles { fs.removeAll { $0.kind == .added || $0.kind == .untracked } }
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        if !q.isEmpty { fs.removeAll { !$0.path.lowercased().contains(q) } }
+        return fs
+    }
+
+    // Flat list for list mode: path order (already what changedFiles returns) or
+    // most-recently-modified first. Tree/combined modes keep their structural
+    // ordering; only the flat list honors the sort preference.
+    private var listFiles: [GitFileChange] {
+        let fs = displayedFiles
+        guard sort == .modified else { return fs }
+        return fs.sorted { ($0.modDate ?? .distantPast) > ($1.modDate ?? .distantPast) }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -224,14 +258,20 @@ private struct FileListView: View {
                             .foregroundStyle(Theme.text3)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.top, 40)
+                    } else if activeFilter && displayedFiles.isEmpty && !model.loadingFiles {
+                        Text("No Matches")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.text3)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, 40)
                     }
                     switch mode {
                     case .list:
-                        ForEach(model.files) { f in fileRow(f, indent: 0, showDir: true) }
+                        ForEach(listFiles) { f in fileRow(f, indent: 0, showDir: true) }
                     case .tree:
-                        ForEach(visibleTreeRows) { r in treeRow(r) }
+                        ForEach(filteredTreeRows) { r in treeRow(r) }
                     case .combined:
-                        ForEach(model.combined) { g in combinedGroup(g) }
+                        ForEach(filteredCombined) { g in combinedGroup(g) }
                     }
                 }
                 .padding(8)
@@ -253,6 +293,7 @@ private struct FileListView: View {
                     .foregroundStyle(Theme.text1)
                     .lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 6)
+                if mode == .list { sortMenu }
                 layoutMenu
             }
 
@@ -266,6 +307,8 @@ private struct FileListView: View {
                 .labelsHidden()
                 .controlSize(.small)
             }
+
+            filterField
 
             HStack(spacing: 6) {
                 Text(fileCountText)
@@ -298,6 +341,8 @@ private struct FileListView: View {
             Button { modeRaw = FileListMode.combined.rawValue } label: {
                 Label("View as Combined List", systemImage: mode == .combined ? "checkmark" : "rectangle.grid.1x2")
             }
+            Divider()
+            Toggle("Hide New Files", isOn: $hideNewFiles)
         } label: {
             Image(systemName: mode == .tree ? "list.bullet.indent" : "list.dash")
                 .font(.system(size: 11.5, weight: .semibold))
@@ -307,6 +352,52 @@ private struct FileListView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help(Text("Change file list layout"))
+    }
+
+    // List-mode ordering menu: path (default) or most-recently-modified first.
+    private var sortMenu: some View {
+        Menu {
+            Button { sortRaw = FileSort.path.rawValue } label: {
+                Label("Sort by Name", systemImage: sort == .path ? "checkmark" : "textformat")
+            }
+            Button { sortRaw = FileSort.modified.rawValue } label: {
+                Label("Sort by Modified", systemImage: sort == .modified ? "checkmark" : "calendar")
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(sort == .modified ? Theme.cyan : Theme.text3)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(Text("Sort"))
+    }
+
+    // Filename filter — case-insensitive match against the full repo-relative
+    // path, so "review/" narrows to a subtree and "swift" to an extension.
+    private var filterField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 10))
+                .foregroundStyle(Theme.text4)
+            TextField("Filter", text: $query)
+                .font(.system(size: 11.5))
+                .textFieldStyle(.plain)
+                .autocorrectionDisabled(true)
+                .submitLabel(.done)
+            if !query.isEmpty {
+                Button { query = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.text4)
+                }
+                .buttonStyle(.plain)
+                .help(Text("Clear filter"))
+            }
+        }
+        .padding(.horizontal, 7).padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.overlay(0.08)))
     }
 
     private var fileCountText: String {
@@ -340,11 +431,18 @@ private struct FileListView: View {
     // MARK: tree
 
     // Cheap per-render flatten of the model's prebuilt tree against the current
-    // collapse set — the expensive build/sort happened once in reload().
-    private var visibleTreeRows: [TreeRow] {
+    // collapse set — the expensive build/sort happened once in reload(). When a
+    // filter is active, rebuild from the filtered file set so hidden/query-excluded
+    // files (and their now-empty folders) drop out of the tree.
+    private var filteredTreeRows: [TreeRow] {
+        let nodes = activeFilter ? TreeNode.build(displayedFiles) : model.tree
         var rows: [TreeRow] = []
-        flatten(model.tree, depth: 0, into: &rows)
+        flatten(nodes, depth: 0, into: &rows)
         return rows
+    }
+
+    private var filteredCombined: [CombinedGroup] {
+        activeFilter ? ReviewModel.groupByDir(displayedFiles) : model.combined
     }
 
     private func flatten(_ nodes: [TreeNode], depth: Int, into rows: inout [TreeRow]) {
@@ -479,6 +577,19 @@ private struct FileListView: View {
         case .renamed:           return Theme.cyan
         case .modified:          return Theme.orange
         }
+    }
+}
+
+// Shared locale-aware relative formatter for a file's working-tree mtime — used
+// by the diff-pane file header. One cached instance.
+private enum MtimeFormat {
+    static let formatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
+    static func relative(_ date: Date, now: Date = Date()) -> String {
+        formatter.localizedString(for: date, relativeTo: now)
     }
 }
 
@@ -670,6 +781,13 @@ private struct DiffPaneView: View {
                 .foregroundStyle(Theme.text2)
                 .lineLimit(1).truncationMode(.middle)
                 .textSelection(.enabled)
+            if let m = f.modDate {
+                Label(MtimeFormat.relative(m), systemImage: "clock")
+                    .labelStyle(.titleAndIcon)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.text4)
+                    .help(Text("Last modified"))
+            }
             Spacer(minLength: 8)
             diffModeMenu
             contextLinesMenu

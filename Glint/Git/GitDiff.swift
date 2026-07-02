@@ -20,6 +20,10 @@ struct GitFileChange: Identifiable, Equatable {
     var additions: Int
     var deletions: Int
     var isBinary: Bool
+    /// Working-tree modification time (stat of `repo/path`), or nil when the
+    /// file isn't on disk (deleted) — powers the list's compact "Modified"
+    /// column + sort-by-modified; not consumed by git itself.
+    var modDate: Date? = nil
     var id: String { path }
 }
 
@@ -55,7 +59,7 @@ extension GitService {
                                            deletions: 0, isBinary: false)
                 }
             }
-            return map.values.sorted { $0.path < $1.path }
+            return Self.withMtime(map.values.sorted { $0.path < $1.path }, repo: repo)
 
         case .branch(let base):
             async let names = git(["diff", "\(base)...HEAD", "--name-status"], cwd: repo,
@@ -65,7 +69,21 @@ extension GitService {
             let map = Self.mergeNameNumstat(
                 nameStatus: (try? await names)?.stdout ?? "",
                 numstat: (try? await nums)?.stdout ?? "")
-            return map.values.sorted { $0.path < $1.path }
+            return Self.withMtime(map.values.sorted { $0.path < $1.path }, repo: repo)
+        }
+    }
+
+    /// Stat each file's working-tree path for its modification date — one cheap
+    /// syscall per file, nil-safe (a deleted/missing file yields nil). Review-only
+    /// enrichment kept here so `modDate` is populated before the model builds its
+    /// list views.
+    private static func withMtime(_ files: [GitFileChange], repo: String) -> [GitFileChange] {
+        let fm = FileManager.default
+        let base = repo as NSString
+        return files.map { f in
+            var g = f
+            g.modDate = (try? fm.attributesOfItem(atPath: base.appendingPathComponent(f.path)))?[.modificationDate] as? Date
+            return g
         }
     }
 
