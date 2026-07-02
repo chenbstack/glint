@@ -52,6 +52,17 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.25-beta.6",
+            en: [
+                "Review now refreshes automatically when its window regains focus, keeps the selected file in sync with filters, and stays smoother while resizing the file sidebar. The file list also handles narrow sidebars better so change counts no longer wrap awkwardly.",
+                "Light mode multi-pane terminals now use a much lighter inactive-pane tint, so unfocused panes still read as the same white terminal surface instead of turning gray."
+            ],
+            zh: [
+                "Review 窗口重新获得焦点时会自动刷新改动,筛选文件后选中项和右侧 diff 会保持同步;拖动左侧文件栏时也更稳定。文件列表在窄侧栏下也更耐挤,改动数量不再竖着换行。",
+                "亮色模式下多终端窗格的失焦遮罩大幅变轻,未聚焦窗格仍然像同一个白色终端表面,不会再明显发灰。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.25-beta.5",
             en: [
                 "zsh panes now show your most recent matching history command as faint inline text right after the cursor — press → or End to accept. Toggle in Settings ▸ Terminal ▸ Command suggestions (defaults on). Glint installs a small fenced block in ~/.zshrc that sources the vendored zsh-autosuggestions script; flipping the toggle off strips that block cleanly. If you already load zsh-autosuggestions through oh-my-zsh / prezto / your own config, Glint detects it and stays out of the way. Bash / fish panes are unaffected. The ghost text is rendered by zsh as real terminal cells, so font, spacing, and alignment always match the surrounding line — no SwiftUI overlay drift."

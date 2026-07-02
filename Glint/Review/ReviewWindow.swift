@@ -84,10 +84,7 @@ final class ReviewModel: ObservableObject {
         } else if let first = fs.first {
             await select(first)
         } else {
-            selected = nil
-            diffText = ""
-            diff = .empty
-            loadingDiff = false
+            clearSelection()
         }
     }
 
@@ -127,6 +124,14 @@ final class ReviewModel: ObservableObject {
         diff = doc
         loadingDiff = false
     }
+
+    func clearSelection() {
+        diffLoadToken += 1
+        selected = nil
+        diffText = ""
+        diff = .empty
+        loadingDiff = false
+    }
 }
 
 // MARK: - Root view
@@ -155,13 +160,17 @@ struct ReviewView: View {
     var body: some View {
         GeometryReader { geo in
             let maxSidebar = max(Self.minSidebar, Double(geo.size.width) * 0.6)
-            let w = min(max(liveWidth ?? sidebarWidth, Self.minSidebar), maxSidebar)
+            let w = clampedSidebarWidth(liveWidth ?? sidebarWidth, maxSidebar: maxSidebar)
             HStack(spacing: 0) {
                 FileListView(model: model)
                     .frame(width: w)
-                divider(maxSidebar: maxSidebar)
+                divider(maxSidebar: maxSidebar, currentWidth: w)
                 DiffPaneView(model: model)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .transaction { tx in
+                tx.animation = nil
+                tx.disablesAnimations = true
             }
         }
         .frame(minWidth: 780, minHeight: 480)
@@ -170,7 +179,17 @@ struct ReviewView: View {
         .task { await model.reload() }
     }
 
-    private func divider(maxSidebar: Double) -> some View {
+    private func clampedSidebarWidth(_ width: Double, maxSidebar: Double) -> Double {
+        min(max(Self.minSidebar, width), maxSidebar)
+    }
+
+    private func withoutResizeAnimation(_ updates: () -> Void) {
+        var tx = Transaction(animation: nil)
+        tx.disablesAnimations = true
+        withTransaction(tx, updates)
+    }
+
+    private func divider(maxSidebar: Double, currentWidth: Double) -> some View {
         Rectangle()
             .fill(Color.clear)
             .frame(width: 6)
@@ -184,14 +203,22 @@ struct ReviewView: View {
                     .onChanged { v in
                         // translation is cumulative from gesture start, so the
                         // base must stay fixed for the whole drag.
-                        let base = dragBase ?? sidebarWidth
-                        if dragBase == nil { dragBase = base }
-                        liveWidth = min(max(Self.minSidebar, base + v.translation.width), maxSidebar)
+                        let shouldSetBase = dragBase == nil
+                        let base = dragBase ?? currentWidth
+                        let nextWidth = clampedSidebarWidth(base + v.translation.width, maxSidebar: maxSidebar)
+                        withoutResizeAnimation {
+                            if shouldSetBase { dragBase = base }
+                            liveWidth = nextWidth
+                        }
                     }
-                    .onEnded { _ in
-                        if let lw = liveWidth { sidebarWidth = lw }
-                        liveWidth = nil
-                        dragBase = nil
+                    .onEnded { v in
+                        let base = dragBase ?? currentWidth
+                        let finalWidth = clampedSidebarWidth(base + v.translation.width, maxSidebar: maxSidebar)
+                        withoutResizeAnimation {
+                            sidebarWidth = finalWidth
+                            liveWidth = nil
+                            dragBase = nil
+                        }
                     }
             )
     }
@@ -209,6 +236,8 @@ enum FileSort: String { case path, modified }
 enum DiffMode: String { case unified, split }
 
 private struct FileListView: View {
+    private static let treeIndentStep: CGFloat = 12
+
     @ObservedObject var model: ReviewModel
     @AppStorage("glint.review.fileListMode") private var modeRaw = FileListMode.tree.rawValue
     @AppStorage("glint.glassEffect") private var glass = true
@@ -278,6 +307,9 @@ private struct FileListView: View {
             }
         }
         .background(sidebarBackground)
+        .onChange(of: query) { syncSelectionToVisibleFiles() }
+        .onChange(of: hideNewFiles) { syncSelectionToVisibleFiles() }
+        .onChange(of: model.files) { syncSelectionToVisibleFiles() }
     }
 
     // Title / scope / counts at the sidebar top, under the traffic lights
@@ -401,11 +433,26 @@ private struct FileListView: View {
     }
 
     private var fileCountText: String {
-        switch model.files.count {
-        case 0:  return String(localized: "No changes")
+        if model.files.isEmpty { return String(localized: "No changes") }
+        let count = displayedFiles.count
+        switch count {
         case 1:  return String(localized: "1 file")
-        default: return String(localized: "\(model.files.count) files")
+        default: return String(localized: "\(count) files")
         }
+    }
+
+    private func syncSelectionToVisibleFiles() {
+        guard !model.loadingFiles else { return }
+        let files = mode == .list ? listFiles : displayedFiles
+        if let selected = model.selected,
+           files.contains(where: { $0.path == selected.path }) {
+            return
+        }
+        guard let first = files.first else {
+            model.clearSelection()
+            return
+        }
+        Task { await model.select(first) }
     }
 
     private func scopeLabel(_ s: DiffScope) -> String {
@@ -419,7 +466,10 @@ private struct FileListView: View {
     private var sidebarBackground: some View {
         if glass {
             ZStack {
-                VisualEffectBackground(material: .sidebar)
+                Theme.bgSidebar
+                VisualEffectBackground(material: .sidebar,
+                                       state: .active,
+                                       appearance: NSAppearance(named: Theme.current.isDark ? .darkAqua : .aqua))
                 LinearGradient(colors: [Theme.sidebarTintTop, Theme.sidebarTintBottom],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
             }
@@ -459,7 +509,7 @@ private struct FileListView: View {
         if r.node.isDir {
             folderRow(r.node, depth: r.depth)
         } else if let f = r.node.file {
-            fileRow(f, indent: CGFloat(r.depth) * 15, showDir: false)
+            fileRow(f, indent: CGFloat(r.depth) * Self.treeIndentStep, showDir: false)
         }
     }
 
@@ -500,7 +550,7 @@ private struct FileListView: View {
                     .lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 0)
             }
-            .padding(.leading, CGFloat(depth) * 15 + 8).padding(.trailing, 9)
+            .padding(.leading, CGFloat(depth) * Self.treeIndentStep + 8).padding(.trailing, 9)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
@@ -515,7 +565,7 @@ private struct FileListView: View {
         return Button {
             Task { await model.select(file) }
         } label: {
-            HStack(spacing: 9) {
+            HStack(spacing: 7) {
                 Text(Self.kindBadge(file.kind))
                     .font(.system(size: 9.5, weight: .heavy, design: .monospaced))
                     .foregroundStyle(Self.kindColor(file.kind))
@@ -534,26 +584,43 @@ private struct FileListView: View {
                             .lineLimit(1).truncationMode(.head)
                     }
                 }
+                .layoutPriority(1)
+                .frame(minWidth: 0, alignment: .leading)
 
-                Spacer(minLength: 6)
-
-                if file.isBinary {
-                    Text("bin").font(.system(size: 9, weight: .medium)).foregroundStyle(Theme.text4)
-                } else {
-                    HStack(spacing: 5) {
-                        if file.additions > 0 { Text("+\(file.additions)").foregroundStyle(Theme.green) }
-                        if file.deletions > 0 { Text("−\(file.deletions)").foregroundStyle(Theme.pink) }
-                    }
-                    .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
-                }
+                Spacer(minLength: 4)
+                changeSummary(file)
             }
-            .padding(.leading, indent + 9).padding(.trailing, 9).padding(.vertical, 6)
+            .padding(.leading, indent + 8).padding(.trailing, 8).padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 7).fill(selected ? Theme.cyan.opacity(0.13) : .clear))
             .overlay(RoundedRectangle(cornerRadius: 7).stroke(selected ? Theme.cyan.opacity(0.30) : .clear, lineWidth: 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(Text(file.path))
+    }
+
+    @ViewBuilder
+    private func changeSummary(_ file: GitFileChange) -> some View {
+        if file.isBinary {
+            Text("bin")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(Theme.text4)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        } else {
+            HStack(spacing: 4) {
+                if file.additions > 0 {
+                    Text("+\(file.additions)").foregroundStyle(Theme.green)
+                }
+                if file.deletions > 0 {
+                    Text("−\(file.deletions)").foregroundStyle(Theme.pink)
+                }
+            }
+            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+        }
     }
 
     private func dirName(_ path: String) -> String? {
@@ -1512,5 +1579,11 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
         // resubscribes when the window comes back.
         model = nil
         themeCancellable = nil
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard notification.object as? NSWindow === window,
+              let model else { return }
+        Task { await model.reload() }
     }
 }

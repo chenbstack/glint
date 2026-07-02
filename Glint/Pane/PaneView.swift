@@ -16,6 +16,15 @@ struct PaneView: View {
         store.isTerminalTransparent ? Color.clear : Theme.bgPane
     }
 
+    private var unfocusedDimOpacity: Double {
+        if Theme.current.isDark {
+            return store.isTerminalTransparent ? 0.18 : 0.28
+        }
+        // Light themes need only a subtle inactive hint. The old 0.28 black
+        // wash turned white terminal panes into a heavy gray block.
+        return store.isTerminalTransparent ? 0.05 : 0.035
+    }
+
     var body: some View {
         // Resolve a surface only for a (workspace, pane) pair that exists in
         // the model. A miss means we're either mid-teardown (workspace
@@ -48,12 +57,9 @@ struct PaneView: View {
                 deferFocus: store.commandPaletteOpen || store.agentChooserIntent != nil
             )
             if !isFocused {
-                // Dim unfocused panes with a black wash in BOTH modes. A
-                // `Theme.bgPane` veil would re-opacify the desktop in
-                // translucent mode, and on a LIGHT theme bgPane (≈white) would
-                // wash the pane lighter instead of dimming it — a black wash
-                // de-emphasizes correctly regardless of theme/opacity.
-                Color.black.opacity(store.isTerminalTransparent ? 0.18 : 0.28)
+                // Use a black wash so translucent panes stay translucent; tune
+                // the strength by theme so light terminals don't turn gray.
+                Color.black.opacity(unfocusedDimOpacity)
                     .allowsHitTesting(false)
             }
         }

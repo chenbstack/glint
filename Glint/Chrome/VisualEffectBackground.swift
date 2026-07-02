@@ -40,10 +40,21 @@ struct VisualEffectBackground: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
-        nsView.blendingMode = blendingMode
-        nsView.state = state
-        nsView.appearance = appearance
+        // SwiftUI calls this on every layout pass. Re-assigning these
+        // NSVisualEffectView properties even when unchanged can make the
+        // material redraw for a frame, which is visible while resizing panes.
+        if nsView.material != material {
+            nsView.material = material
+        }
+        if nsView.blendingMode != blendingMode {
+            nsView.blendingMode = blendingMode
+        }
+        if nsView.state != state {
+            nsView.state = state
+        }
+        if nsView.appearance?.name != appearance?.name {
+            nsView.appearance = appearance
+        }
     }
 }
 
