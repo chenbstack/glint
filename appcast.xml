@@ -6,16 +6,23 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.25-beta.5</title>
-      <sparkle:version>202606281341</sparkle:version>
-      <sparkle:shortVersionString>0.1.25-beta.5</sparkle:shortVersionString>
+      <title>Glint 0.1.25-beta.6</title>
+      <sparkle:version>202607020254</sparkle:version>
+      <sparkle:shortVersionString>0.1.25-beta.6</sparkle:shortVersionString>
       <sparkle:channel>beta</sparkle:channel>
-      <pubDate>Sun, 28 Jun 2026 13:44:10 +0000</pubDate>
+      <pubDate>Thu, 02 Jul 2026 02:55:59 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.25-beta.5</h3><ul>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.25-beta.6</h3><ul>
+    <li>feat(review): filter, hide-new-files, sort-by-mtime + diff-header mtime / 文件列表过滤、隐藏新增、按修改时间排序 + diff 头显示修改时间 (#74)</li>
+    <li><strong>polish(review): stabilize review sidebar and light pane focus</strong><br><span style="color:#666">优化 Review 窗口焦点刷新、筛选选中同步、左侧栏拖动稳定性和窄侧栏文件行;同时降低亮色模式多终端失焦窗格的灰度差。</span></li>
+    <li>fix(autosuggest): make toggle-off actually strip the .zshrc block / 修复关闭历史命令自动补全后 .zshrc 块删不掉 (#75)</li>
+    <li><strong>fix(review): patch 10 follow-up findings from #70 review / 修补 #70 review 出的 10 个隐患 (#71)</strong><br><span style="color:#666">跟进 #70 的 10 处 review 隐患修补:watchdog SIGKILL 的 pid 回收 race(主因)、ls-files 漏 readTimeout(整丢 untracked)、fileDiff 截断当完整 diff 渲染、本地路径 tilde 不展开、本地计数与 git numstat 在 Latin-1 / tail-NUL 上不一致、本地字节读阻塞 cooperative 线程、timeout 改成强制 enum intent(`.poll/.read/.write/.apply`)、`isRemote` 抽象上移到 runner、git apply 改成无 ceiling 避免半应用。3 个实际 untracked + 3 个边界用例对齐 git numstat = 0 mismatches;build/tests 通过。</span></li>
+    <li>fix(review): bound git ops to stop hangs + faster file list / 限制 git 操作防卡死 + 加快文件列表 (#70)</li>
+    <li>release: appcast for v0.1.25-beta.5</li>
+  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.25-beta.5</h3><ul>
     <li><strong>feat(autosuggest): zsh history-driven inline command suggestions / zsh 历史命令自动补全</strong><br><span style="color:#666">新增 zsh 历史命令灰字自动补全(设置 ▸ 终端 ▸ 命令提示,默认开);</span></li>
     <li>release: appcast for v0.1.25-beta.4</li>
-  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.25-beta.4</h3><ul>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.25-beta.4</h3><ul>
     <li><strong>feat(review): review changes over SSH (auto-follow remote session) / 通过 SSH 审阅远程仓库改动(自动跟随远程会话) (#62)</strong><br><span style="color:#666">修两处 SSH Review 的脚 gun。</span></li>
     <li><strong>feat(review): syntax highlighting in the diff view / diff 视图语法高亮 (#64)</strong><br><span style="color:#666">SQL profile 只列大写关键字 + 大小写敏感匹配,导致小写写法（现代风格）</span></li>
     <li>feat(review): adjustable context lines in Changes Only / 仅显示改动模式下可调上下文行数 (#63)</li>
@@ -79,11 +86,88 @@
     <li><strong>fix(devin): localize &quot;Hook config&quot; + correct Devin mascot status-cue comment</strong><br><span style="color:#666">修复 Devin 设置项「Hook config」漏译,并改正侧栏 Devin 图标状态提示的矛盾注释。</span></li>
     <li><strong>fix(terminal): guard ⌘-clicked file:// URLs against launching code (#29)</strong><br><span style="color:#666">修复 ⌘-click 打开 file:// 链接可能直接启动恶意 .app/.command 的隐患</span></li>
     <li>release: appcast for v0.1.23-beta.5</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.23-beta.5</h3><ul>
-    <li><strong>feat(review): read-only changes review window + worktree polish &amp; git perf</strong><br><span style="color:#666">新增只读「改动审阅」窗口(文件树+统一 diff,工作树/整分支对比),修若干新建工作区与审阅窗口的问题,并优化 git 状态轮询与大 diff 渲染性能</span></li>
-    <li><strong>feat(worktree): 工作树/仓库工作区 + git 状态 + 全量本地化</strong><br><span style="color:#666">新增工作树/仓库工作区(隔离分支 + 一键 agent)、侧栏与标题栏 git 状态</span></li>
-    <li>release: appcast for v0.1.23-beta.4</li>
   </ul></div>]]></description>
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.25-beta.6/Glint-0.1.25-beta.6.dmg" length="19105525" type="application/octet-stream" sparkle:edSignature="c9SBawZxxBbzlFheWWekf+V09NoJ1yIqFtM4HQCLf8egCkYsLXL7FZZH819O3DRU/pWkjqYgj1Cp+hk4SO8LBA==" />
+    </item>
+    <item>
+      <title>Glint 0.1.25-beta.5</title>
+      <sparkle:version>202606281341</sparkle:version>
+      <sparkle:shortVersionString>0.1.25-beta.5</sparkle:shortVersionString>
+      <sparkle:channel>beta</sparkle:channel>
+      <pubDate>Sun, 28 Jun 2026 13:44:10 +0000</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description>&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.25-beta.5&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(autosuggest): zsh history-driven inline command suggestions / zsh 历史命令自动补全&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增 zsh 历史命令灰字自动补全(设置 ▸ 终端 ▸ 命令提示,默认开);&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.25-beta.4&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;!--GLINT_HISTORY_BELOW--&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3 style="color:#666;"&gt;历史版本 · Previous releases&lt;/h3&gt;&lt;/div&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.25-beta.4&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(review): review changes over SSH (auto-follow remote session) / 通过 SSH 审阅远程仓库改动(自动跟随远程会话) (#62)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修两处 SSH Review 的脚 gun。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(review): syntax highlighting in the diff view / diff 视图语法高亮 (#64)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;SQL profile 只列大写关键字 + 大小写敏感匹配,导致小写写法（现代风格）&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;feat(review): adjustable context lines in Changes Only / 仅显示改动模式下可调上下文行数 (#63)&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(settings): clarify macOS notification toggle only fires when Glint is in background / 明确通知开关仅在 Glint 后台时触发 (#69)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;设置里 macOS 通知开关的副标题改为「仅在 Glint 处于后台时触发」,把跟 workspace 无关、跟 app 前后台状态有关说清楚。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(sidebar): drop selected-card left accent bar, keep only wash / 选中工作区移除左侧 accent 竖条,只留 wash (#68)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;选中工作区不再叠加左侧 accent 竖条,只保留 wash 底色。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: 10 findings from recall-biased review of v0.1.24..HEAD / 修复全量代码 review 出的 10 处问题 (#67)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 10 项 review findings:SSH Review 行数算错/IPv6 host/agent session 错串/transient tool 误清 session/语法高亮跨行污染/首开主题/scrollback 5s 烧 CPU/自动保存空写 等。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(review): tilde-preserving quote + dedupe shellQuote / 保留 ~ 不引并统一 shellQuote (#66)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;SSH Review 修复保留 `~` 展开 + 远程命令全量 quote + 统一 shellQuote 实现;路径白名单加 Unicode/空格/`@` 支持(同时拒 `..` 与非 ASCII host)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(review): neutralize remote-shell command injection in SSH Review (#65)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修 #62 引入的远端命令注入。`parseRemoteTitle` 从远端 shell 的终端标题&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(focus): focus the terminal at launch, not the sidebar search / 启动后焦点落到右侧终端而非左侧搜索框 (#60)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;启动后焦点落在左侧搜索框而非右侧终端。AppKit 默认把启动焦点给了搜索框的 field editor（NSText），而终端每秒一次的焦点同步专门跳过 NSText 状态（避免抢用户点中的搜索框），导致终端抢不回焦点。新增一次性 assertTerminalFocusOnLaunch 直接 makeFirstResponder(终端)，绕过该守卫，复用 #32 的 focus-claim 模式。启动安全：仅经 DispatchQueue.main.async 在窗口上屏后执行；用 surface.window 而非 NSApp.keyWindow（避免 #43 式启动期 nil）；全程可选解包 + [weak self]；只用 10.0 起稳定的 first-responder API（部署目标 14.0）。弹窗占用焦点时 no-op。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.25-beta.3&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release-notes: 0.1.25-beta.4&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;0.1.25-beta.4 更新内容:SSH Review、Diff 语法高亮、可调上下文行数、启动焦点终端、侧栏 / 通知文案细节。&lt;/span&gt;&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.25-beta.3&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(review): split diff, whole-file/changes-only, ignore-whitespace, change nav (#61)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Review 窗口新增并排 diff、Show All / Changes Only、忽略空白三个 toggle,Opt+↑/↓ 跳转改动且在大文件下改瞬跳;Review 窗口跟随 Glint 主题(不再钉在 .dark)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(terminal): CJK fallback font picker + font catalog&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;终端设置新增「CJK fallback」字体下拉，可挑 PingFang / Hiragino 等 CJK 兜底字体（主字体缺中文字形时回落到这里，再到 Menlo）；字体下拉变成可搜索+分组（Recommended / All installed），覆盖 SF Mono 等系统字体；ghostty config 注入面加固（cursor-style 走白名单、所有 UD 来源 value 剥控制字符）。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(workspace): optional macOS notification on agent attention (#59)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增可选的静默 macOS 通知,后台 agent 需要批准/完成/出错时弹横幅(chime 之外的视觉提示,默认关);仅整个 Glint 不在前台时触发,点横幅激活窗口并切到对应 pane;scene 从 WindowGroup 换成单实例 Window 防止激活时再开一个窗口,稳定 per-pane id + quit 时清空已发送通知防死链接。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(review): root-or-cwd scope for Review/Reveal + fix subdir empty diff / Review 与 Reveal 支持「仓库根 vs 当前目录」并修复子目录 diff 为空 (#57)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Review/Reveal 一律以 git 仓库根为根、用相对根的路径跑 git,修复 plain workspace 在子目录里 Review 全空的 bug;新增「在仓库根」总开关(Review、Reveal in Finder 各一,默认开)统一普通工作区与 worktree;所有「在访达中打开」改成 dive-in。⌘⇧F 默认行为相应变为打开仓库根,可在设置里关回 cwd。取代 #48。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;refactor(codex): route all CodexHome reads through one store accessor (#54)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;把 CodexHome 的 UserDefaults 解码集中到 CodexHomeStore.configuredHomes(),AgentHookInstaller/UsageStore 全部走它,删除两份漂移副本;附带 CLAUDE.md 加 worktree 缺 GhosttyKit.xcframework 的说明。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;refactor(review): classify diff lines by marker, drop unrecognized meta (#55)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;diff parse 改成按行首 marker(+/-/空格)分类,未识别的 git 元信息行直接丢弃,新增 dissimilarity index 这类未列入旧 allow-list 的头的覆盖测试。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(review): nav anchor + theme follow + filter edge cases from code review&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修了 10 处 code review 发现的问题:Opt+↑/↓ 在 &amp;gt;6000 行整文件 diff 上跳不动 / 首次 Opt+↑ 跳到第一个改动而非最后;Review 窗口运行时切主题菜单文字白底白字;未跟踪文件忽略 Show All / Ignore Whitespace 开关;Ignore Whitespace 把所有改动过滤光时整个 pane 空白没提示;mode/showContext toggle 把 diff 滚回顶;rename 中工作区被删时 store.isRenaming 卡 true 导致侧栏搜索焦点被误吹;ignoreWS 菜单图标缺一格;三个 toolbar menu 抽公共组件去重。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(rename): narrow click-away commit to rename fields only / 收紧点击外部确认：仅作用于重命名 (#58)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;重命名 workspace / tab 时点空白处即可提交(不再只能按回车);仅在重命名期间生效,侧栏搜索等其它文本框不受影响。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(codex): persist Codex Home per pane so non-default homes survive restart / 持久化每窗格 Codex Home，修复非默认 Home 重启后 resume 失效 (#49)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Pane 新增 codexHome 字段持久化非默认 Codex Home 路径,重启后 codex resume 用同一个 CODEX_HOME 前缀,修复多 Home 场景下 #45 引入的 resume 失效;仅在面板回到 benign shell(用户真的退出 codex)时清理,Codex 子进程短暂抢前台不影响。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(hooks): deliver hook events when mktemp fails + dedup removeReporterIfUnused (#53)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;共享 reporter 清理合并为 AgentHookInstaller.removeReporterScriptIfUnused() 单一入口,由 reporterSharingInstallers 列表驱动;shell 钩子 mktemp 失败时仍 drain 并下发无 session_id 事件,不再吞掉整条事件。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(workspace): guard New Workspace detect() against stale repo probes / 修复 detect() 陈旧探测竞态 (#51)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新工作区表单 detect() 加 staleness 守卫,旧 repo 探测晚到时不再覆盖新值,空字段时复位 spinner,行为与 branchChanged() 守卫一致。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(persistence): don&amp;#x27;t disable all saves after a one-time repair-write failure (#50)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Persistence 修复后写盘失败时不再设 corruptUnmovablePath 封死整会话保存,改为日志并让下次 autosave 重试,把瞬态磁盘问题从「整会话数据丢失」降级为一次重试。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(launch): guard applyAppIcon() against the NSApp launch race (#43) (#52)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;applyAppIcon() 补上和 dock-tile 路径相同的 NSApp nil 守卫,防止未来 init 阶段调用方再撞到 #43 同源 IUO trap。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.25-beta.2&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release-notes: 0.1.25-beta.3&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;这一版的「更新内容」：Review 窗口大升级（split / Changes Only /&lt;/span&gt;&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.25-beta.2&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(chrome): light-mode chrome polish + scrollback byte-budget rewrite&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;亮色模式 chrome 整体优化（窗口/sidebar/玻璃浮岛/sheet/Settings 跟主题不再被钉死在暗色，修了透明窗 1pt 黑边、sidebar 用真 vibrancy + 立体分隔条、WorkspaceCard 选中态改用更轻的 wash + 左侧 accent 指示条）；scrollback 设置从行数改成内存预算（5–250MB），UI 给出估算行数范围，老设置自动迁移。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(terminal): add bold font toggle in settings&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;终端设置里新增「Bold」开关，开启后整个终端以字体的 Bold 切片渲染。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(chrome): make glass capsule fallback theme-aware&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;pre-26 / 玻璃关时的浮岛 header 在亮色主题下显示成深色 capsule 的回退材质按主题分叉。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.25-beta.1&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.25-beta.1&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix(workspace): harden NSApp.dockTile access against launch-time race (#43)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;加固 WorkspaceStore 里 NSApp.dockTile 的访问，避开 #43 上 v0.1.24 启动&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;test(codex): loosen error-message assertions for localized strings&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;555e7bc 之后 Codex 错误文案走了 xcstrings，相关断言改为校验枚举 case + 文案非空，&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;chore(gitignore): exclude local one-off diagnostic builds (build-diag/)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;把本次诊断流程产出的 build-diag/ 加入 .gitignore（本地一次性产物，不入库）&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release-notes: 0.1.25-beta.1&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;写 0.1.25-beta.1 的 ReleaseNotes 条目（按 CLAUDE.md 规则与 tag commit 同步写）。三条用户可见：#43 启动崩溃路径加固、#45 各 agent 窗格各自 resume 自己的 session、⌘⇧F 在访达中显示。#43 那条措辞偏「加固」而非「修复」，原因是本地没有 15.1.x 复现条件，机理上 trap vector 已堵死但缺现场闭环。&lt;/span&gt;&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.24&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;release: 0.1.24 hotfix for #43 macOS 15 launch crash&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;0.1.24 热修版,代码与 v0.1.23(已含 #43 修复)一致;仅升版本号以便 Sparkle 把修复推给那些下载了 fix 前 0.1.23 DMG、现在每次启动都崩的用户。同时把 ReleaseNotes 里 0.1.24-beta.1 占位条目转正为 bare 0.1.24,并补一行 #43 修复说明。&lt;/span&gt;&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.23-beta.8&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix(codex): harden shared Codex session routing across edge cases&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 Codex 共享会话路由的 10 个边角问题:cwd 解析符号链接、跨实例&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;fix(codex): route shared app-server hooks to panes&lt;/li&gt;
+    &lt;li&gt;fix(palette): restore focus on close + reliable arrow-key navigation (#37)&lt;/li&gt;
+    &lt;li&gt;fix(theme): English source strings + zh-Hans catalog for theme UI (#38)&lt;/li&gt;
+    &lt;li&gt;fix(persistence): tolerate a single bad workspace + guard the repaired write (#39)&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.23-beta.7&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.23-beta.7&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(codex): launch Codex under a chosen home from every new-terminal entry&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新建标签页/分屏/工作区时,可在&amp;quot;打开方式&amp;quot;、命令面板和新建工作树面板里按 Codex Home 启动 Codex —— 多个 Home 会分别列出并显示目录,选哪个就以哪个 CODEX_HOME 启动。同时修复了额度为空时状态文案未翻译的问题。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(codex): support multiple Codex home directories (#34)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;支持配置多个 Codex home 目录,各自安装钩子并在侧栏显示额度&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(workspace): agent-launch chooser + worktree-only New Workspace sheet (#27)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增「新建时询问启动哪个 Agent」开关(默认关),⌘T/⌘D/⌘N 和 + 按钮弹出轻量选择面板,新标签页/分屏/工作区都能直接以 Claude/Codex/OpenCode/Devin 或纯终端启动;新建工作区窗口收成纯「新建工作树」,可选把 base 未提交改动带进工作树(失败弹警告)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;perf(review): O(1) child lookup in TreeNode.build (#30)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Review 文件树构建从 O(N²) 优化到 O(N·D)(按累加路径建字典索引)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(codex): localize home status placeholders + match Glint&amp;#x27;s flat field/badge styling&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Codex Home 卡片状态徽章化 + 输入框统一深色样式 + 补 Usage off/Disabled 翻译&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(shortcut): ⌘W closes the focused secondary window instead of the terminal pane (#31)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复副窗口(审阅窗口/设置/新建工作区 sheet)前台时 ⌘W 误关终端 pane 的问题。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(palette): command palette search field reliably takes focus (#32)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复命令面板打开时搜索框抢不到焦点、按键落到终端的问题。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(review): tint diff for CRLF (Windows) files (#33)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 Windows(CRLF)文件在 Review diff 面板里不着色、+/- 标记泄漏的问题。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;chore(xcodegen): normalize pbxproj after CloseOnCmdW.swift add (#31)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;用 xcodegen 重新生成 pbxproj,归一化 #31 手改的条目。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.23-beta.6&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.23-beta.6&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(agent): Devin CLI support (#28)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;接入 Devin CLI:逐窗格状态、会话恢复、可从新建工作树面板直接启动;事件按 Devin 官方文档对齐,测试改为可隔离运行。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(worktree): tooltip on the disabled Create button explaining what&amp;#x27;s missing&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新建工作树时,变灰的「创建」按钮 hover 会提示还差什么(未填分支名等)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(devin): localize &amp;quot;Hook config&amp;quot; + correct Devin mascot status-cue comment&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 Devin 设置项「Hook config」漏译,并改正侧栏 Devin 图标状态提示的矛盾注释。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(terminal): guard ⌘-clicked file:// URLs against launching code (#29)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 ⌘-click 打开 file:// 链接可能直接启动恶意 .app/.command 的隐患&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.23-beta.5&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.23-beta.5&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(review): read-only changes review window + worktree polish &amp;amp; git perf&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增只读「改动审阅」窗口(文件树+统一 diff,工作树/整分支对比),修若干新建工作区与审阅窗口的问题,并优化 git 状态轮询与大 diff 渲染性能&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(worktree): 工作树/仓库工作区 + git 状态 + 全量本地化&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增工作树/仓库工作区(隔离分支 + 一键 agent)、侧栏与标题栏 git 状态&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.23-beta.4&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;</description>
       <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.25-beta.5/Glint-0.1.25-beta.5.dmg" length="18726020" type="application/octet-stream" sparkle:edSignature="9nZ+cfel23J2DucS7MFDZ07EmCdv3op5DPedl7PO9rE4k/6PmvCnmx/F1xSRX3tEy2cid3zdLsGUH1iuuFqTBQ==" />
     </item>
     <item>
