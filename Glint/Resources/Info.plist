@@ -41,5 +41,46 @@
 	<string>https://raw.githubusercontent.com/chenbstack/glint/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>H8aS+y7VAi2SyldeYcNAHur5C4JqM4eLetjOXKYOaQc=</string>
+	<!-- Receiving paths: folders open as a workspace, plain files execute after
+	     a confirm, and glint:// URLs carry a path query param. Alternate rank so
+	     Glint never steals Finder's default — it only appears in "Open With". -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Folder</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.folder</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>File</string>
+			<key>CFBundleTypeRole</key>
+			<string>Shell</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.item</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.glint.Glint</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>glint</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

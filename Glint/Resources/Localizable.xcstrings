@@ -1,6 +1,17 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "\"%@\" is not executable.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" 不是可执行文件。"
+          }
+        }
+      }
+    },
     "%@": {},
     "%@ used": {
       "extractionState": "manual",
@@ -560,6 +571,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "构建通道"
+          }
+        }
+      }
+    },
+    "Allow": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许"
+          }
+        }
+      }
+    },
+    "Allow Glint to execute \"%@\"?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许 Glint 执行 \"%@\"?"
           }
         }
       }
@@ -1821,6 +1854,17 @@
         }
       }
     },
+    "Glint can only run files with the executable bit set.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 只能运行设置了可执行权限的文件。"
+          }
+        }
+      }
+    },
     "Glint can register a small hook with Claude Code (~/.claude/settings.json) and Codex (~/.codex/hooks.json) that reports when an agent is thinking, finished, or waiting for approval. It only sends events to Glint on this Mac. You can uninstall it anytime in Settings → Agents.": {
       "extractionState": "manual",
       "localizations": {
@@ -1891,6 +1935,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Glint 会在后台查找新版本。"
+          }
+        }
+      }
+    },
+    "Glint will run this file in a shell at its parent directory.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 将在其父目录的 shell 中运行此文件。"
           }
         }
       }
@@ -2578,6 +2633,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "新建工作区 · %@"
+          }
+        }
+      }
+    },
+    "New workspace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建工作区"
           }
         }
       }

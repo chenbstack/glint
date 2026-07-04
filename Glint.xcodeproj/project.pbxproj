@@ -47,6 +47,7 @@
 		B1DE20B081ACC4536DBD2089 /* GitStatusPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54663E213FE879B96C0D80E7 /* GitStatusPopover.swift */; };
 		B70CAFEBB2416E25B0FFED97 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C48F9D3C512A0ABE8369D0F4 /* Sparkle */; };
 		BFF9A1736CA029241BB0622D /* SSHGitRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8EDEAA2D0EAD42ED6F1915 /* SSHGitRunnerTests.swift */; };
+		C0667FA434EF07D98DED44D1 /* AEBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = 0D5B5D0462A1225A56E6EE85 /* AEBridge.m */; };
 		C0E8D97C08BA3F0FA33F31E7 /* CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 235E2D958A2244483CAA0812 /* CommandPalette.swift */; };
 		C11ED5034D6EF2BA539846AD /* FontCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C753FB652599A4C7900F8AA4 /* FontCatalog.swift */; };
 		C41119D04864077E5B554F59 /* CodexHomeStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AB338782EF6F22B7B381DA8 /* CodexHomeStoreTests.swift */; };
@@ -90,12 +91,14 @@
 		08FC2FBC9E8729A5ECBF857C /* PaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneView.swift; sourceTree = "<group>"; };
 		0C5FD3EEA1ECD40F78394862 /* AgentLaunchChooser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLaunchChooser.swift; sourceTree = "<group>"; };
 		0D29C0D2447094B07854C193 /* NewWorkspaceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewWorkspaceSheet.swift; sourceTree = "<group>"; };
+		0D5B5D0462A1225A56E6EE85 /* AEBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AEBridge.m; sourceTree = "<group>"; };
 		0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevinHookInstallerTests.swift; sourceTree = "<group>"; };
 		0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageReaderTests.swift; sourceTree = "<group>"; };
 		150EEF32284061D527E51866 /* GlintTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintTheme.swift; sourceTree = "<group>"; };
 		16137B405E48DBE262A15B6D /* PaneSurfaceRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSurfaceRepresentable.swift; sourceTree = "<group>"; };
 		1E646AABA8ADCE8A2A5C6F55 /* PaneTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeView.swift; sourceTree = "<group>"; };
 		21868C7211897C87A6CAD7C3 /* ControlBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlBridge.swift; sourceTree = "<group>"; };
+		223D9249D7FF29F87D9DE3A4 /* Glint-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Glint-Bridging-Header.h"; sourceTree = "<group>"; };
 		235E2D958A2244483CAA0812 /* CommandPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPalette.swift; sourceTree = "<group>"; };
 		25DADCEBA9C483C729B69388 /* Glint.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Glint.entitlements; sourceTree = "<group>"; };
 		26141150D2DB4C0589558ECC /* CodexHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHookInstallerTests.swift; sourceTree = "<group>"; };
@@ -318,7 +321,9 @@
 		CE6E633968E3B9EE7F187610 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				0D5B5D0462A1225A56E6EE85 /* AEBridge.m */,
 				9E67CF5D8552AE1F51386161 /* AppDelegate.swift */,
+				223D9249D7FF29F87D9DE3A4 /* Glint-Bridging-Header.h */,
 				7CB74659D174004C620D538A /* GlintApp.swift */,
 				407B3A9D15F4B9E613DA1CF8 /* ReleaseNotes.swift */,
 				DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */,
@@ -478,6 +483,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0667FA434EF07D98DED44D1 /* AEBridge.m in Sources */,
 				E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */,
 				9F605AB2DC185A94ED28E6D4 /* AgentChoice.swift in Sources */,
 				3932A4CFEFF6FB81AE283645 /* AgentHookInstaller.swift in Sources */,
@@ -592,6 +598,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = app.glint.Glint;
 				PRODUCT_NAME = Glint;
 				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "Glint/App/Glint-Bridging-Header.h";
 			};
 			name = Release;
 		};
@@ -720,6 +727,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = app.glint.Glint.dev;
 				PRODUCT_NAME = Glint;
 				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "Glint/App/Glint-Bridging-Header.h";
 			};
 			name = Debug;
 		};
