@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 import CoreText
 import UserNotifications
 
@@ -47,6 +48,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.global(qos: .utility).async {
                 FontCatalog.warmCache()
             }
+        }
+    }
+
+    /// Intercept folder / file / `glint://` opens at the raw Apple-Event level,
+    /// BEFORE NSApplication's default dispatch sees them.
+    ///
+    /// Why not `application(_:open:)` or `.onOpenURL`: Glint declares
+    /// `CFBundleDocumentTypes` so Launch Services will deliver an `odoc` event
+    /// for a folder/file — but on a running single-`Window` SwiftUI app, when
+    /// SwiftUI/NSApplication's default handler processes that `odoc`, it tears
+    /// the window down, and `applicationShouldTerminateAfterLastWindowClosed`
+    /// then quits the app. Registering our own `kAEOpenDocuments` / `kAEOpenURLs`
+    /// handlers pre-empts that: NSApplication sees a handler is already set and
+    /// skips its default dispatch, so SwiftUI never reacts and the window stays.
+    /// We route the paths to `WorkspaceStore` ourselves.
+    ///
+    /// Must run in `applicationWillFinishLaunching` (before NSApplication
+    /// installs its own handlers during finishLaunching). Cold-launch timing is
+    /// handled by the `pendingOpenURLs` queue + `WorkspaceStore.init` drain.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        let aem = NSAppleEventManager.shared()
+        aem.setEventHandler(self, andSelector: #selector(appleEventOpenDocuments(_:withReplyEvent:)),
+                            forEventClass: kCoreEventClass, andEventID: kAEOpenDocuments)
+        aem.setEventHandler(self, andSelector: #selector(appleEventOpenURLs(_:withReplyEvent:)),
+                            forEventClass: AEEventClass(kInternetEventClass),
+                            andEventID: AEEventID(kAEGetURL))
+    }
+
+    /// `kAEOpenDocuments` (odoc): Finder "Open With", dock drop, `open -a Glint
+    /// <folder>`. The direct object is a list of file-ref descriptors; coerce
+    /// each to a `file://` URL.
+    @objc private func appleEventOpenDocuments(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
+        Self.deliver(extractFileURLs(from: event))
+    }
+
+    /// `kAEGetURL` (GURL): a `glint://` link.
+    @objc private func appleEventOpenURLs(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
+        Self.deliver(extractURLStrings(from: event))
+    }
+
+    private func extractFileURLs(from event: NSAppleEventDescriptor) -> [URL] {
+        guard let direct = event.paramDescriptor(forKeyword: keyDirectObject) else { return [] }
+        // fileURLValue coerces each item (alias / file-ref descriptor) to a URL.
+        return descriptorList(direct).compactMap { $0.fileURLValue }
+    }
+
+    private func extractURLStrings(from event: NSAppleEventDescriptor) -> [URL] {
+        guard let direct = event.paramDescriptor(forKeyword: keyDirectObject) else { return [] }
+        // GURL's direct object is a URL string (sometimes a list of them).
+        return descriptorList(direct).compactMap { $0.stringValue.flatMap(URL.init(string:)) }
+    }
+
+    /// Treat `desc` as a list of descriptors, or a single-element list if it
+    /// isn't an AEList. `descriptorAtIndex:` isn't bridged to Swift on this SDK
+    /// (and `perform(_:with:)`/`NSInvocation` can't pass a primitive NSInteger),
+    /// so reach it through the `glint_aeDescriptorAtIndex` ObjC shim in
+    /// AEBridge.m. Items are 1-indexed.
+    private func descriptorList(_ desc: NSAppleEventDescriptor) -> [NSAppleEventDescriptor] {
+        guard desc.descriptorType == typeAEList else { return [desc] }
+        let n = desc.numberOfItems
+        guard n > 0 else { return [] }
+        return (1...n).compactMap { glint_aeDescriptorAtIndex(desc, $0) }
+    }
+
+    private static var pendingOpenURLs: [URL] = []
+    /// Re-entry guard: `openURL` may run a modal (the execute-file confirm)
+    /// whose nested run loop delivers more Apple Events → `deliver` → `flush`.
+    /// The guard makes re-entrant calls a no-op; the outer `flush` loop keeps
+    /// draining `pendingOpenURLs` after each modal returns, so confirms never
+    /// stack on top of each other.
+    private static var isFlushing = false
+    private static func deliver(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        pendingOpenURLs.append(contentsOf: urls)
+        flush()
+    }
+    /// Drain anything queued before the store existed. Called from `deliver`
+    /// (warm) and from `WorkspaceStore.init` (cold, once `current` is set).
+    static func flush() {
+        guard let store = WorkspaceStore.current, !pendingOpenURLs.isEmpty else { return }
+        guard !isFlushing else { return }
+        isFlushing = true
+        defer { isFlushing = false }
+        while let url = pendingOpenURLs.first {
+            pendingOpenURLs.removeFirst()
+            store.openURL(url)
         }
     }
 

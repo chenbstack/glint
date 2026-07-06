@@ -1357,6 +1357,10 @@ final class WorkspaceStore: ObservableObject {
         }
         self.sidebarCollapsed = loaded.sidebarCollapsed
         Self.current = self
+        // Drain paths Launch Services handed us before the store existed (cold
+        // launch with a folder/file/glint:// URL). No-op when nothing's pending;
+        // AppDelegate.deliver also calls flush() for warm-launch opens.
+        DispatchQueue.main.async { AppDelegate.flush() }
 
         // Reconcile the zsh-side inline-suggestion install on every launch:
         // first-ever launch installs from the current default; subsequent
@@ -2459,13 +2463,13 @@ final class WorkspaceStore: ObservableObject {
     /// Open a new tab in the current workspace, inheriting the focused pane's
     /// cwd (terminal convention: a new tab opens "here"). Inserts it right
     /// after the current tab and selects it.
-    func newTab(agentCommand: String? = nil, codexHome: String? = nil) {
+    func newTab(cwd: String? = nil, agentCommand: String? = nil, codexHome: String? = nil) {
         guard let i = currentIndex else { return }
         let inheritedCwd = (workspaces[i].selectedTab?.focusedPane)
             .flatMap { workspaces[i].panes[$0]?.workingDirectory }
         let pane = PaneID(value: workspaces[i].nextPaneSeq)
         workspaces[i].nextPaneSeq += 1
-        workspaces[i].panes[pane] = Pane(id: pane, title: "zsh", workingDirectory: inheritedCwd)
+        workspaces[i].panes[pane] = Pane(id: pane, title: "zsh", workingDirectory: cwd ?? inheritedCwd)
         let tab = WorkspaceTab(id: TabID(value: workspaces[i].nextTabSeq), name: nil,
                                root: .leaf(pane), focusedPane: pane)
         workspaces[i].nextTabSeq += 1
@@ -2720,18 +2724,135 @@ final class WorkspaceStore: ObservableObject {
         ]
         let pick = palette[workspaces.count % palette.count]
         // Auto-named: fallback label is "New workspace" until the shell reports a cwd.
-        let ws = Workspace.fresh(name: "New workspace", accentHex: pick.0, symbol: pick.1)
+        let ws = Workspace.fresh(name: String(localized: "New workspace"), accentHex: pick.0, symbol: pick.1)
         workspaces.append(ws)
         selectedWorkspaceID = ws.id
         // Workspace.fresh seeds a single pane at PaneID 0.
         queueInitialInput(agentCommand, codexHome: codexHome, workspace: ws.id, pane: PaneID(value: 0))
     }
 
-    /// Open a workspace anchored at `directory` (the "Local Repo" source). The
-    /// shell is seeded there immediately so it opens in the right place — the old
-    /// stub called `addWorkspace()` and dropped the path, landing the user in
-    /// their home dir. If the directory is inside a git repo, the source is then
-    /// upgraded to `.localRepo` so the git button / worktree actions light up.
+    // MARK: - Open via path (Launch Services: folders / files / glint://)
+
+    /// Route a URL handed to Glint by Launch Services (`open -a Glint <path>`,
+    /// Finder "Open With", a dock drop, an external launcher, a `glint://` link).
+    /// File URLs and `glint://open?path=…` both bottom out in `openPath`. Entry
+    /// point: raw `odoc`/`GURL` Apple-Event handlers registered in
+    /// `AppDelegate.applicationWillFinishLaunching` (intercepted there because
+    /// SwiftUI's default handling tears the single-`Window` scene down on a warm
+    /// odoc); the cold-launch queue + drain live in `AppDelegate.flush`.
+    func openURL(_ url: URL) {
+        if url.isFileURL {
+            openPath(url.path)
+        } else if url.scheme == "glint" {
+            // glint://open?path=<percent-encoded absolute path>. Query form so
+            // slashes / special chars in the path survive URLComponents intact.
+            guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                  let raw = comps.queryItems?.first(where: { $0.name == "path" })?.value,
+                  !raw.isEmpty else { return }
+            openPath((raw as NSString).expandingTildeInPath)
+        }
+    }
+
+    /// Dispatch a filesystem path to folder- or file-handling by what's on disk.
+    private func openPath(_ path: String) {
+        let standardized = (path as NSString).standardizingPath
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: standardized, isDirectory: &isDir) else { return }
+        if isDir.boolValue { openFolder(standardized) } else { openFile(standardized) }
+    }
+
+    /// Open a workspace anchored at `directory`. If a workspace already anchored
+    /// there exists, switch to it and open a new tab; otherwise append a new one.
+    /// The append runs synchronously so a concurrent open of the same folder
+    /// dedupes instead of racing into a duplicate; the source is upgraded to
+    /// `.localRepo` in place once git reports the repo root.
+    private func openFolder(_ directory: String) {
+        if let existing = workspaces.first(where: { isAnchoredAt($0, directory) }) {
+            selectedWorkspaceID = existing.id
+            newTab(cwd: directory)
+            return
+        }
+        let dirName = (directory as NSString).lastPathComponent
+        let wsID = appendWorkspace(cwd: directory, source: .plain,
+                                   name: dirName.isEmpty ? String(localized: "New workspace") : dirName)
+        Task {
+            if let root = await git.repoRoot(at: directory),
+               let i = workspaces.firstIndex(where: { $0.id == wsID }) {
+                workspaces[i].source = WorkspaceSource(kind: .localRepo, repoRoot: root)
+            }
+            await refreshGitStatus(for: wsID)
+        }
+    }
+
+    /// True if `ws` opens into `directory` — for deduping folder opens. Matches
+    /// the bound repo root (or, for a worktree, its worktree path — a worktree
+    /// shares `repoRoot` with the main checkout, so matching on repoRoot would
+    /// wrongly absorb a main-repo open into a worktree workspace) OR the focused
+    /// pane's cwd (covers a workspace opened at a repo subdir).
+    private func isAnchoredAt(_ ws: Workspace, _ directory: String) -> Bool {
+        let boundPath = (ws.source.kind == .localWorktree) ? ws.source.worktreePath : ws.source.repoRoot
+        if boundPath == directory { return true }
+        let cwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
+            ?? ws.panes.values.compactMap(\.workingDirectory).first
+        return cwd == directory
+    }
+
+    /// Execute a plain file in a shell (mirrors Ghostty's openFile): confirm,
+    /// then run `'<path>'; exit` with the parent directory as cwd. Non-executable
+    /// files are refused upfront (otherwise the pane just dies with "permission
+    /// denied"). Always asks — no "don't ask again" — because executing an
+    /// arbitrary file is a trust boundary.
+    private func openFile(_ path: String) {
+        guard FileManager.default.isExecutableFile(atPath: path) else {
+            let alert = NSAlert()
+            alert.messageText = String(format: String(localized: "\"%@\" is not executable."),
+                                       (path as NSString).lastPathComponent)
+            alert.informativeText = String(localized: "Glint can only run files with the executable bit set.")
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: String(localized: "OK"))
+            alert.runModal()
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = String(format: String(localized: "Allow Glint to execute \"%@\"?"), path)
+        alert.informativeText = String(localized: "Glint will run this file in a shell at its parent directory.")
+        alert.alertStyle = .warning
+        // Cancel is the default button (Enter) so executing the file takes an
+        // explicit click on Allow rather than a reflexive ⏎.
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        alert.addButton(withTitle: String(localized: "Allow"))
+        guard alert.runModal() == .alertSecondButtonReturn else { return }
+        let cmd = posixShellQuoted(path) + "; exit\n"
+        appendWorkspace(cwd: (path as NSString).deletingLastPathComponent,
+                        source: .plain,
+                        name: (path as NSString).lastPathComponent,
+                        initialInput: cmd)
+    }
+
+    /// Append a fresh single-pane workspace anchored at `cwd`, select it,
+    /// optionally seed the first pane's shell input (and Codex home), and return
+    /// its id. The single factory for "create an empty workspace" — used by
+    /// `openFolder`, `openFile`, and `createWorktreeWorkspace`.
+    @discardableResult
+    private func appendWorkspace(cwd: String, source: WorkspaceSource,
+                                 name: String, initialInput: String? = nil,
+                                 codexHome: String? = nil) -> UUID {
+        let first = PaneID(value: 0)
+        let pane = Pane(id: first, title: "zsh", workingDirectory: cwd)
+        let tab = WorkspaceTab(id: TabID(value: 0), name: nil, root: .leaf(first), focusedPane: first)
+        let ws = Workspace(
+            id: UUID(), name: name, userNamed: false,
+            accentHex: nextAccentHex(), symbol: "•",
+            tabs: [tab], selectedTabID: tab.id, nextTabSeq: 1,
+            panes: [first: pane], nextPaneSeq: 1,
+            source: source)
+        workspaces.append(ws)
+        selectedWorkspaceID = ws.id
+        // queueInitialInput also persists codexHome onto the pane (restart path).
+        queueInitialInput(initialInput, codexHome: codexHome, workspace: ws.id, pane: first)
+        return ws.id
+    }
+
     // MARK: - Worktree (Plan B: out-of-band git, never via the terminal)
 
     private func nextAccentHex() -> String {
@@ -2783,27 +2904,17 @@ final class WorkspaceStore: ObservableObject {
             catch { carryFailed = true }
         }
 
-        let first = PaneID(value: 0)
-        var pane = Pane(id: first, title: "zsh", workingDirectory: expanded)
-        pane.codexHome = codexHome
-        let tab = WorkspaceTab(id: TabID(value: 0), name: nil, root: .leaf(first), focusedPane: first)
-        let ws = Workspace(
-            id: UUID(), name: "New workspace", userNamed: false,
-            accentHex: nextAccentHex(), symbol: "•",
-            tabs: [tab], selectedTabID: tab.id, nextTabSeq: 1,
-            panes: [first: pane], nextPaneSeq: 1,
+        let wsID = appendWorkspace(
+            cwd: expanded,
             source: WorkspaceSource(kind: .localWorktree, repoRoot: repoRoot,
                                     branch: branch, baseBranch: baseBranch,
-                                    worktreePath: expanded))
-        if let cmd = agentCommand, !cmd.isEmpty {
-            let key = WorkspacePaneKey(workspace: ws.id, pane: first)
-            pendingInitialInput[key] = cmd.hasSuffix("\n") ? cmd : cmd + "\n"
-        }
-        workspaces.append(ws)
-        selectedWorkspaceID = ws.id
+                                    worktreePath: expanded),
+            name: String(localized: "New workspace"),
+            initialInput: agentCommand,
+            codexHome: codexHome)
         if carryFailed { worktreeCarryFailed = true }
-        await refreshGitStatus(for: ws.id)
-        return ws.id
+        await refreshGitStatus(for: wsID)
+        return wsID
     }
 
     /// Remove a worktree from disk (`git worktree remove`) and close its

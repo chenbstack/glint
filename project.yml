@@ -35,6 +35,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: app.glint.Glint
         INFOPLIST_FILE: Glint/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Glint/Resources/Glint.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: Glint/App/Glint-Bridging-Header.h
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
         DEVELOPMENT_TEAM: ""
