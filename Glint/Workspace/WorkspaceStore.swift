@@ -2767,8 +2767,9 @@ final class WorkspaceStore: ObservableObject {
     /// dedupes instead of racing into a duplicate; the source is upgraded to
     /// `.localRepo` in place once git reports the repo root.
     private func openFolder(_ directory: String) {
-        if let existing = workspaces.first(where: { isAnchoredAt($0, directory) }) {
-            selectedWorkspaceID = existing.id
+        if let existingIndex = workspaces.firstIndex(where: { isAnchoredAt($0, directory) }) {
+            if workspaces[existingIndex].archived { workspaces[existingIndex].archived = false }
+            selectWorkspace(workspaces[existingIndex].id)
             newTab(cwd: directory)
             return
         }
