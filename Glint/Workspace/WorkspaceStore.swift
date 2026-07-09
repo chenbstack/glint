@@ -3074,6 +3074,25 @@ final class WorkspaceStore: ObservableObject {
         NSSound.beep()
     }
 
+    /// Global ⌘⇧C: copy the focused pane's cwd to the clipboard — the
+    /// "where am I right now" path, useful to paste into chat/docs/another
+    /// terminal. Cwd-first; when no cwd has been reported yet (fresh pane)
+    /// falls back to the workspace's known root. Unlike Reveal in Finder it
+    /// deliberately ignores `revealAtRepoRoot`: "copy path" should give the
+    /// literal current directory, never silently jump to the repo root.
+    /// Beeps when nothing resolves.
+    func copyCurrentPath() {
+        guard let ws = selectedWorkspace else { NSSound.beep(); return }
+        let paneCwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
+        if let path = paneCwd ?? ws.source.worktreePath ?? ws.source.repoRoot
+            ?? ws.source.gitPath ?? effectiveGitPath(for: ws) {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(path, forType: .string)
+        } else {
+            NSSound.beep()
+        }
+    }
+
     /// Open the read-only Review window for a workspace. Always offers the
     /// working-tree scope; for a worktree with a known base branch it also offers
     /// the whole-branch (`base...HEAD`) scope, so the segmented control appears.

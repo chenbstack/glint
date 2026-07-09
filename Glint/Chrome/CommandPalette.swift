@@ -324,6 +324,14 @@ struct CommandPalette: View {
             tint: actionTint,
             action: { store.sidebarCollapsed.toggle() }
         ))
+        items.append(.action(
+            title: "Copy Path",
+            subtitle: "Copy the focused pane's directory",
+            symbol: "doc.on.doc",
+            shortcut: "⌘⇧C",
+            tint: actionTint,
+            action: { store.copyCurrentPath() }
+        ))
 
         return items
     }

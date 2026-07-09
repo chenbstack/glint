@@ -2114,6 +2114,8 @@ private struct ShortcutsPane: View {
             SettingsDivider()
             shortcutRow("Reveal in Finder", keys: ["⌘", "⇧", "F"])
             SettingsDivider()
+            shortcutRow("Copy Path", keys: ["⌘", "⇧", "C"])
+            SettingsDivider()
             shortcutRow("Settings", keys: ["⌘", ","])
             SettingsDivider()
             shortcutRow("Minimize", keys: ["⌘", "M"])

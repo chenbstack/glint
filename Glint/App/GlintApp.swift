@@ -144,6 +144,12 @@ struct GlintApp: App {
                     workspaceStore.revealCurrentInFinder()
                 }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
+                // Copy the focused pane's cwd (⌘⇧C) — cwd-first, so it works
+                // outside a git repo too. Never disabled; beeps if unknown.
+                Button("Copy Path") {
+                    workspaceStore.copyCurrentPath()
+                }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
             }
             // Hijack the App menu's Settings… so ⌘, opens our in-window
             // sheet instead of trying to summon a separate scene.

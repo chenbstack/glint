@@ -1132,6 +1132,17 @@
         }
       }
     },
+    "Copy the focused pane's directory": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷贝当前面板所在目录"
+          }
+        }
+      }
+    },
     "Could not create the Codex Home directory: %@": {
       "extractionState": "manual",
       "localizations": {
