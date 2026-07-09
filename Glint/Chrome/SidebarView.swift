@@ -178,18 +178,22 @@ struct SidebarView: View {
             }
         }
         guard applySort, store.sortCompletedFirst else { return base }
-        // Stable partition: `.justCompleted` first, preserving the user's
-        // drag-assigned order within each group. Using enumerated() +
-        // offset as the tiebreaker keeps the sort deterministic regardless
-        // of `sorted(by:)` stability guarantees.
-        func attention(_ e: Workspace) -> Bool {
-            let s = store.agentSummary(for: e)?.status
-            return s == .justCompleted || s == .failed   // both float: finished or errored
+        // Stable 3-tier partition, preserving the user's drag-assigned order
+        // within each tier. enumerated() + offset tiebreaker keeps the sort
+        // deterministic regardless of `sorted(by:)` stability guarantees. A
+        // blocking `.needsPermission` outranks unread results (a turn that
+        // finished or errored) — both float above everything else. A workspace
+        // waiting on approval is the one you most need to see next.
+        func rank(_ ws: Workspace) -> Int {
+            switch store.agentSummary(for: ws)?.status {
+            case .needsPermission:                  return 0   // blocking → top
+            case .justCompleted, .failed:           return 1   // unread results
+            default:                                return 2
+            }
         }
         return base.enumerated().sorted { lhs, rhs in
-            let lhsDone = attention(lhs.element)
-            let rhsDone = attention(rhs.element)
-            if lhsDone != rhsDone { return lhsDone }
+            let lr = rank(lhs.element), rr = rank(rhs.element)
+            if lr != rr { return lr < rr }
             return lhs.offset < rhs.offset
         }.map(\.element)
     }
