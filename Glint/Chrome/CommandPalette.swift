@@ -332,6 +332,36 @@ struct CommandPalette: View {
             tint: actionTint,
             action: { store.copyCurrentPath() }
         ))
+        // The remaining global menu commands, surfaced in the palette so the
+        // keyboard hub can reach every affordance without remembering its
+        // shortcut. Review Changes is gated the same way its menu item is
+        // (only when the focused workspace resolves a git path).
+        items.append(.action(
+            title: "Reveal in Finder",
+            subtitle: "Open the focused pane's directory in Finder",
+            symbol: "folder",
+            shortcut: "⌘⇧F",
+            tint: actionTint,
+            action: { store.revealCurrentInFinder() }
+        ))
+        if let ws = store.selectedWorkspace, store.effectiveGitPath(for: ws) != nil {
+            items.append(.action(
+                title: "Review Changes…",
+                subtitle: "Review this workspace's changes",
+                symbol: "eye",
+                shortcut: "⌘⇧R",
+                tint: actionTint,
+                action: { store.openReview(for: ws) }
+            ))
+        }
+        items.append(.action(
+            title: "Settings",
+            subtitle: "Open Glint settings",
+            symbol: "gearshape",
+            shortcut: "⌘,",
+            tint: actionTint,
+            action: { store.settingsOpen = true }
+        ))
 
         return items
     }

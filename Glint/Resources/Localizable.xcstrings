@@ -3031,6 +3031,28 @@
         }
       }
     },
+    "Open Glint settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开 Glint 设置"
+          }
+        }
+      }
+    },
+    "Open the focused pane's directory in Finder": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中打开当前面板所在目录"
+          }
+        }
+      }
+    },
     "Open with": {
       "extractionState": "manual",
       "localizations": {
@@ -3617,6 +3639,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "审阅改动…"
+          }
+        }
+      }
+    },
+    "Review this workspace's changes": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "审阅此工作区的改动"
           }
         }
       }
