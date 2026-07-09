@@ -2116,6 +2116,8 @@ private struct ShortcutsPane: View {
             SettingsDivider()
             shortcutRow("Copy Path", keys: ["⌘", "⇧", "C"])
             SettingsDivider()
+            shortcutRow("Jump to Attention", keys: ["⌘", "⇧", "A"])
+            SettingsDivider()
             shortcutRow("Settings", keys: ["⌘", ","])
             SettingsDivider()
             shortcutRow("Minimize", keys: ["⌘", "M"])

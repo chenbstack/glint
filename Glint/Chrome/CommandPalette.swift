@@ -362,6 +362,14 @@ struct CommandPalette: View {
             tint: actionTint,
             action: { store.settingsOpen = true }
         ))
+        items.append(.action(
+            title: "Jump to Attention",
+            subtitle: "Focus the next pane that needs you",
+            symbol: "exclamationmark.bubble",
+            shortcut: "⌘⇧A",
+            tint: actionTint,
+            action: { store.jumpToAttention() }
+        ))
 
         return items
     }

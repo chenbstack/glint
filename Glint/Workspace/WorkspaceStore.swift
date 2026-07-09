@@ -2375,6 +2375,32 @@ final class WorkspaceStore: ObservableObject {
         refreshGitStatusNow(for: workspace)
     }
 
+    /// ⌘⇧A: jump to the next pane that needs you. A pane waiting for permission
+    /// (blocking) outranks one that just finished or failed (unread results).
+    /// The current workspace is scanned first so a local attention pane wins,
+    /// then every other active (non-archived) workspace. Reuses `revealPane`
+    /// (the notification-click path): it switches workspace, selects the pane's
+    /// tab, focuses it, and clears the unread / dock-badge state. Nothing needs
+    /// attention ⇒ beep.
+    func jumpToAttention() {
+        let priority: [PaneAgentStatus] = [.needsPermission, .justCompleted, .failed]
+        let current = selectedWorkspaceID
+        let active = workspaces.filter { !$0.archived }
+        let ordered = active.filter { $0.id == current }
+            + active.filter { $0.id != current }
+        for status in priority {
+            for ws in ordered {
+                for paneID in ws.panes.keys {
+                    let key = WorkspacePaneKey(workspace: ws.id, pane: paneID)
+                    guard paneAgentState[key]?.status == status else { continue }
+                    revealPane(workspace: ws.id, pane: paneID)
+                    return
+                }
+            }
+        }
+        NSSound.beep()
+    }
+
     // MARK: - external control (control.sock)
     //
     // Command dispatch for ControlBridge. Each method runs on the main thread

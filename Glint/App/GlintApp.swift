@@ -150,6 +150,12 @@ struct GlintApp: App {
                     workspaceStore.copyCurrentPath()
                 }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
+                // Jump to the next pane needing attention (permission / done /
+                // failed). Multi-agent muscle memory; beeps if none.
+                Button("Jump to Attention") {
+                    workspaceStore.jumpToAttention()
+                }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
             }
             // Hijack the App menu's Settings… so ⌘, opens our in-window
             // sheet instead of trying to summon a separate scene.

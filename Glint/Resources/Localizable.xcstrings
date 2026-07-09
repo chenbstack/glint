@@ -1756,6 +1756,17 @@
         }
       }
     },
+    "Focus the next pane that needs you": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦到下一个需要你的面板"
+          }
+        }
+      }
+    },
     "Follow system": {
       "extractionState": "stale",
       "localizations": {
@@ -2316,6 +2327,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "隔离的分支"
+          }
+        }
+      }
+    },
+    "Jump to Attention": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跳转到待处理项"
           }
         }
       }
