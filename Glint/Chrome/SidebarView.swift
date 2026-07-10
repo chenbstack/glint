@@ -201,16 +201,11 @@ struct SidebarView: View {
         guard applySort, store.sortCompletedFirst else { return base }
         // Stable 3-tier partition, preserving the user's drag-assigned order
         // within each tier. enumerated() + offset tiebreaker keeps the sort
-        // deterministic regardless of `sorted(by:)` stability guarantees. A
-        // blocking `.needsPermission` outranks unread results (a turn that
-        // finished or errored) — both float above everything else. A workspace
-        // waiting on approval is the one you most need to see next.
+        // deterministic regardless of `sorted(by:)` stability guarantees. The
+        // ranking itself is shared with ⌘⇧A via `PaneAgentStatus.attentionRank`,
+        // so the sidebar sort and the jump-to-attention target always agree.
         func rank(_ ws: Workspace) -> Int {
-            switch store.agentSummary(for: ws)?.status {
-            case .needsPermission:                  return 0   // blocking → top
-            case .justCompleted, .failed:           return 1   // unread results
-            default:                                return 2
-            }
+            store.agentSummary(for: ws)?.status.attentionRank ?? PaneAgentStatus.sinkAttentionRank
         }
         return base.enumerated().sorted { lhs, rhs in
             let lr = rank(lhs.element), rr = rank(rhs.element)

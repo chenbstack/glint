@@ -2356,30 +2356,38 @@ final class WorkspaceStore: ObservableObject {
         refreshGitStatusNow(for: workspace)
     }
 
-    /// ⌘⇧A: jump to the next pane that needs you. A pane waiting for permission
-    /// (blocking) outranks one that just finished or failed (unread results).
-    /// The current workspace is scanned first so a local attention pane wins,
-    /// then every other active (non-archived) workspace. Reuses `revealPane`
-    /// (the notification-click path): it switches workspace, selects the pane's
-    /// tab, focuses it, and clears the unread / dock-badge state. Nothing needs
+    /// ⌘⇧A: jump to the next pane that needs you. `PaneAgentStatus.attentionRank`
+    /// is the shared ordering, so ⌘⇧A lands on the same pane that floats to the
+    /// top of the sidebar. The current workspace is walked first (so a local
+    /// attention pane wins ties against a remote one), then panes in display
+    /// order (tab → leaves) — never `panes.keys`, whose order is unspecified and
+    /// would make the target non-deterministic. Reuses `revealPane` (the
+    /// notification-click path): it switches workspace, selects the pane's tab,
+    /// focuses it, and clears the unread / dock-badge state. Nothing needs
     /// attention ⇒ beep.
     func jumpToAttention() {
-        let priority: [PaneAgentStatus] = [.needsPermission, .justCompleted, .failed]
         let current = selectedWorkspaceID
-        let active = workspaces.filter { !$0.archived }
-        let ordered = active.filter { $0.id == current }
-            + active.filter { $0.id != current }
-        for status in priority {
-            for ws in ordered {
-                for paneID in ws.panes.keys {
+        let ordered = workspaces.filter { !$0.archived && $0.id == current }
+            + workspaces.filter { !$0.archived && $0.id != current }
+        // Walk panes in display order and keep the FIRST pane at the best
+        // (lowest) attentionRank. `< bestRank` (not `<=`) preserves the
+        // current-workspace-first / tab-order winner among equal ranks.
+        var bestRank = Int.max
+        var best: (ws: UUID, pane: PaneID)?
+        for ws in ordered {
+            for tab in ws.tabs {
+                for paneID in tab.root.leaves {
                     let key = WorkspacePaneKey(workspace: ws.id, pane: paneID)
-                    guard paneAgentState[key]?.status == status else { continue }
-                    revealPane(workspace: ws.id, pane: paneID)
-                    return
+                    guard let rank = paneAgentState[key]?.status.attentionRank,
+                          rank < PaneAgentStatus.sinkAttentionRank,   // ignore sinks (idle/thinking/…)
+                          rank < bestRank else { continue }
+                    bestRank = rank
+                    best = (ws.id, paneID)
                 }
             }
         }
-        NSSound.beep()
+        guard let target = best else { NSSound.beep(); return }
+        revealPane(workspace: target.ws, pane: target.pane)
     }
 
     // MARK: - external control (control.sock)
@@ -3697,6 +3705,13 @@ extension WorkspaceStore {
         }
     }
 
+    /// Attention ranking shared by the status merge and the icon pick.
+    /// Which status to SHOW (the tab chip's dot) when a tab has panes at
+    /// different statuses — NOT the "float to top" ordering. A different axis
+    /// from `PaneAgentStatus.attentionRank` (which ranks what the sidebar
+    /// floats and ⌘⇧A jumps to, and treats `.failed`/`.justCompleted` as
+    /// peers); here `.failed` outranks `.justCompleted` because an error dot
+    /// should win the chip. Don't "fix" one to match the other.
     private func statusRank(_ s: PaneAgentStatus) -> Int {
         switch s {
         case .needsPermission: return 5
