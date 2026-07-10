@@ -86,6 +86,29 @@ enum PaneAgentStatus: String, Codable {
     case compacting        // auto-compacting context window
     case justCompleted     // turn just finished — transient, fades to idle
     case failed            // turn ended in an API/transport error (StopFailure)
+
+    /// "Float to top" / "jump to next" priority — the single source of truth
+    /// shared by the sidebar sort (`SidebarView`) and ⌘⇧A
+    /// (`WorkspaceStore.jumpToAttention`) so the two always land on the same
+    /// "most worth seeing next" pane. A blocking `.needsPermission` outranks
+    /// unread results (a turn that `.failed` or `.justCompleted`), which both
+    /// float above everything else. Exhaustive, so adding a new case is a
+    /// compile error here — decide its rank in one place, not at every call
+    /// site. This is a coarser axis than `WorkspaceStore.statusRank` (the
+    /// status-dot ranking, which ranks `.failed` above `.justCompleted`);
+    /// here they're peers, so a local just-completed pane can win a tie
+    /// against a remote one.
+    var attentionRank: Int {
+        switch self {
+        case .needsPermission:                          return 0   // blocking → top
+        case .failed, .justCompleted:                   return 1   // unread results
+        case .idle, .thinking, .tool, .compacting:      return Self.sinkAttentionRank
+        }
+    }
+
+    /// The rank at which a status stops floating / no longer counts as "needs
+    /// you". `jumpToAttention` ignores panes at this rank or higher.
+    static let sinkAttentionRank = 2
 }
 
 struct PaneAgentState: Codable, Equatable {
