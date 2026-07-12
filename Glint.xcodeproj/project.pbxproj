@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A11D19DF80794F929D548A03 /* GitRepositoryWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11D19DF80794F929D548A04 /* GitRepositoryWatcher.swift */; };
+		A11D19DF80794F929D548A05 /* GitRepositoryWatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11D19DF80794F929D548A06 /* GitRepositoryWatcherTests.swift */; };
+		A11D19DF80794F929D548A01 /* GhosttyTickSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11D19DF80794F929D548A02 /* GhosttyTickSchedulerTests.swift */; };
 		04E75EAD5165E8D96C1C5517 /* MascotAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 349714D49AE52D84995314FD /* MascotAssetTests.swift */; };
 		07817DC6A98F8ED2E236CFA1 /* CodexHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E3B385162995D0F1F5B72D /* CodexHome.swift */; };
 		0FEECB27EB1ACE11E29ECCEF /* CodexHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26141150D2DB4C0589558ECC /* CodexHookInstallerTests.swift */; };
@@ -84,6 +87,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A11D19DF80794F929D548A04 /* GitRepositoryWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRepositoryWatcher.swift; sourceTree = "<group>"; };
+		A11D19DF80794F929D548A06 /* GitRepositoryWatcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRepositoryWatcherTests.swift; sourceTree = "<group>"; };
+		A11D19DF80794F929D548A02 /* GhosttyTickSchedulerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTickSchedulerTests.swift; sourceTree = "<group>"; };
 		050E267AE14712D4D6633B4F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		05F2CA2243872C8111048EF2 /* AgentBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBridge.swift; sourceTree = "<group>"; };
 		08FC2FBC9E8729A5ECBF857C /* PaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneView.swift; sourceTree = "<group>"; };
@@ -195,6 +201,8 @@
 		5F9010EBEE9DCDE13D866A74 /* GlintTests */ = {
 			isa = PBXGroup;
 			children = (
+				A11D19DF80794F929D548A06 /* GitRepositoryWatcherTests.swift */,
+				A11D19DF80794F929D548A02 /* GhosttyTickSchedulerTests.swift */,
 				FF0082D535969C315B8D75D7 /* AgentHookRoutingTests.swift */,
 				4EEF00CBEF45A9D60423A207 /* AgentKindResolutionTests.swift */,
 				6AB338782EF6F22B7B381DA8 /* CodexHomeStoreTests.swift */,
@@ -239,6 +247,7 @@
 		6A47880D53D0B53681B9E4D3 /* Git */ = {
 			isa = PBXGroup;
 			children = (
+				A11D19DF80794F929D548A04 /* GitRepositoryWatcher.swift */,
 				7039488F4C2F75498E461311 /* GitDiff.swift */,
 				39F54835E4A44EC88236EFBE /* GitService.swift */,
 			);
@@ -451,6 +460,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A11D19DF80794F929D548A05 /* GitRepositoryWatcherTests.swift in Sources */,
+				A11D19DF80794F929D548A01 /* GhosttyTickSchedulerTests.swift in Sources */,
 				A019A2AD685F1407D7E2A7E1 /* AgentHookRoutingTests.swift in Sources */,
 				81532B36FEC3039B8EAD9CB1 /* AgentKindResolutionTests.swift in Sources */,
 				C41119D04864077E5B554F59 /* CodexHomeStoreTests.swift in Sources */,
@@ -474,6 +485,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A11D19DF80794F929D548A03 /* GitRepositoryWatcher.swift in Sources */,
 				E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */,
 				9F605AB2DC185A94ED28E6D4 /* AgentChoice.swift in Sources */,
 				3932A4CFEFF6FB81AE283645 /* AgentHookInstaller.swift in Sources */,

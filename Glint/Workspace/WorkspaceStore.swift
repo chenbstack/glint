@@ -132,7 +132,7 @@ struct Pane: Identifiable, Codable {
     /// Remote SSH context for Review-over-SSH — the ssh destination the user
     /// typed, its port, the remote host (display only), and the remote cwd
     /// mined from the terminal title. Transient (NOT persisted): re-derived
-    /// from the live surface on the 1s capture poll, so it's nil until the
+    /// from the live surface on a title/command event, so it's nil until the
     /// remote shell's title reports a cwd. Mirrors `workingDirectory`'s
     /// snapshot-from-surface pattern. Optional → defaults nil, so the custom
     /// Codable below ignores them without a CodingKeys/init/encode change.
@@ -512,12 +512,12 @@ final class WorkspaceStore: ObservableObject {
     @Published var workspaces: [Workspace]
     @Published var selectedWorkspaceID: UUID?
     @Published var sidebarCollapsed: Bool
-    /// Latest foreground-process name per (workspace, pane). Polled every
-    /// few seconds; drives the workspace card icon. Non-persistent.
+    /// Latest foreground-process name per (workspace, pane). Event-driven with
+    /// a slow fallback capture; drives the workspace card icon. Non-persistent.
     @Published var paneProcesses: [WorkspacePaneKey: String] = [:]
     /// CLI-agent state per pane (push-driven via AgentBridge hooks).
     /// Beats `paneProcesses` for icon/state because hooks carry live
-    /// status (thinking/permission/…) the 1s name poll can't know.
+    /// status (thinking/permission/…) a process-name capture can't know.
     /// Non-persistent.
     @Published var paneAgentState: [WorkspacePaneKey: PaneAgentState] = [:]
 
@@ -577,11 +577,11 @@ final class WorkspaceStore: ObservableObject {
     }
 
     /// Lightweight git status per workspace, keyed by workspace id. Refreshed by
-    /// `gitTimer` for non-plain sources and on demand. NON-persistent — it's live
+    /// filesystem/command events plus a slow fallback. NON-persistent — it's live
     /// state, recomputed each launch, never written to state.json.
     @Published var gitStatuses: [UUID: GitStatus] = [:]
     /// Workspaces with a `git status` poll in flight — guards against a slow git
-    /// (large/network repo) letting 5s ticks stack into overlapping subprocesses
+    /// (large/network repo) letting repeated events stack overlapping subprocesses
     /// whose out-of-order results overwrite a newer status.
     private var gitInFlight: Set<UUID> = []
     /// Resolved cwds confirmed (via a `rev-parse` probe) NOT to be inside a git
@@ -1327,11 +1327,15 @@ final class WorkspaceStore: ObservableObject {
     private var dockBadgePaneStatuses: [WorkspacePaneKey: PaneAgentStatus] = [:]
 
     private var saveCancellable: AnyCancellable?
-    private var cwdTimer: Timer?
-    /// Counts 1s cwd ticks so scrollback flushes run at ~5s, not every second.
-    private var scrollbackFlushTick = 0
-    private var gitStatusTick = 0
+    private var gitWatcherCancellable: AnyCancellable?
+    private var fallbackTimer: Timer?
+    private var fallbackGitTick = 0
     private var observerTokens: [NSObjectProtocol] = []
+    private struct GitWatchRegistration {
+        let path: String
+        let watcher: GitRepositoryWatcher
+    }
+    private var gitWatchers: [UUID: GitWatchRegistration] = [:]
 
     /// The app's single live store. AppDelegate consults it for the quit
     /// confirmation (it has no other path to the store — the store is
@@ -1381,26 +1385,28 @@ final class WorkspaceStore: ObservableObject {
         .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
         .sink { [weak self] _ in self?.persist() }
 
-        // Sweep live surface cwds every second so a crash/quit still leaves
-        // recent dirs persisted. The closure captures self weakly so the
-        // repeating timer doesn't retain the store forever.
-        cwdTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        // Repository bindings change rarely, but workspace model updates are
+        // frequent. Reconcile by path so ordinary cwd/process updates don't
+        // recreate FSEvent streams.
+        gitWatcherCancellable = $workspaces
+            .dropFirst()
+            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in self?.syncGitWatchers() }
+        syncGitWatchers()
+
+        // Shell integration drives normal cwd/process/git updates. This slow,
+        // active-app-only timer is a correctness fallback for shells without
+        // OSC 7 / command-finished integration and for long-running TUIs.
+        fallbackTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
             // scheduledTimer fires on the main run loop, so this is already the
-            // main actor — assumeIsolated avoids allocating a Task every second.
+            // main actor — assumeIsolated avoids allocating a Task per fallback.
             MainActor.assumeIsolated {
-                guard let self else { return }
+                guard let self, NSApp.isActive else { return }
                 self.captureCwdsFromLiveSurfaces()
-                // Snapshot terminal scrollback to disk roughly every 5s (off
-                // the IO/main hot path; skips panes with no new output).
-                self.scrollbackFlushTick += 1
-                if self.scrollbackFlushTick >= 5 {
-                    self.scrollbackFlushTick = 0
-                    self.flushScrollback()
-                }
-                // Refresh git status for repo/worktree workspaces ~every 5s.
-                self.gitStatusTick += 1
-                if self.gitStatusTick >= 5 {
-                    self.gitStatusTick = 0
+                self.flushScrollback()
+                self.fallbackGitTick += 1
+                if self.fallbackGitTick >= 2 {
+                    self.fallbackGitTick = 0
                     self.refreshAllGitStatuses()
                 }
             }
@@ -1447,8 +1453,39 @@ final class WorkspaceStore: ObservableObject {
             forName: .ghosttyCwdChanged,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.captureCwdsFromLiveSurfaces() }
+        ) { [weak self] note in
+            Task { @MainActor in
+                guard let view = note.object as? GhosttySurfaceView else { return }
+                self?.captureSurfaceState(from: view)
+            }
+        })
+
+        observerTokens.append(NotificationCenter.default.addObserver(
+            forName: .ghosttyRemoteTitleChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            Task { @MainActor in
+                guard let view = note.object as? GhosttySurfaceView else { return }
+                self?.captureSurfaceState(from: view)
+            }
+        })
+
+        // Command completion is the high-value event: update the one pane,
+        // persist its scrollback, and refresh only its repository.
+        observerTokens.append(NotificationCenter.default.addObserver(
+            forName: .ghosttyCommandFinished,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            Task { @MainActor in
+                guard let self, let view = note.object as? GhosttySurfaceView,
+                      let key = self.captureSurfaceState(from: view) else { return }
+                if self.restoreTerminalScrollback {
+                    view.noteCommandFinishedForScrollback()
+                }
+                self.refreshGitStatusNow(for: key.workspace)
+            }
         })
 
         // "✓ done" is an unread badge cleared by *seeing* the workspace.
@@ -1462,6 +1499,9 @@ final class WorkspaceStore: ObservableObject {
             Task { @MainActor in
                 guard let self, let id = self.selectedWorkspaceID else { return }
                 self.acknowledgeCompletionIfNeeded(for: id)
+                self.captureCwdsFromLiveSurfaces()
+                self.flushScrollback()
+                self.refreshAllGitStatuses()
             }
         })
 
@@ -1507,7 +1547,7 @@ final class WorkspaceStore: ObservableObject {
     }
 
     deinit {
-        cwdTimer?.invalidate()
+        fallbackTimer?.invalidate()
         for token in observerTokens {
             NotificationCenter.default.removeObserver(token)
         }
@@ -1614,144 +1654,97 @@ final class WorkspaceStore: ObservableObject {
 
     func captureCwdsFromLiveSurfaces() {
         var newProcesses: [WorkspacePaneKey: String] = [:]
-        for i in workspaces.indices {
-            let wsID = workspaces[i].id
-            for paneID in workspaces[i].panes.keys {
-                let key = WorkspacePaneKey(workspace: wsID, pane: paneID)
-                guard let view = surfaceViews[key] else { continue }
-                // Only write when the value actually changed: an unconditional
-                // subscript write on a @Published array fires objectWillChange
-                // every tick, and since this poll (1s) outpaces the autosave
-                // debounce (0.5s) that meant a JSON encode + disk write every
-                // second for the app's whole lifetime.
-                if let cwd = view.currentCwd(),
-                   workspaces[i].panes[paneID]?.workingDirectory != cwd {
-                    workspaces[i].panes[paneID]?.workingDirectory = cwd
-                }
-                // Snapshot the remote SSH context (Review-over-SSH). Same
-                // write-only-on-change discipline as cwd — an unconditional
-                // write would fire objectWillChange every tick.
-                let rctx = view.remoteReviewContext
-                let rhost = view.remoteHost
-                if workspaces[i].panes[paneID]?.remoteTarget != rctx?.target
-                    || workspaces[i].panes[paneID]?.remotePort != rctx?.port
-                    || workspaces[i].panes[paneID]?.remotePath != rctx?.remotePath
-                    || workspaces[i].panes[paneID]?.remoteHost != rhost {
-                    workspaces[i].panes[paneID]?.remoteTarget = rctx?.target
-                    workspaces[i].panes[paneID]?.remotePort = rctx?.port
-                    workspaces[i].panes[paneID]?.remotePath = rctx?.remotePath
-                    workspaces[i].panes[paneID]?.remoteHost = rhost
-                }
-                if let name = view.foregroundProcessName() {
-                    newProcesses[key] = name
-                    // Track CURRENT claude/codex/opencode foreground so the
-                    // next launch can optionally `--continue` / `resume --last`
-                    // (gated by the per-agent setting). Cleared the moment the
-                    // foreground is a benign shell — i.e. the user actually
-                    // exited the agent — NOT when a tool subprocess (vim, git,
-                    // rg, npm, …) briefly fronts the foreground pid mid-turn.
-                    // Without this guard, a `Bash(vim …)` from inside a live
-                    // Claude/Codex turn would wipe lastAgent + sessionIds, and
-                    // a quit during the vim window would persist an empty map
-                    // → restart loses the #45 multi-pane resume entirely. A
-                    // *nil* foreground (no live surface / transient empty pid)
-                    // is unknown, not an exit — leave the hint alone.
-                    let agentKind = Self.agentKind(forProcessName: name)
-                    let agentToken = agentKind?.rawValue
-                    let foregroundIsExit = agentKind == nil && Self.isBenignShellProcessName(name)
-                    // Update lastAgent when foreground is a known agent OR the
-                    // pane is genuinely back at a shell. A transient tool
-                    // subprocess leaves lastAgent (and sessionIds below)
-                    // untouched.
-                    if agentKind != nil || foregroundIsExit {
-                        if workspaces[i].panes[paneID]?.lastAgent != agentToken {
-                            workspaces[i].panes[paneID]?.lastAgent = agentToken
-                        }
-                    }
-                    // A session id is only meaningful while its agent is the
-                    // foreground. Filter to the current foreground (or wipe
-                    // when foreground is a shell, i.e. agent exited) so a
-                    // future restart can't try to resume a session the user
-                    // has moved on from. Comparing against `agentKind?.rawValue`
-                    // (not a free-form String) is what structurally guarantees
-                    // the writer here and the reader at `surfaceView`'s
-                    // `pane.sessionIds[kind.rawValue]` can't drift on spelling.
-                    // SKIPPED when the foreground is a transient tool subproc
-                    // (same reason as lastAgent above).
-                    if (agentKind != nil || foregroundIsExit),
-                       let existing = workspaces[i].panes[paneID]?.sessionIds,
-                       !existing.isEmpty {
-                        let kept = existing.filter { $0.key == agentToken }
-                        if kept.count != existing.count {
-                            workspaces[i].panes[paneID]?.sessionIds = kept
-                        }
-                    }
-                    // codexHome is only meaningful while Codex is the
-                    // foreground. Clear it ONLY when the pane is back at a
-                    // benign shell — i.e. the user actually exited Codex — not
-                    // when a Codex tool subprocess (git/npm/vim/…) briefly takes
-                    // the foreground pid. Unlike sessionIds (re-stashed by every
-                    // UserPromptSubmit hook above), codexHome has no writer but
-                    // launch, so a premature clear permanently breaks the
-                    // non-default-home resume (#45 multi-home regression) until
-                    // the pane is relaunched. A stale home can't leak anyway:
-                    // the next launch always rewrites codexHome via
-                    // queueInitialInput.
-                    if workspaces[i].panes[paneID]?.codexHome != nil,
-                       Self.isBenignShellProcessName(name) {
-                        workspaces[i].panes[paneID]?.codexHome = nil
-                    }
-                }
+        for (key, view) in surfaceViews {
+            if let name = captureSurfaceState(for: key, view: view) {
+                newProcesses[key] = name
             }
         }
         if newProcesses != paneProcesses {
-            for (k, v) in newProcesses where paneProcesses[k] != v {
-                NSLog("[glint] pane process changed: ws=\(k.workspace.uuidString.prefix(8)) pane=\(k.pane.value) -> \(v)")
+            for (key, name) in newProcesses where paneProcesses[key] != name {
+                logProcessChange(key: key, name: name)
             }
             paneProcesses = newProcesses
         }
-        // Reconcile stale hook state. Hooks are the only writer of
-        // paneAgentState and no hook fires when an agent quits, so after
-        // e.g. claude → exit → shell the pane can keep kind == .claude and
-        // iconKind (which prefers hook state over pid polling) stays stuck.
-        // Reconcile ONLY panes we actually observed a foreground process for
-        // this tick (i.e. present in newProcesses). A pane with no live
-        // surface (background tab) or a transient empty foreground pid is
-        // *unknown*, not exited — its absence here leaves its state untouched
-        // rather than wiping a still-live session and flickering its icon.
-        for (key, processName) in newProcesses {
-            guard var state = paneAgentState[key] else { continue }
-            guard let runningKind = Self.agentKind(named: processName) else {
-                // Foreground is a non-agent process. Only a recognized benign
-                // shell proves the session exited; a live agent that shells out
-                // to a tool briefly foregrounds a child (vim/git/bash/…), so
-                // clearing on any non-agent name would drop the session
-                // mid-turn (the next hook would have to rebuild it, flickering
-                // the icon). Clear only when the pane is idle AND genuinely
-                // back at a shell. An unread .justCompleted/.failed badge —
-                // e.g. Claude's sticky StopFailure after the CLI exits — must
-                // also survive until the user acknowledges it.
-                if state.status == .idle, Self.isBenignShellProcessName(processName) {
-                    paneAgentState.removeValue(forKey: key)
+        for (key, name) in newProcesses {
+            reconcileAgentState(key: key, processName: name)
+        }
+    }
+
+    /// Capture only the surface named by a Ghostty event instead of rescanning
+    /// every pane. Returns its model key for event-specific follow-up work.
+    @discardableResult
+    private func captureSurfaceState(from view: GhosttySurfaceView) -> WorkspacePaneKey? {
+        guard let key = surfaceViews.first(where: { $0.value === view })?.key else { return nil }
+        guard let name = captureSurfaceState(for: key, view: view) else { return key }
+        if paneProcesses[key] != name {
+            logProcessChange(key: key, name: name)
+            paneProcesses[key] = name
+        }
+        reconcileAgentState(key: key, processName: name)
+        return key
+    }
+
+    private func captureSurfaceState(for key: WorkspacePaneKey,
+                                     view: GhosttySurfaceView) -> String? {
+        guard let i = workspaces.firstIndex(where: { $0.id == key.workspace }),
+              workspaces[i].panes[key.pane] != nil else { return nil }
+
+        if let cwd = view.currentCwd(),
+           workspaces[i].panes[key.pane]?.workingDirectory != cwd {
+            workspaces[i].panes[key.pane]?.workingDirectory = cwd
+        }
+        let rctx = view.remoteReviewContext
+        let rhost = view.remoteHost
+        if workspaces[i].panes[key.pane]?.remoteTarget != rctx?.target
+            || workspaces[i].panes[key.pane]?.remotePort != rctx?.port
+            || workspaces[i].panes[key.pane]?.remotePath != rctx?.remotePath
+            || workspaces[i].panes[key.pane]?.remoteHost != rhost {
+            workspaces[i].panes[key.pane]?.remoteTarget = rctx?.target
+            workspaces[i].panes[key.pane]?.remotePort = rctx?.port
+            workspaces[i].panes[key.pane]?.remotePath = rctx?.remotePath
+            workspaces[i].panes[key.pane]?.remoteHost = rhost
+        }
+
+        guard let name = view.foregroundProcessName() else { return nil }
+        let agentKind = Self.agentKind(forProcessName: name)
+        let agentToken = agentKind?.rawValue
+        let foregroundIsExit = agentKind == nil && Self.isBenignShellProcessName(name)
+        if agentKind != nil || foregroundIsExit {
+            if workspaces[i].panes[key.pane]?.lastAgent != agentToken {
+                workspaces[i].panes[key.pane]?.lastAgent = agentToken
+            }
+            if let existing = workspaces[i].panes[key.pane]?.sessionIds, !existing.isEmpty {
+                let kept = existing.filter { $0.key == agentToken }
+                if kept.count != existing.count {
+                    workspaces[i].panes[key.pane]?.sessionIds = kept
                 }
-                continue
             }
-            // A known agent owns the pane. If it differs from the recorded
-            // kind, reattribute — but only while genuinely idle. Hook state is
-            // authoritative while a turn/approval/tool is active (some agent
-            // CLIs foreground helper or wrapper processes whose names look like
-            // another agent — don't flip OpenCode to Claude mid-turn), and an
-            // unread .justCompleted/.failed badge must survive until
-            // acknowledged rather than being wiped by a coincidental foreground
-            // name. A real hand-off re-establishes state from the new agent's
-            // first explicit hook, so the poller need not force it here.
-            if runningKind != state.kind, state.status == .idle {
-                state.kind = runningKind
-                state.status = .idle
-                state.detail = nil
-                state.updatedAt = Date()
-                paneAgentState[key] = state
+        }
+        if workspaces[i].panes[key.pane]?.codexHome != nil,
+           Self.isBenignShellProcessName(name) {
+            workspaces[i].panes[key.pane]?.codexHome = nil
+        }
+        return name
+    }
+
+    private func logProcessChange(key: WorkspacePaneKey, name: String) {
+        NSLog("[glint] pane process changed: ws=\(key.workspace.uuidString.prefix(8)) pane=\(key.pane.value) -> \(name)")
+    }
+
+    private func reconcileAgentState(key: WorkspacePaneKey, processName: String) {
+        guard var state = paneAgentState[key] else { return }
+        guard let runningKind = Self.agentKind(named: processName) else {
+            if state.status == .idle, Self.isBenignShellProcessName(processName) {
+                paneAgentState.removeValue(forKey: key)
             }
+            return
+        }
+        if runningKind != state.kind, state.status == .idle {
+            state.kind = runningKind
+            state.status = .idle
+            state.detail = nil
+            state.updatedAt = Date()
+            paneAgentState[key] = state
         }
     }
 
@@ -1773,7 +1766,7 @@ final class WorkspaceStore: ObservableObject {
         // (status badge, detail text, kind = .claude as a safe display default
         // — see `kind` below), but a nil resolvedKind MUST NOT be used to key a
         // sessionId write: stashing a Codex/OpenCode/Devin uuid under "claude"
-        // sticks until the next poll tick (~1s race window) and a quit in that
+        // could stick until the next capture and a quit in that
         // window persists a misrouted resume map — restart would run
         // `claude --resume <foreign-uuid>` and fail. Every Glint-installed
         // reporter sets `agent` already, so this nil-path is normally
@@ -1799,8 +1792,7 @@ final class WorkspaceStore: ObservableObject {
         }
 
         // Note: we deliberately do NOT force-write paneProcesses here. The
-        // 1s poller owns that dictionary and replaces it wholesale, so any
-        // value written from this path lived at most one tick. Icon/state
+        // surface capture owns that dictionary. Icon/state
         // already prefer paneAgentState (set below), which this event keeps
         // authoritative.
 
@@ -1925,8 +1917,16 @@ final class WorkspaceStore: ObservableObject {
     func handlePaneReturn(_ info: [AnyHashable: Any]?) {
         guard let info,
               let paneStr = info["pane"] as? String,
-              let key = Self.parsePaneKey(paneStr),
-              var state = paneAgentState[key],
+              let key = Self.parsePaneKey(paneStr) else { return }
+        // Return commonly launches a foreground process. Query this pane once
+        // after the shell has had time to exec instead of polling every pane.
+        if let view = surfaceViews[key] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self, weak view] in
+                guard let self, let view else { return }
+                self.captureSurfaceState(from: view)
+            }
+        }
+        guard var state = paneAgentState[key],
               state.status == .needsPermission else { return }
         let now = Date()
         state.status = .tool
@@ -3068,7 +3068,7 @@ final class WorkspaceStore: ObservableObject {
     private func remoteContext(for ws: Workspace) -> (target: String, port: Int?, remotePath: String, host: String?)? {
         guard let paneID = ws.selectedTab?.focusedPane else { return nil }
         // Read the LIVE surface rather than the Pane snapshot. The snapshot
-        // (Pane.remotePath) lags up to the 1s capture poll, so pressing ⌘⇧R
+        // (Pane.remotePath) can lag until the next title/capture event, so pressing ⌘⇧R
         // right after a remote `cd` would otherwise review the previous
         // directory (e.g. `~` → "not a git repo" → empty Review). The surface's
         // remotePath is updated immediately when the remote shell's title fires.
@@ -3114,6 +3114,31 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func gitStatus(for id: UUID) -> GitStatus? { gitStatuses[id] }
+
+    private func syncGitWatchers() {
+        var desired: [UUID: String] = [:]
+        for ws in workspaces {
+            switch ws.source.kind {
+            case .localRepo, .localWorktree:
+                if let path = ws.source.gitPath { desired[ws.id] = path }
+            default:
+                break
+            }
+        }
+
+        for id in gitWatchers.keys.filter({ desired[$0] == nil }) {
+            gitWatchers.removeValue(forKey: id)
+        }
+        for (id, path) in desired {
+            if gitWatchers[id]?.path == path { continue }
+            let paths = GitRepositoryWatcher.watchPaths(for: path)
+            let watcher = GitRepositoryWatcher(paths: paths) { [weak self] in
+                guard NSApp.isActive else { return }
+                self?.refreshGitStatusNow(for: id)
+            }
+            gitWatchers[id] = GitWatchRegistration(path: path, watcher: watcher)
+        }
+    }
 
     func refreshGitStatus(for id: UUID) async {
         guard let ws = workspaces.first(where: { $0.id == id }) else {
@@ -3166,7 +3191,7 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
-    /// Which workspaces the 5s timer fans out to. Bound repo/worktree sources
+    /// Which workspaces an event or fallback refresh fans out to. Bound sources
     /// keep their dirty badge live; the selected workspace is what the user is
     /// looking at. Other plain shells are NOT timer-polled — they refresh on
     /// demand via `refreshGitStatusNow` when switched/focused, which avoids
@@ -3182,7 +3207,7 @@ final class WorkspaceStore: ObservableObject {
 
     /// Fire-and-forget single refresh, used when the *displayed* terminal
     /// changes (workspace / tab / pane switch) so the tab's git button updates
-    /// right away instead of waiting up to ~5s for the next poll.
+    /// right away instead of waiting for a filesystem/fallback event.
     func refreshGitStatusNow(for id: UUID) {
         Task { await refreshGitStatus(for: id) }
     }
@@ -3539,6 +3564,11 @@ extension Notification.Name {
     /// Posted by GhosttyManager when ghostty reports a new cwd for some
     /// surface (via OSC 7 / GHOSTTY_ACTION_PWD).
     static let ghosttyCwdChanged = Notification.Name("ghostty.cwd.changed")
+    /// Posted after a title updates remote SSH state for one surface.
+    static let ghosttyRemoteTitleChanged = Notification.Name("ghostty.remote-title.changed")
+    /// Posted when shell integration reports that a command completed on a
+    /// specific surface. Consumers can refresh only that pane/repository.
+    static let ghosttyCommandFinished = Notification.Name("ghostty.command.finished")
 }
 
 // MARK: - Color hex helpers
