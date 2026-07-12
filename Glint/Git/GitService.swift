@@ -679,7 +679,7 @@ struct GitService {
     func status(at path: String) async throws -> GitStatus {
         // The status and the HEAD-commit lookup are independent — run them
         // concurrently so each poll costs one round-trip, not two sequential
-        // subprocess waits (matters with N workspaces polled every ~5s).
+        // subprocess waits (matters when an event invalidates N workspaces).
         async let statusR = git(["status", "--porcelain=v2", "--branch"], cwd: path, timeout: .poll)
         async let logR = git(["log", "-1", "--format=%s%n%cr"], cwd: path,
                              allowFailure: true, timeout: .poll)

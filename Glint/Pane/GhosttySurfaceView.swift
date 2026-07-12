@@ -427,7 +427,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// queue, which also drops the frame early when the grid hasn't changed.
     func flushScrollbackToDisk() {
         guard let id = scrollbackID, let s = surface else { return }
-        // Per-pane dirty bit. Without it the 5s flush serializes every live
+        // Per-pane dirty bit. Without it each fallback flush serializes every live
         // pane's full grid (viewport + 3000 scrollback rows × per-cell color/
         // attrs) on MainActor under the renderer-state lock every tick, even
         // for occluded background tabs that haven't seen activity in minutes
@@ -451,7 +451,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     /// Set whenever something touches the grid we know about: user input
     /// (text_input), our own writes (process_output, scrollback restore), or
-    /// a foreground-pid flip noticed by the cwd poller. Starts true so the
+    /// a foreground-pid flip noticed by an event/fallback capture. Starts true so the
     /// FIRST flush of a session always runs (captures the restored history).
     /// Cleared at the tail of a successful flush.
     private var scrollbackNeedsFlush = true
@@ -460,13 +460,20 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// Called by the per-store flush loop right before `flushScrollbackToDisk`.
     /// Marks the pane dirty when its foreground process changed since the last
     /// successful flush, so a user `cd`ing or a TUI launching shows up even if
-    /// no keystroke was sent in between (cwd polling already notices these
-    /// every tick — we just piggy-back the signal).
+    /// no keystroke was sent in between.
     func noteForegroundPidForScrollback() {
         guard let s = surface else { return }
         let pid = pid_t(ghostty_surface_foreground_pid(s))
         guard pid > 0 else { return }
         if pid != scrollbackLastFlushedPid { scrollbackNeedsFlush = true }
+    }
+
+    /// A completed shell command is a cheap, surface-scoped signal that both
+    /// the foreground process and the rendered grid may have changed.
+    func noteCommandFinishedForScrollback() {
+        scrollbackNeedsFlush = true
+        noteForegroundPidForScrollback()
+        flushScrollbackToDisk()
     }
 
     /// Mark the pane's scrollback dirty so the next flush serializes the grid.

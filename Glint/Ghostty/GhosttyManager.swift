@@ -2,6 +2,39 @@ import Foundation
 import AppKit
 import GhosttyKit
 
+/// Coalesces edge-like Ghostty wakeups without losing a wakeup that arrives
+/// while the current tick is draining the mailbox.
+final class GhosttyTickScheduler {
+    typealias Enqueue = (@escaping () -> Void) -> Void
+
+    private let lock = NSLock()
+    private var scheduled = false
+    private let enqueue: Enqueue
+
+    init(enqueue: @escaping Enqueue = { DispatchQueue.main.async(execute: $0) }) {
+        self.enqueue = enqueue
+    }
+
+    func schedule(_ tick: @escaping () -> Void) {
+        lock.lock()
+        guard !scheduled else {
+            lock.unlock()
+            return
+        }
+        scheduled = true
+        lock.unlock()
+
+        enqueue { [self] in
+            // Clear before ticking: a producer can enqueue after the mailbox has
+            // drained, and that wakeup must be allowed to schedule another tick.
+            lock.lock()
+            scheduled = false
+            lock.unlock()
+            tick()
+        }
+    }
+}
+
 /// Owns the single `ghostty_app_t` for the process and drives its tick loop.
 ///
 /// Lifecycle:
@@ -17,6 +50,7 @@ final class GhosttyManager {
     private(set) var app: ghostty_app_t?
     private var config: ghostty_config_t?
     private var appearanceObservation: NSKeyValueObservation?
+    private let tickScheduler = GhosttyTickScheduler()
 
     private init() {
         bootstrap()
@@ -145,7 +179,7 @@ final class GhosttyManager {
     }
 
     private func tickSoon() {
-        DispatchQueue.main.async { [weak self] in
+        tickScheduler.schedule { [weak self] in
             guard let app = self?.app else { return }
             ghostty_app_tick(app)
         }
@@ -371,6 +405,13 @@ final class GhosttyManager {
                 }
             }
 
+        case GHOSTTY_ACTION_COMMAND_FINISHED:
+            if let view {
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .ghosttyCommandFinished, object: view)
+                }
+            }
+
         case GHOSTTY_ACTION_SET_TITLE:
             // ghostty forwards the shell's OSC 0/2 title verbatim and — unlike
             // OSC 7 — does NOT host-validate it, so a remote shell's
@@ -381,7 +422,10 @@ final class GhosttyManager {
             // titles can't pollute remote state.
             if let view, let cstr = action.action.set_title.title {
                 let title = String(cString: cstr)
-                DispatchQueue.main.async { view.updateRemoteFromTitle(title) }
+                DispatchQueue.main.async {
+                    view.updateRemoteFromTitle(title)
+                    NotificationCenter.default.post(name: .ghosttyRemoteTitleChanged, object: view)
+                }
             }
 
         case GHOSTTY_ACTION_MOUSE_SHAPE:
