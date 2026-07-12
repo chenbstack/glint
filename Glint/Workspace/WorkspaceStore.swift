@@ -1339,6 +1339,10 @@ final class WorkspaceStore: ObservableObject {
         let watcher: GitRepositoryWatcher
     }
     private var gitWatchers: [UUID: GitWatchRegistration] = [:]
+    /// Coalesces the command-finished and FSEvents channels so one logical
+    /// change spawns at most one `git status` (see its own doc comment for the
+    /// gap it closes vs `gitInFlight`).
+    private let gitRefreshCoordinator = GitRefreshCoordinator()
 
     /// The app's single live store. AppDelegate consults it for the quit
     /// confirmation (it has no other path to the store — the store is
@@ -1491,7 +1495,14 @@ final class WorkspaceStore: ObservableObject {
                 if self.restoreTerminalScrollback {
                     view.noteCommandFinishedForScrollback()
                 }
-                self.refreshGitStatusNow(for: key.workspace)
+                let wsID = key.workspace
+                // Route through the refresh coordinator so the FSEvents
+                // callback that follows this same change ~0.5s later doesn't
+                // spawn a second `git status` (gitInFlight only merges runs
+                // that overlap in time; a fast git finishes first).
+                self.gitRefreshCoordinator.request(wsID) { [weak self] in
+                    self?.refreshGitStatusNow(for: wsID)
+                }
             }
         })
 
@@ -3386,13 +3397,16 @@ final class WorkspaceStore: ObservableObject {
 
         for id in gitWatchers.keys.filter({ desired[$0] == nil }) {
             gitWatchers.removeValue(forKey: id)
+            gitRefreshCoordinator.cancel(id)
         }
         for (id, path) in desired {
             if gitWatchers[id]?.path == path { continue }
             let paths = GitRepositoryWatcher.watchPaths(for: path)
             let watcher = GitRepositoryWatcher(paths: paths) { [weak self] in
                 guard NSApp.isActive else { return }
-                self?.refreshGitStatusNow(for: id)
+                self?.gitRefreshCoordinator.request(id) { [weak self] in
+                    self?.refreshGitStatusNow(for: id)
+                }
             }
             gitWatchers[id] = GitWatchRegistration(path: path, watcher: watcher)
         }
