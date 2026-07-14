@@ -361,10 +361,10 @@ struct SidebarView: View {
 }
 
 /// Bottom-of-sidebar usage readout (above New Workspace). One row per agent
-/// that currently has data: a name column, then two equal-width tracks — the
-/// rolling session (5h) window and the weekly (7d) window — each captioned
-/// with its percent and a compact reset countdown. Renders nothing when no
-/// agent has data, so the divider+New Workspace sit flush as before.
+/// that currently has data: a name column, then one or two source-defined
+/// window tracks, each captioned with its percent and a compact reset countdown.
+/// Renders nothing when no agent has data, so the divider+New Workspace sit
+/// flush as before.
 private struct QuotaSection: View {
     @EnvironmentObject var store: WorkspaceStore
     let claude: AgentQuota?
@@ -431,30 +431,31 @@ private struct QuotaRow: View {
             TimelineView(.periodic(from: .now, by: 60)) { ctx in
                 HStack(spacing: 8) {
                     QuotaColumn(
-                        kind: "5h",
+                        kind: quota.primaryWindowLabel,
                         percent: quota.sessionPercent,
                         resetsAt: quota.sessionResetsAt,
                         now: ctx.date,
                         fill: color,
                         warn: quota.sessionIsWarn ? warn : nil
                     )
-                    QuotaColumn(
-                        kind: "7d",
-                        percent: quota.weeklyPercent,
-                        resetsAt: quota.weeklyResetsAt,
-                        now: ctx.date,
-                        fill: color.opacity(0.45),
-                        warn: nil
-                    )
+                    if quota.weeklyPercent != nil {
+                        QuotaColumn(
+                            kind: quota.secondaryWindowLabel,
+                            percent: quota.weeklyPercent,
+                            resetsAt: quota.weeklyResetsAt,
+                            now: ctx.date,
+                            fill: color.opacity(0.45),
+                            warn: nil
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-/// One window track: caption (`5h 62% · 2h14m`) over a thin progress bar. A
-/// nil percent renders a muted "—" with an empty track so a single-window
-/// source still lines up under the other agent's two columns.
+/// One window track: caption (`5h 62% · 2h14m`) over a thin progress bar.
+/// A nil percent degrades to a muted "—" with an empty track.
 private struct QuotaColumn: View {
     let kind: String
     let percent: Double?

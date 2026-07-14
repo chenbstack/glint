@@ -6,16 +6,27 @@ import IOKit
 /// One agent's rate-limit snapshot. Percentages are 0–100 (fraction of the
 /// window already consumed); `nil` fields mean "not reported by this source".
 struct AgentQuota: Hashable, Codable {
-    /// Rolling session window (Codex `primary`, ~5h). 0–100.
+    /// Codex `primary` window (historically ~5h, now source-defined). 0–100.
     var sessionPercent: Double
-    /// Longer rolling window (Codex `secondary`, ~7d). nil when unknown.
+    /// Codex `secondary` window. nil when the source reports only one window.
     var weeklyPercent: Double?
-    /// When the session window rolls over. nil when unknown.
+    /// When the primary window rolls over. nil when unknown.
     var sessionResetsAt: Date?
-    /// When the weekly window rolls over. nil when unknown.
+    /// When the secondary window rolls over. nil when unknown.
     var weeklyResetsAt: Date?
     /// Plan label, e.g. "plus" / "pro". Shown verbatim if present.
     var planType: String?
+    /// Source-reported window sizes. nil keeps legacy 5h / 7d labels.
+    var primaryWindowMinutes: Int? = nil
+    var secondaryWindowMinutes: Int? = nil
+
+    var primaryWindowLabel: String {
+        Self.windowLabel(minutes: primaryWindowMinutes, fallback: "5h")
+    }
+
+    var secondaryWindowLabel: String {
+        Self.windowLabel(minutes: secondaryWindowMinutes, fallback: "7d")
+    }
 
     /// >= this fraction used → render the session readout in the warn (amber)
     /// color. Chosen so the common "busy but fine" range stays calm and only
@@ -40,8 +51,17 @@ struct AgentQuota: Hashable, Codable {
             weeklyPercent: finite(weeklyPercent),
             sessionResetsAt: finite(sessionResetsAt),
             weeklyResetsAt: finite(weeklyResetsAt),
-            planType: planType
+            planType: planType,
+            primaryWindowMinutes: primaryWindowMinutes,
+            secondaryWindowMinutes: secondaryWindowMinutes
         )
+    }
+
+    private static func windowLabel(minutes: Int?, fallback: String) -> String {
+        guard let minutes, minutes > 0 else { return fallback }
+        if minutes.isMultiple(of: 1_440) { return "\(minutes / 1_440)d" }
+        if minutes.isMultiple(of: 60) { return "\(minutes / 60)h" }
+        return "\(minutes)m"
     }
 }
 
@@ -339,9 +359,11 @@ final class UsageStore: ObservableObject {
 enum CodexUsageReader {
     private struct Window: Decodable {
         let used_percent: Double?
+        let window_minutes: Int?
         let resets_at: Double?      // unix seconds
     }
     private struct RateLimits: Decodable {
+        let limit_id: String?
         let primary: Window?
         let secondary: Window?
         let plan_type: String?
@@ -415,6 +437,11 @@ enum CodexUsageReader {
                   let rlData = SafeJSON.data(rlAny),
                   let rl = try? JSONDecoder().decode(RateLimits.self, from: rlData)
             else { continue }
+            // Newer Codex sessions also persist model-specific buckets (for
+            // example GPT-5.3-Codex-Spark) in the same shape. The sidebar's
+            // Codex row is the general account limit, so ignore known non-
+            // general IDs; nil keeps compatibility with older rollout files.
+            guard rl.limit_id == nil || rl.limit_id == "codex" else { continue }
 
             let primary = rl.primary
             let secondary = rl.secondary
@@ -424,7 +451,9 @@ enum CodexUsageReader {
                 weeklyPercent: secondary?.used_percent,
                 sessionResetsAt: primary?.resets_at.map { Date(timeIntervalSince1970: $0) },
                 weeklyResetsAt: secondary?.resets_at.map { Date(timeIntervalSince1970: $0) },
-                planType: rl.plan_type
+                planType: rl.plan_type,
+                primaryWindowMinutes: primary?.window_minutes,
+                secondaryWindowMinutes: secondary?.window_minutes
             )
         }
         return nil
@@ -463,6 +492,7 @@ enum CodexLiveReader {
     private struct Payload: Decodable {
         struct Window: Decodable {
             let used_percent: Double?   // 0–100 (integer over the wire)
+            let limit_window_seconds: Int?
             let reset_at: Double?       // unix seconds
         }
         struct RateLimit: Decodable {
@@ -508,7 +538,7 @@ enum CodexLiveReader {
         return (token, account)
     }
 
-    private static func decode(_ data: Data) -> AgentQuota? {
+    static func decode(_ data: Data) -> AgentQuota? {
         guard let p = try? JSONDecoder().decode(Payload.self, from: data),
               let primary = p.rate_limit?.primary_window,
               let sessionPercent = primary.used_percent else { return nil }
@@ -518,7 +548,9 @@ enum CodexLiveReader {
             weeklyPercent: secondary?.used_percent,
             sessionResetsAt: primary.reset_at.map { Date(timeIntervalSince1970: $0) },
             weeklyResetsAt: secondary?.reset_at.map { Date(timeIntervalSince1970: $0) },
-            planType: p.plan_type
+            planType: p.plan_type,
+            primaryWindowMinutes: primary.limit_window_seconds.map { $0 / 60 },
+            secondaryWindowMinutes: secondary?.limit_window_seconds.map { $0 / 60 }
         )
     }
 }
