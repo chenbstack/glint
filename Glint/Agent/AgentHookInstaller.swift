@@ -357,6 +357,8 @@ enum AgentHookInstaller {
     /// instead of `--continue` (issue #45). When extraction fails (older CLI,
     /// non-JSON payload) the field is omitted; the receiver tells "no id
     /// captured" apart from "captured but empty".
+    /// Codex PermissionRequest events also forward transcript_path + turn_id;
+    /// AgentBridge uses that pair to resolve the effective approvals reviewer.
     static let scriptBody: String = """
     #!/bin/sh
     # Glint CLI-agent hook reporter. argv: event, agent kind.
@@ -380,24 +382,38 @@ enum AgentHookInstaller {
     # resume. Dropping the whole event (the old `exit 0`) stalled the pane
     # silently until mktemp recovered.
     SESSION=""
+    TRANSCRIPT=""
+    TURN=""
     if TMP=$(/usr/bin/mktemp "${TMPDIR:-/tmp}/glint-hook.XXXXXX"); then
       trap '/bin/rm -f "$TMP"' EXIT HUP INT TERM
       cat >"$TMP"
       SESSION=$(/usr/bin/plutil -extract session_id raw -o - "$TMP" 2>/dev/null || true)
+      if [ "$HOOK" = "PermissionRequest" ] && [ "$AGENT" = "codex" ]; then
+        TRANSCRIPT=$(/usr/bin/plutil -extract transcript_path raw -o - "$TMP" 2>/dev/null || true)
+        TURN=$(/usr/bin/plutil -extract turn_id raw -o - "$TMP" 2>/dev/null || true)
+      fi
       /bin/rm -f "$TMP"
       trap - EXIT HUP INT TERM
     else
       cat >/dev/null 2>&1
     fi
 
+    APPROVAL_META=""
+    if [ -n "$TRANSCRIPT" ] && [ -n "$TURN" ]; then
+      TRANSCRIPT_B64=$(printf '%s' "$TRANSCRIPT" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
+      TURN_B64=$(printf '%s' "$TURN" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
+      APPROVAL_META=$(printf ',"transcript_b64":"%s","turn_b64":"%s"' \\
+        "$TRANSCRIPT_B64" "$TURN_B64")
+    fi
+
     if [ -n "$SESSION" ]; then
       SESSION_B64=$(printf '%s' "$SESSION" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
-      printf '{"pane":"%s","hook":"%s","agent":"%s","session_b64":"%s"}\\n' \\
-        "$PANE" "$HOOK" "$AGENT" "$SESSION_B64" \\
+      printf '{"pane":"%s","hook":"%s","agent":"%s","session_b64":"%s"%s}\\n' \\
+        "$PANE" "$HOOK" "$AGENT" "$SESSION_B64" "$APPROVAL_META" \\
         | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
     else
-      printf '{"pane":"%s","hook":"%s","agent":"%s"}\\n' \\
-        "$PANE" "$HOOK" "$AGENT" \\
+      printf '{"pane":"%s","hook":"%s","agent":"%s"%s}\\n' \\
+        "$PANE" "$HOOK" "$AGENT" "$APPROVAL_META" \\
         | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
     fi
     exit 0
@@ -418,8 +434,9 @@ enum AgentHookInstaller {
 ///     }
 ///
 /// Codex passes the entire hook payload on stdin, same as Claude. The shared
-/// reporter pulls `session_id` out for restore-on-launch (#45) and forwards
-/// the event name to Glint's local socket using the pane env vars.
+/// reporter pulls `session_id` out for restore-on-launch (#45), adds the
+/// approval context needed for Codex PermissionRequest events, and forwards
+/// the event to Glint's local socket using the pane env vars.
 enum CodexHookInstaller {
     /// Events Glint reacts to. Codex has no Notification event, but it does
     /// expose tool boundaries; PreToolUse is important for clearing a pending

@@ -152,10 +152,14 @@ final class AgentBridge {
         let hook: String
         let agent: String?
         let sessionB64: String?
+        let transcriptB64: String?
+        let turnB64: String?
 
         private enum CodingKeys: String, CodingKey {
             case pane, hook, agent
             case sessionB64 = "session_b64"
+            case transcriptB64 = "transcript_b64"
+            case turnB64 = "turn_b64"
         }
     }
 
@@ -172,13 +176,81 @@ final class AgentBridge {
            !value.isEmpty {
             result["session"] = value
         }
+        if let encoded = env.transcriptB64,
+           let data = Data(base64Encoded: encoded),
+           let value = String(data: data, encoding: .utf8),
+           !value.isEmpty {
+            result["transcript"] = value
+        }
+        if let encoded = env.turnB64,
+           let data = Data(base64Encoded: encoded),
+           let value = String(data: data, encoding: .utf8),
+           !value.isEmpty {
+            result["turn"] = value
+        }
         return result
     }
 
+    /// Codex runs PermissionRequest hooks before routing the request to its
+    /// user or auto reviewer, and the hook payload does not expose that
+    /// reviewer. The matching turn_context in the supplied rollout does.
+    /// Read only the tail so a long-lived session cannot stall hook routing.
+    ///
+    /// `approvals_reviewer` is one of `"user"` (a human approves) or
+    /// `"auto_review"` (Codex's guardian subagent approves) — the only values
+    /// observed in real rollouts. Anything else, or a missing field, yields
+    /// `nil`: the caller treats that as "needs permission", since a false
+    /// alert is safe and silently suppressing a real prompt is not.
+    /// `maxTailBytes` defaults to the production cap and is overridable only
+    /// so the tail-window logic can be exercised without writing megabytes.
+    static func codexApprovalReviewer(
+        transcriptPath: String,
+        turnID: String,
+        maxTailBytes: UInt64 = 8 * 1024 * 1024
+    ) -> String? {
+        guard !turnID.isEmpty else { return nil }
+        let url = URL(fileURLWithPath: transcriptPath).standardizedFileURL
+        guard url.pathExtension == "jsonl",
+              let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+
+        let end = handle.seekToEndOfFile()
+        let start = end > maxTailBytes ? end - maxTailBytes : 0
+        handle.seek(toFileOffset: start)
+        var data = handle.readDataToEndOfFile()
+        if start > 0 {
+            guard let newline = data.firstIndex(of: 0x0A) else { return nil }
+            data.removeSubrange(data.startIndex...newline)
+        }
+
+        for line in data.split(separator: 0x0A).reversed() {
+            guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                  object["type"] as? String == "turn_context",
+                  let payload = object["payload"] as? [String: Any],
+                  payload["turn_id"] as? String == turnID,
+                  let reviewer = payload["approvals_reviewer"] as? String else { continue }
+            switch reviewer {
+            case "user", "auto_review": return reviewer
+            default: return nil
+            }
+        }
+        return nil
+    }
+
     private func handle(line: Data) {
-        guard let decoded = Self.decodeHookLine(line) else {
+        guard var decoded = Self.decodeHookLine(line) else {
             NSLog("[glint] agent: malformed hook line (\(line.count) bytes)")
             return
+        }
+        if decoded["agent"] == "codex",
+           decoded["hook"] == "PermissionRequest",
+           let transcript = decoded["transcript"],
+           let turn = decoded["turn"],
+           let reviewer = Self.codexApprovalReviewer(
+               transcriptPath: transcript,
+               turnID: turn
+           ) {
+            decoded["approvals_reviewer"] = reviewer
         }
         DispatchQueue.main.async {
             NotificationCenter.default.post(

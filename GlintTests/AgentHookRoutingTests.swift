@@ -86,7 +86,7 @@ final class AgentHookRoutingTests: XCTestCase {
 
         let reporter = Process()
         reporter.executableURL = URL(fileURLWithPath: "/bin/sh")
-        reporter.arguments = [script.path, "UserPromptSubmit", "codex"]
+        reporter.arguments = [script.path, "PermissionRequest", "codex"]
         var environment = ProcessInfo.processInfo.environment
         environment["GLINT_PANE_ID"] = "12345678-1234-1234-1234-123456789ABC:7"
         environment["GLINT_AGENT_SOCK"] = socket.path
@@ -95,7 +95,7 @@ final class AgentHookRoutingTests: XCTestCase {
         reporter.standardInput = input
         try reporter.run()
         input.fileHandleForWriting.write(
-            Data(#"{"session_id":"session-123","cwd":"/tmp/repo"}"#.utf8)
+            Data(#"{"session_id":"session-123","turn_id":"turn-123","transcript_path":"/tmp/codex.jsonl","cwd":"/tmp/repo"}"#.utf8)
         )
         try input.fileHandleForWriting.close()
         reporter.waitUntilExit()
@@ -109,10 +109,120 @@ final class AgentHookRoutingTests: XCTestCase {
         let line = listenerOutput.fileHandleForReading.readDataToEndOfFile()
         XCTAssertEqual(AgentBridge.decodeHookLine(line), [
             "pane": "12345678-1234-1234-1234-123456789ABC:7",
-            "hook": "UserPromptSubmit",
+            "hook": "PermissionRequest",
             "agent": "codex",
             "session": "session-123",
+            "turn": "turn-123",
+            "transcript": "/tmp/codex.jsonl",
         ])
+    }
+
+    func testCodexApprovalReviewerComesFromMatchingTurnContext() throws {
+        let transcript = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-rollout-\(UUID().uuidString).jsonl")
+        let fixture = """
+        {"type":"turn_context","payload":{"turn_id":"turn-user","approvals_reviewer":"user"}}
+        {"type":"turn_context","payload":{"turn_id":"turn-auto","approvals_reviewer":"auto_review"}}
+        """
+        try fixture.write(to: transcript, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+
+        XCTAssertEqual(
+            AgentBridge.codexApprovalReviewer(
+                transcriptPath: transcript.path,
+                turnID: "turn-auto"
+            ),
+            "auto_review"
+        )
+        XCTAssertEqual(
+            AgentBridge.codexApprovalReviewer(
+                transcriptPath: transcript.path,
+                turnID: "turn-user"
+            ),
+            "user"
+        )
+        XCTAssertNil(
+            AgentBridge.codexApprovalReviewer(
+                transcriptPath: transcript.path,
+                turnID: "turn-missing"
+            )
+        )
+    }
+
+    /// The tail window must drop turn_context lines older than `maxTailBytes`,
+    /// including a matching one, so a multi-MB session can't stall routing. A
+    /// tiny window keeps the fixture cheap while still exercising the
+    /// partial-first-line drop the production 8 MB cap relies on.
+    func testCodexApprovalReviewerIgnoresTurnContextBeyondTailWindow() throws {
+        let transcript = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-tail-\(UUID().uuidString).jsonl")
+        let decoy = #"{"type":"turn_context","payload":{"turn_id":"turn-x","approvals_reviewer":"user"}}"#
+        let live = #"{"type":"turn_context","payload":{"turn_id":"turn-x","approvals_reviewer":"auto_review"}}"#
+        // One long newline-free line pushes the decoy out of the window; the
+        // read offset lands inside it, so this also covers the
+        // drop-up-to-first-newline branch.
+        let filler = String(repeating: "x", count: 512)
+        let window: UInt64 = 128
+
+        // Decoy sits beyond the window → only the tail `live` line is visible,
+        // so we resolve auto_review rather than the head's user.
+        try "\(decoy)\n\(filler)\n\(live)\n".write(to: transcript, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        XCTAssertEqual(
+            AgentBridge.codexApprovalReviewer(
+                transcriptPath: transcript.path,
+                turnID: "turn-x",
+                maxTailBytes: window
+            ),
+            "auto_review"
+        )
+
+        // With no match in the tail, the head decoy must not be seen — a
+        // broken window would return "user" here.
+        try "\(decoy)\n\(filler)\n".write(to: transcript, atomically: true, encoding: .utf8)
+        XCTAssertNil(
+            AgentBridge.codexApprovalReviewer(
+                transcriptPath: transcript.path,
+                turnID: "turn-x",
+                maxTailBytes: window
+            )
+        )
+    }
+
+    @MainActor
+    func testCodexAutoReviewPermissionRequestDoesNotWaitForUser() {
+        XCTAssertEqual(
+            WorkspaceStore.permissionRequestStatus(
+                kind: .codex,
+                approvalsReviewer: "auto_review"
+            ),
+            .thinking
+        )
+        // Any reviewer other than auto_review (incl. future/unknown values)
+        // still surfaces as needs-permission: a false alert is safe, silently
+        // suppressing a real prompt is not.
+        XCTAssertEqual(
+            WorkspaceStore.permissionRequestStatus(
+                kind: .codex,
+                approvalsReviewer: "some_future_reviewer"
+            ),
+            .needsPermission
+        )
+        XCTAssertEqual(
+            WorkspaceStore.permissionRequestStatus(kind: .codex, approvalsReviewer: "user"),
+            .needsPermission
+        )
+        XCTAssertEqual(
+            WorkspaceStore.permissionRequestStatus(kind: .codex, approvalsReviewer: nil),
+            .needsPermission
+        )
+        XCTAssertEqual(
+            WorkspaceStore.permissionRequestStatus(
+                kind: .claude,
+                approvalsReviewer: "auto_review"
+            ),
+            .needsPermission
+        )
     }
 
     /// Without PANE/SOCK the reporter must still exit 0 and drain stdin —

@@ -1764,6 +1764,21 @@ final class WorkspaceStore: ObservableObject {
 
     // MARK: agent hook events
 
+    static func permissionRequestStatus(
+        kind: PaneAgentKind,
+        approvalsReviewer: String?
+    ) -> PaneAgentStatus {
+        guard kind == .codex else { return .needsPermission }
+        // Only `auto_review` (Codex's guardian subagent) approves without the
+        // human. `user`, nil, or any unrecognised reviewer still needs a person
+        // — see AgentBridge.codexApprovalReviewer for why the default is
+        // conservative rather than "anything but user".
+        switch approvalsReviewer {
+        case "auto_review": return .thinking
+        default: return .needsPermission
+        }
+    }
+
     /// Translate one hook from the AgentBridge into pane state.
     func handleAgentEvent(_ info: [AnyHashable: Any]?) {
         guard let info,
@@ -1832,7 +1847,11 @@ final class WorkspaceStore: ObservableObject {
             }
             state.status = .thinking
         case "Notification":      break   // noisy: background/idle prompts, ignore
-        case "PermissionRequest": state.status = .needsPermission
+        case "PermissionRequest":
+            state.status = Self.permissionRequestStatus(
+                kind: kind,
+                approvalsReviewer: info["approvals_reviewer"] as? String
+            )
         case "PreCompact":        state.status = .compacting
         case "Stop":
             // `.justCompleted` persists until the user actually views this
