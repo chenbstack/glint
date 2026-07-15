@@ -36,8 +36,7 @@ final class GitRefreshCoordinatorTests: XCTestCase {
         let immediate = expectation(description: "immediate")
 
         coordinator.request(id) { count += 1; immediate.fulfill() }
-        // Two more within the window — both must fold into the single trailing.
-        coordinator.request(id) { count += 1 }
+        // The watcher follow-up within the window folds into one trailing run.
         coordinator.request(id) { count += 1 }
 
         wait(for: [immediate], timeout: 0.5)
@@ -47,6 +46,31 @@ final class GitRefreshCoordinatorTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
             // immediate + exactly one trailing
             XCTAssertEqual(count, 2)
+            settled.fulfill()
+        }
+        wait(for: [settled], timeout: 1.5)
+    }
+
+    /// A build/rebase can keep FSEvents busy for seconds. Once the burst is
+    /// clearly larger than the normal command-finished + watcher pair, refresh
+    /// less often instead of spawning one git process pair every base window.
+    func testSustainedStormBacksOffBeyondBaseInterval() {
+        let coordinator = GitRefreshCoordinator(minInterval: 0.15)
+        let id = UUID()
+        var count = 0
+
+        coordinator.request(id) { count += 1 }
+        for offset in stride(from: 0.04, through: 0.52, by: 0.04) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + offset) {
+                coordinator.request(id) { count += 1 }
+            }
+        }
+
+        let settled = expectation(description: "storm throttled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+            // Fixed 150 ms throttling produces about five refreshes here. The
+            // storm path should produce the initial refresh plus one trailing.
+            XCTAssertLessThanOrEqual(count, 3)
             settled.fulfill()
         }
         wait(for: [settled], timeout: 1.5)
