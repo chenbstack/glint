@@ -5142,6 +5142,7 @@
       "extractionState": "manual"
     },
     "awaiting reply": {
+      "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
@@ -5163,6 +5164,7 @@
       }
     },
     "reply": {
+      "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
@@ -5173,6 +5175,7 @@
       }
     },
     "Agent is waiting for your reply": {
+      "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {

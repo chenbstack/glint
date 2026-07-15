@@ -3852,7 +3852,7 @@ extension WorkspaceStore {
     static func isBusyStatus(_ s: PaneAgentStatus) -> Bool {
         switch s {
         case .thinking, .tool, .compacting, .needsPermission: return true
-        case .justCompleted, .failed, .needsReply, .idle:  return false
+        case .justCompleted, .failed, .needsReply, .idle:     return false
         }
     }
 
@@ -3865,13 +3865,13 @@ extension WorkspaceStore {
     /// should win the chip. Don't "fix" one to match the other.
     private func statusRank(_ s: PaneAgentStatus) -> Int {
         switch s {
-        case .needsPermission: return 5
-        case .failed:          return 4
-        case .compacting:      return 3
-        case .tool:            return 3
-        case .thinking:        return 3
-        case .justCompleted, .needsReply:  return 2
-        case .idle:            return 1
+        case .needsPermission:            return 5
+        case .failed:                     return 4
+        case .compacting:                 return 3
+        case .tool:                       return 3
+        case .thinking:                   return 3
+        case .justCompleted, .needsReply: return 2
+        case .idle:                       return 1
         }
     }
 
