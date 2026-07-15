@@ -1190,7 +1190,7 @@ enum OmpHookInstaller {
       pi.on("agent_end", (event, ctx) => {
         if (!rootSession || !agentActive) return
         agentActive = false
-        void send(endedInError(event) ? "StopFailure" : "Stop", pickSessionId(ctx))
+        void send(endedInError(event) ? "StopFailure" : "NeedsReply", pickSessionId(ctx))
       })
     }
     """

@@ -36,6 +36,7 @@ final class OmpHookInstallerTests: XCTestCase {
         XCTAssertTrue(body.contains("UserPromptSubmit"))
         XCTAssertTrue(body.contains("PermissionRequest"))
         XCTAssertTrue(body.contains("StopFailure"))
+        XCTAssertTrue(body.contains("NeedsReply"))
         XCTAssertTrue(body.contains("GLINT_PANE_ID"))
         XCTAssertTrue(body.contains("client.end(line)"))
 

@@ -5195,6 +5195,36 @@
         }
       },
       "extractionState": "manual"
+    },
+    "awaiting reply": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待回复"
+          }
+        }
+      }
+    },
+    "reply": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待回复"
+          }
+        }
+      }
+    },
+    "Agent is waiting for your reply": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent 等待你的回复"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -1028,6 +1028,7 @@ private struct WorkspaceCard: View {
         case .some(.needsPermission):   return "permission"
         case .some(.compacting):        return "compacting"
         case .some(.justCompleted):     return "done"
+        case .some(.needsReply):        return "reply"
         case .some(.failed):            return "failed"
         }
     }
@@ -1035,7 +1036,7 @@ private struct WorkspaceCard: View {
     private func showsTimer(_ s: PaneAgentStatus) -> Bool {
         switch s {
         case .thinking, .tool, .compacting, .needsPermission: return true
-        case .justCompleted, .failed, .idle:                  return false
+        case .justCompleted, .failed, .needsReply, .idle:   return false
         }
     }
 
@@ -1181,6 +1182,7 @@ private struct WorkspaceCard: View {
         case .needsPermission: return String(localized: "needs approval")
         case .compacting:      return String(localized: "compacting…")
         case .justCompleted:   return String(localized: "done")
+        case .needsReply:     return String(localized: "reply")
         case .failed:          return String(localized: "error")
         case .idle:            return ""
         }
@@ -1202,6 +1204,7 @@ private struct WorkspaceCard: View {
         case .needsPermission: return LocalizedStringKey("needs approval")
         case .compacting:      return LocalizedStringKey("compacting…")
         case .justCompleted:   return LocalizedStringKey("✓ done")
+        case .needsReply:     return LocalizedStringKey("awaiting reply")
         case .failed:          return LocalizedStringKey("error")
         case .idle:            return LocalizedStringKey("")
         }
@@ -1213,6 +1216,7 @@ private struct WorkspaceCard: View {
         case .needsPermission:  return Color(red: 1.0, green: 0.45, blue: 0.42)
         case .compacting:       return Color(red: 0.43, green: 0.72, blue: 0.86)
         case .justCompleted:    return Color(red: 0.40, green: 0.86, blue: 0.55)
+        case .needsReply:      return Color(red: 0.35, green: 0.60, blue: 0.95)
         case .failed:           return Color(red: 0.96, green: 0.36, blue: 0.34)
         case .idle:             return Theme.text4
         }
@@ -1234,7 +1238,7 @@ enum MascotAsset {
     static func claude(for s: PaneAgentStatus?, isSpark: Bool) -> String {
         let prefix = isSpark ? "ClaudeSpark" : "Claude"
         switch s {
-        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed):
+        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed), .some(.needsReply):
             return prefix + "Idle"
         case .some(.thinking):   return prefix + "Thinking"
         case .some(.tool):       return prefix + "ToolCall"
@@ -1244,7 +1248,7 @@ enum MascotAsset {
 
     static func codex(for s: PaneAgentStatus?) -> String {
         switch s {
-        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed):
+        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed), .some(.needsReply):
             return "CodexIdle"
         case .some(.thinking), .some(.compacting): return "CodexThinking"
         case .some(.tool):       return "CodexWorking"
@@ -1259,6 +1263,7 @@ enum MascotAsset {
         case .some(.compacting): return "OpenCodeCompressing"
         case .some(.needsPermission): return "OpenCodeNeedsPermission"
         case .some(.justCompleted): return "OpenCodeDone"
+        case .some(.needsReply): return "OpenCodeIdle"
         case .some(.failed): return "OpenCodeFailed"
         }
     }
@@ -1271,6 +1276,7 @@ enum MascotAsset {
         case .some(.compacting): return "DevinCompressing"
         case .some(.needsPermission): return "DevinNeedsPermission"
         case .some(.justCompleted): return "DevinDone"
+        case .some(.needsReply): return "DevinIdle"
         case .some(.failed): return "DevinFailed"
         }
     }
@@ -1283,6 +1289,7 @@ enum MascotAsset {
         case .some(.compacting): return "OmpCompressing"
         case .some(.needsPermission): return "OmpNeedsPermission"
         case .some(.justCompleted): return "OmpDone"
+        case .some(.needsReply): return "OmpIdle"
         case .some(.failed): return "OmpFailed"
         }
     }

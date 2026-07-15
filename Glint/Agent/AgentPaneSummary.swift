@@ -27,6 +27,7 @@ func agentStatusLabel(_ s: PaneAgentStatus) -> String {
     case .needsPermission: return String(localized: "needs approval")
     case .compacting:      return String(localized: "compacting…")
     case .justCompleted:   return String(localized: "✓ done")
+    case .needsReply:     return String(localized: "awaiting reply")
     case .failed:          return String(localized: "error")
     case .idle:            return ""
     }
@@ -40,6 +41,7 @@ func agentStatusLabelColor(_ s: PaneAgentStatus) -> Color {
     case .needsPermission:  return Color(red: 1.0,  green: 0.45, blue: 0.42)
     case .compacting:       return Color(red: 0.43, green: 0.72, blue: 0.86)
     case .justCompleted:    return Color(red: 0.40, green: 0.86, blue: 0.55)
+    case .needsReply:      return Color(red: 0.35, green: 0.60, blue: 0.95)
     case .failed:           return Color(red: 0.96, green: 0.36, blue: 0.34)
     case .idle:             return Theme.text4
     }

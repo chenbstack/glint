@@ -1908,6 +1908,14 @@ final class WorkspaceStore: ObservableObject {
             // Always set it, even if the user is watching: an error is worth a
             // beat of red rather than silently snapping to idle.
             state.status = .failed
+        case "NeedsReply":
+            // OMP fires NeedsReply when the agent finishes its turn and is
+            // idle waiting for the user's next prompt — a richer signal than
+            // Claude's Stop (which just means "turn ended"). Always set the
+            // sticky badge, even when the user is watching: unlike Stop's
+            // justCompleted, NeedsReply means "your move", so it should never
+            // silently snap to idle. Cleared on view like justCompleted/failed.
+            state.status = .needsReply
         default: break
         }
         // Anchor the turn clock at the start of active work, then keep it
@@ -1937,6 +1945,8 @@ final class WorkspaceStore: ObservableObject {
             case .needsPermission where soundOnPermissionRequest:
                 NSSound(named: soundPermissionName)?.play()
             case .justCompleted where soundOnTurnComplete:
+                NSSound(named: soundCompleteName)?.play()
+            case .needsReply where soundOnTurnComplete:
                 NSSound(named: soundCompleteName)?.play()
             case .failed where soundOnError:
                 NSSound(named: soundErrorName)?.play()
@@ -1969,9 +1979,9 @@ final class WorkspaceStore: ObservableObject {
             state.updatedAt = Date()
             paneAgentState[key] = state
             clearDockBadge(for: key)
-        case .idle, .justCompleted, .failed:
-            // justCompleted/failed are unread badges — only viewing the
-            // workspace clears them, not a stray Esc.
+        case .idle, .justCompleted, .failed, .needsReply:
+            // justCompleted/failed/needsReply are unread badges — only viewing
+            // the workspace clears them, not a stray Esc.
             break
         }
     }
@@ -2003,11 +2013,12 @@ final class WorkspaceStore: ObservableObject {
         clearDockBadge(for: key)
     }
 
-    /// Clear any `.justCompleted` / `.failed` panes back to `.idle` — but
-    /// only the ones actually on screen: panes in `workspaceID`'s *selected
-    /// tab*. Called when the user selects the workspace, switches to a tab,
-    /// or ⌘Tabs back to Glint — each is "I saw it finished / saw it
-    /// errored". Background tabs keep their badge until visited.
+    /// Clear any `.justCompleted` / `.failed` / `.needsReply` panes back to
+    /// `.idle` — but only the ones actually on screen: panes in
+    /// `workspaceID`'s *selected tab*. Called when the user selects the
+    /// workspace, switches to a tab, or ⌘Tabs back to Glint — each is "I saw
+    /// it finished / saw it errored / saw it waiting". Background tabs keep
+    /// their badge until visited.
     func acknowledgeCompletionIfNeeded(for workspaceID: UUID) {
         guard let ws = workspaces.first(where: { $0.id == workspaceID }),
               let tab = ws.selectedTab else { return }
@@ -2018,7 +2029,7 @@ final class WorkspaceStore: ObservableObject {
         }
         for (key, state) in paneAgentState
         where key.workspace == workspaceID && visible.contains(key.pane)
-            && (state.status == .justCompleted || state.status == .failed) {
+            && (state.status == .justCompleted || state.status == .failed || state.status == .needsReply) {
             paneAgentState[key]?.status = .idle
             paneAgentState[key]?.updatedAt = Date()
         }
@@ -2026,7 +2037,7 @@ final class WorkspaceStore: ObservableObject {
 
     private static func isDockBadgeStatus(_ status: PaneAgentStatus) -> Bool {
         switch status {
-        case .needsPermission, .justCompleted, .failed:
+        case .needsPermission, .justCompleted, .failed, .needsReply:
             return true
         case .idle, .thinking, .tool, .compacting:
             return false
@@ -2041,6 +2052,7 @@ final class WorkspaceStore: ObservableObject {
         case .needsPermission: body = String(localized: "Waiting for your approval")
         case .justCompleted:   body = String(localized: "Agent finished its turn")
         case .failed:          body = String(localized: "Agent's turn ended in an error")
+        case .needsReply:      body = String(localized: "Agent is waiting for your reply")
         default: return
         }
         let title = workspaces.first { $0.id == key.workspace }?.displayName
@@ -3827,7 +3839,7 @@ extension WorkspaceStore {
     static func isBusyStatus(_ s: PaneAgentStatus) -> Bool {
         switch s {
         case .thinking, .tool, .compacting, .needsPermission: return true
-        case .justCompleted, .failed, .idle:                  return false
+        case .justCompleted, .failed, .needsReply, .idle:  return false
         }
     }
 
@@ -3845,7 +3857,7 @@ extension WorkspaceStore {
         case .compacting:      return 3
         case .tool:            return 3
         case .thinking:        return 3
-        case .justCompleted:   return 2
+        case .justCompleted, .needsReply:  return 2
         case .idle:            return 1
         }
     }
