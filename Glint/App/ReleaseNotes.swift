@@ -52,6 +52,23 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.26-beta.3",
+            en: [
+                "Oh My Pi (OMP) joins Claude, Codex, OpenCode, and Devin as a first-class agent: live status in the sidebar and tabs, one-click hook install in Settings → Agents, and per-pane session restore on relaunch.",
+                "New \"awaiting reply\" status: when an agent stops to ask you a question, its pane shows a blue badge — with the same chime, Dock badge, and sidebar float-to-top as a finished turn — so questions never sit unnoticed.",
+                "Agent activity now reads \"thinking…\" while the model is reasoning and \"running…\" while a tool executes, instead of one combined label.",
+                "Smoother Settings: opacity and blur sliders apply once when you release them instead of rewriting the terminal configuration on every pixel of the drag. Review windows no longer double-load on first open, and revealing a deleted file lands on its nearest existing folder.",
+                "Less background work: git polling pauses while Glint is inactive and skips archived workspaces, cancelled git operations now terminate their subprocesses, and terminals stop cursor-blink rendering when the app is in the background."
+            ],
+            zh: [
+                "Oh My Pi（OMP）成为与 Claude、Codex、OpenCode、Devin 并列的内置 Agent：侧边栏和标签页实时显示状态，设置 → Agents 一键安装 hook，重启后每个窗格恢复各自会话。",
+                "新增「待回复」状态：Agent 停下来向你提问时，窗格会显示蓝色徽标，并和任务完成一样有提示音、Dock 角标和侧边栏置顶，提问不再被漏看。",
+                "Agent 活动状态拆分为「思考中…」（模型推理）和「运行中…」（工具执行），不再合并成一个标签。",
+                "设置更顺滑：透明度和模糊滑块改为松手时一次性生效，拖动过程不再逐像素重写终端配置。Review 窗口首次打开不再重复加载，定位已删除的文件会落到最近的现存文件夹。",
+                "后台开销更小：Glint 非活跃时暂停 git 轮询并跳过已归档工作区，取消的 git 操作会真正终止子进程，应用退到后台时终端停止光标闪烁渲染。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.26-beta.2",
             en: [
                 "Jump straight to the pane that needs you with ⌘⇧A. Permission prompts and completed turns now float consistently in the sidebar, and folders can be dragged from Finder onto the sidebar to open them as workspaces.",
