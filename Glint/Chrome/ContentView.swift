@@ -1403,7 +1403,8 @@ private struct TabOverflowRow: View {
     private func secondaryText(_ status: PaneAgentStatus?) -> String {
         if let status, status != .idle {
             switch status {
-            case .thinking, .tool: return String(localized: "running…")
+            case .thinking:         return String(localized: "thinking…")
+            case .tool:             return String(localized: "running…")
             case .needsPermission: return String(localized: "needs approval")
             case .compacting:      return String(localized: "compacting…")
             case .justCompleted:   return String(localized: "✓ done")
@@ -1881,7 +1882,8 @@ private struct WorkspaceSwitcherRow: View {
     private func secondaryText(summary: (status: PaneAgentStatus, since: Date)?) -> String {
         if let s = summary, s.status != .idle {
             switch s.status {
-            case .thinking, .tool: return String(localized: "running…")
+            case .thinking:         return String(localized: "thinking…")
+            case .tool:             return String(localized: "running…")
             case .needsPermission: return String(localized: "needs approval")
             case .compacting:      return String(localized: "compacting…")
             case .justCompleted:   return String(localized: "✓ done")

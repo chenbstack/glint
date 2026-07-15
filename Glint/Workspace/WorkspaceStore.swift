@@ -815,7 +815,7 @@ final class WorkspaceStore: ObservableObject {
     /// Whether Glint's Devin hook entries are registered in `~/.config/devin/config.json`.
     @Published var devinHooksInstalled: Bool = false
 
-    /// Whether Glint's OMP extension is installed in `~/.omp/agent/extensions`.
+    /// Whether Glint's OMP extension is registered in `~/.omp/agent/settings.json`.
     @Published var ompHooksInstalled: Bool = false
 
     /// Whether Glint's modified-Enter shell keybindings are present in the

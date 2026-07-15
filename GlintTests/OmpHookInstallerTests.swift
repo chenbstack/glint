@@ -36,9 +36,13 @@ final class OmpHookInstallerTests: XCTestCase {
         XCTAssertTrue(body.contains("UserPromptSubmit"))
         XCTAssertTrue(body.contains("PermissionRequest"))
         XCTAssertTrue(body.contains("StopFailure"))
-        XCTAssertTrue(body.contains("NeedsReply"))
+        XCTAssertTrue(body.contains("\"Stop\""))
         XCTAssertTrue(body.contains("GLINT_PANE_ID"))
         XCTAssertTrue(body.contains("client.end(line)"))
+        // Must use depth counter, not ctx.hasUI (OMP 16.5.2 sets it false
+        // even in interactive mode, which would block all events).
+        XCTAssertTrue(body.contains("activeDepth"))
+        XCTAssertFalse(body.contains("ctx?.hasUI"))
 
         let settings = try! JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as! [String: Any]
         let list = settings["extensions"] as! [String]

@@ -23,7 +23,8 @@ extension PaneAgentKind {
 /// the popover never drifts from the rows it summarizes.
 func agentStatusLabel(_ s: PaneAgentStatus) -> String {
     switch s {
-    case .thinking, .tool: return String(localized: "running…")
+    case .thinking:         return String(localized: "thinking…")
+    case .tool:             return String(localized: "running…")
     case .needsPermission: return String(localized: "needs approval")
     case .compacting:      return String(localized: "compacting…")
     case .justCompleted:   return String(localized: "✓ done")

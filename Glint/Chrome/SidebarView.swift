@@ -1022,9 +1022,8 @@ private struct WorkspaceCard: View {
     private func secondaryRowKey(_ s: PaneAgentStatus?) -> String {
         switch s {
         case .none, .some(.idle):       return "cwd"
-        // Same key for thinking/tool → no pointless crossfade between two
-        // identical "running…" labels when the agent flips between them.
-        case .some(.thinking), .some(.tool): return "running"
+        case .some(.thinking):          return "thinking"
+        case .some(.tool):              return "running"
         case .some(.needsPermission):   return "permission"
         case .some(.compacting):        return "compacting"
         case .some(.justCompleted):     return "done"
@@ -1178,7 +1177,8 @@ private struct WorkspaceCard: View {
     /// String, not a LocalizedStringKey.
     private func plainStatusText(_ s: PaneAgentStatus) -> String {
         switch s {
-        case .thinking, .tool: return String(localized: "running…")
+        case .thinking:         return String(localized: "thinking…")
+        case .tool:             return String(localized: "running…")
         case .needsPermission: return String(localized: "needs approval")
         case .compacting:      return String(localized: "compacting…")
         case .justCompleted:   return String(localized: "done")
@@ -1197,10 +1197,8 @@ private struct WorkspaceCard: View {
 
     private func statusText(_ s: PaneAgentStatus) -> LocalizedStringKey {
         switch s {
-        // thinking, tool and the post-tool output phase all read as one state —
-        // the agent is busy. Showing distinct "thinking"/"running tool" labels
-        // mislabeled output generation as "thinking", so they share one text.
-        case .thinking, .tool: return LocalizedStringKey("running…")
+        case .thinking:         return LocalizedStringKey("thinking…")
+        case .tool:             return LocalizedStringKey("running…")
         case .needsPermission: return LocalizedStringKey("needs approval")
         case .compacting:      return LocalizedStringKey("compacting…")
         case .justCompleted:   return LocalizedStringKey("✓ done")

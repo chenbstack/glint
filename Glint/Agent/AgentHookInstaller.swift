@@ -1127,37 +1127,45 @@ enum OmpHookInstaller {
       const sock = process.env.GLINT_AGENT_SOCK
       if (!pane || !sock) return
 
-      // Only the interactive root session reports — subagents inherit the same
-      // env and would otherwise thrash the pane's status with nested turns.
+      // session_start fires once per root session — subagents run inside
+      // the same session, so this reliably identifies the root. OMP 16.5.2
+      // sets ctx.hasUI to false even in interactive mode, so we can't use it.
       let rootSession = false
-      let agentActive = false
-
-      function activateRoot(ctx) {
-        if (ctx?.hasUI !== true) return false
-        rootSession = true
-        return true
-      }
+      // Depth counter: nested subagent turns increment/decrement this. We
+      // only report NeedsReply/StopFailure when depth returns to 0, so a
+      // subagent's agent_end doesn't prematurely clear the root turn's status.
+      let activeDepth = 0
 
       pi.on("session_start", (_event, ctx) => {
-        if (!activateRoot(ctx)) return
+        rootSession = true
         void send("SessionStart", pickSessionId(ctx))
       })
 
       pi.on("session_switch", (_event, ctx) => {
-        if (!activateRoot(ctx)) return
-        agentActive = false
+        rootSession = true
+        activeDepth = 0
         void send("SessionStart", pickSessionId(ctx))
       })
 
       pi.on("agent_start", (_event, ctx) => {
-        if (!rootSession && !activateRoot(ctx)) return
-        agentActive = true
-        void send("UserPromptSubmit", pickSessionId(ctx))
+        if (!rootSession) return
+        activeDepth++
+        // Only report UserPromptSubmit on the first (root) agent_start —
+        // subagent starts shouldn't re-trigger the "thinking" transition.
+        if (activeDepth === 1) {
+          void send("UserPromptSubmit", pickSessionId(ctx))
+        }
       })
 
-      pi.on("tool_call", (_event, ctx) => {
+      pi.on("tool_call", (event, ctx) => {
         if (!rootSession) return
-        void send("PreToolUse", pickSessionId(ctx))
+        // The ask tool blocks waiting for user input — surface it as
+        // NeedsReply so the tab reads "awaiting reply" not "running…".
+        if (event?.toolName === "ask") {
+          void send("NeedsReply", pickSessionId(ctx))
+        } else {
+          void send("PreToolUse", pickSessionId(ctx))
+        }
       })
 
       pi.on("tool_result", (_event, ctx) => {
@@ -1166,7 +1174,7 @@ enum OmpHookInstaller {
       })
 
       pi.on("tool_approval_requested", (_event, ctx) => {
-        if (!rootSession && !activateRoot(ctx)) return
+        if (!rootSession) return
         void send("PermissionRequest", pickSessionId(ctx))
       })
 
@@ -1188,9 +1196,11 @@ enum OmpHookInstaller {
       })
 
       pi.on("agent_end", (event, ctx) => {
-        if (!rootSession || !agentActive) return
-        agentActive = false
-        void send(endedInError(event) ? "StopFailure" : "NeedsReply", pickSessionId(ctx))
+        if (!rootSession) return
+        if (activeDepth > 0) activeDepth--
+        // Only report turn end when all nested agents have finished.
+        if (activeDepth > 0) return
+        void send(endedInError(event) ? "StopFailure" : "Stop", pickSessionId(ctx))
       })
     }
     """
