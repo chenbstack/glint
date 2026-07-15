@@ -51,6 +51,7 @@ final class GhosttyManager {
     private var config: ghostty_config_t?
     private var appearanceObservation: NSKeyValueObservation?
     private let tickScheduler = GhosttyTickScheduler()
+    private var focusObservers: [NSObjectProtocol] = []
 
     private init() {
         bootstrap()
@@ -95,6 +96,7 @@ final class GhosttyManager {
         self.app = app
 
         observeColorScheme()
+        observeAppFocus()
     }
 
     /// Push the system Light/Dark setting into ghostty and re-push on
@@ -115,6 +117,31 @@ final class GhosttyManager {
             ? GHOSTTY_COLOR_SCHEME_DARK
             : GHOSTTY_COLOR_SCHEME_LIGHT
         ghostty_app_set_color_scheme(app, scheme)
+    }
+
+    /// App focus is separate from a surface's first-responder state. AppKit
+    /// keeps the first responder when the app resigns active, so mirror the
+    /// lifecycle explicitly to stop cursor blink / render work in the background.
+    private func observeAppFocus() {
+        setAppFocus(NSApp.isActive)
+        let center = NotificationCenter.default
+        focusObservers.append(center.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.setAppFocus(true)
+        })
+        focusObservers.append(center.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.setAppFocus(false)
+        })
+    }
+
+    private func setAppFocus(_ focused: Bool) {
+        guard let app else { return }
+        ghostty_app_set_focus(app, focused)
     }
 
     // MARK: transparency
@@ -334,18 +361,18 @@ final class GhosttyManager {
         applyGlintTheme(newCfg)
         ghostty_config_finalize(newCfg)
         ghostty_app_update_config(app, newCfg)
+        let oldCfg = config
+        self.config = newCfg
+        // `ghostty_app_update_config` copies the configuration into the app and
+        // surfaces; its API contract says caller-owned memory may be freed as
+        // soon as the call returns.
+        if let oldCfg { ghostty_config_free(oldCfg) }
         // Blur is a window-level effect ghostty won't (re)apply on its own —
         // re-assert it after the config swap so toggling opacity/blur live
         // takes hold without a relaunch.
         DispatchQueue.main.async { [weak self] in
             self?.applyWindowEffects()
         }
-        // ghostty takes the config from here. We keep a reference for parity
-        // with bootstrap; we don't free the previous one because ghostty may
-        // still be holding it during in-flight reload propagation. The few
-        // extra config objects accumulated over a session are bounded by how
-        // often a user changes settings (~tens of bytes per knob).
-        self.config = newCfg
     }
 
     private static let writeClipboard: ghostty_runtime_write_clipboard_cb = { _, _, contentPtr, count, _ in

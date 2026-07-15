@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D7A100000000000000000002 /* PerformanceRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A100000000000000000001 /* PerformanceRegressionTests.swift */; };
 		04E75EAD5165E8D96C1C5517 /* MascotAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 349714D49AE52D84995314FD /* MascotAssetTests.swift */; };
 		07817DC6A98F8ED2E236CFA1 /* CodexHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E3B385162995D0F1F5B72D /* CodexHome.swift */; };
 		0FB9792E290FC2A8B527B2D0 /* GitRepositoryWatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C888E59D1091BFC22A9EA4 /* GitRepositoryWatcherTests.swift */; };
@@ -91,6 +92,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		D7A100000000000000000001 /* PerformanceRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceRegressionTests.swift; sourceTree = "<group>"; };
 		050E267AE14712D4D6633B4F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		05F2CA2243872C8111048EF2 /* AgentBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBridge.swift; sourceTree = "<group>"; };
 		08FC2FBC9E8729A5ECBF857C /* PaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneView.swift; sourceTree = "<group>"; };
@@ -223,6 +225,7 @@
 				EBCC04C19D745AA867D961FD /* PaneAgentKindTests.swift */,
 				797C4E86D052EF8A68DD9B39 /* PaneSessionIdMigrationTests.swift */,
 				51DE2D7740BD03498A936B62 /* PersistenceRecoveryTests.swift */,
+				D7A100000000000000000001 /* PerformanceRegressionTests.swift */,
 				4A0B24E791FF6CEB30A9DDD5 /* RemoteTitleParserTests.swift */,
 				2CFFB91CE5C44976A6961F1F /* ReviewDiffParsingTests.swift */,
 				D7F8C1899F93B387843907FF /* ReviewScopeTests.swift */,
@@ -474,6 +477,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D7A100000000000000000002 /* PerformanceRegressionTests.swift in Sources */,
 				A019A2AD685F1407D7E2A7E1 /* AgentHookRoutingTests.swift in Sources */,
 				81532B36FEC3039B8EAD9CB1 /* AgentKindResolutionTests.swift in Sources */,
 				C41119D04864077E5B554F59 /* CodexHomeStoreTests.swift in Sources */,

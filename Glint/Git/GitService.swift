@@ -135,6 +135,59 @@ func boundedMap(paths: [String], maxConcurrent: Int,
     }
 }
 
+private final class ProcessCancellationState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var process: Process?
+    private var cancelled = false
+    private var killer: DispatchWorkItem?
+
+    /// Install and launch atomically with respect to cancellation. Holding the
+    /// lock across `run()` closes the race where cancellation fires after the
+    /// preflight check but before the subprocess actually exists.
+    func launch(_ process: Process) throws -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !cancelled else { return false }
+        self.process = process
+        do {
+            try process.run()
+            return true
+        } catch {
+            self.process = nil
+            throw error
+        }
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        guard let process, process.isRunning else {
+            lock.unlock()
+            return
+        }
+        let pid = process.processIdentifier
+        let killer = DispatchWorkItem {
+            if process.isRunning { kill(pid, SIGKILL) }
+        }
+        self.killer?.cancel()
+        self.killer = killer
+        lock.unlock()
+
+        kill(pid, SIGTERM)
+        DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(2), execute: killer)
+    }
+
+    /// Clear the process and return whether cancellation won the race.
+    func finish() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        process = nil
+        killer?.cancel()
+        killer = nil
+        return cancelled
+    }
+}
+
 /// Spawn `executable arguments` with `cwd`/`env`, drain both pipes concurrently
 /// (so neither fixed pipe buffer can deadlock on large output), and enforce an
 /// optional hard `timeout`. On the deadline: SIGTERM, then SIGKILL after a 2s
@@ -157,6 +210,21 @@ func boundedMap(paths: [String], maxConcurrent: Int,
 /// render a half-streamed diff as if it were complete.
 private func captureProcess(executable: String, arguments: [String], cwd: String?,
                             env: [String: String], timeout: TimeInterval?) async throws -> GitResult {
+    let cancellation = ProcessCancellationState()
+    return try await withTaskCancellationHandler(operation: {
+        let result = try await captureProcessBody(
+            executable: executable, arguments: arguments, cwd: cwd,
+            env: env, timeout: timeout, cancellation: cancellation)
+        try Task.checkCancellation()
+        return result
+    }, onCancel: {
+        cancellation.cancel()
+    })
+}
+
+private func captureProcessBody(executable: String, arguments: [String], cwd: String?,
+                                env: [String: String], timeout: TimeInterval?,
+                                cancellation: ProcessCancellationState) async throws -> GitResult {
     try await withCheckedThrowingContinuation { (cont: CheckedContinuation<GitResult, Error>) in
         DispatchQueue.global(qos: .userInitiated).async {
             let proc = Process()
@@ -172,9 +240,15 @@ private func captureProcess(executable: String, arguments: [String], cwd: String
             proc.standardOutput = outPipe
             proc.standardError = errPipe
             do {
-                try proc.run()
+                guard try cancellation.launch(proc) else {
+                    cont.resume(throwing: CancellationError())
+                    return
+                }
             } catch {
-                cont.resume(throwing: GitError.launchFailed(error.localizedDescription))
+                let wasCancelled = cancellation.finish()
+                cont.resume(throwing: wasCancelled
+                            ? CancellationError()
+                            : GitError.launchFailed(error.localizedDescription))
                 return
             }
 
@@ -212,11 +286,15 @@ private func captureProcess(executable: String, arguments: [String], cwd: String
             watchdog?.cancel()
             killer?.cancel()
 
-            cont.resume(returning: GitResult(
-                exitCode: proc.terminationStatus,
-                stdout: String(decoding: outData, as: UTF8.self),
-                stderr: String(decoding: errData, as: UTF8.self),
-                wasSignaled: proc.terminationReason == .uncaughtSignal))
+            if cancellation.finish() {
+                cont.resume(throwing: CancellationError())
+            } else {
+                cont.resume(returning: GitResult(
+                    exitCode: proc.terminationStatus,
+                    stdout: String(decoding: outData, as: UTF8.self),
+                    stderr: String(decoding: errData, as: UTF8.self),
+                    wasSignaled: proc.terminationReason == .uncaughtSignal))
+            }
         }
     }
 }

@@ -138,6 +138,17 @@ final class ReviewModel: ObservableObject {
         diff = .empty
         loadingDiff = false
     }
+
+    static func revealTarget(fullPath: String, repo: String,
+                             fileManager: FileManager = .default) -> URL {
+        let repoURL = URL(fileURLWithPath: repo).standardizedFileURL
+        var candidate = URL(fileURLWithPath: fullPath).standardizedFileURL
+        while candidate.path != repoURL.path,
+              !fileManager.fileExists(atPath: candidate.path) {
+            candidate.deleteLastPathComponent()
+        }
+        return fileManager.fileExists(atPath: candidate.path) ? candidate : repoURL
+    }
 }
 
 // MARK: - Root view
@@ -635,10 +646,7 @@ private struct FileListView: View {
 
     private func revealFile(_ file: GitFileChange) {
         let full = fullPath(for: file)
-        let url = URL(fileURLWithPath: full)
-        // A deleted file isn't on disk — reveal its containing folder instead.
-        let target = FileManager.default.fileExists(atPath: full) ? url
-            : url.deletingLastPathComponent()
+        let target = ReviewModel.revealTarget(fullPath: full, repo: model.repo)
         NSWorkspace.shared.activateFileViewerSelecting([target])
     }
 
@@ -1557,6 +1565,7 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
     private var model: ReviewModel?   // strong ref for the window's lifetime
+    private var skipNextKeyReload = false
     /// Lives for the duration the window is open. Re-applies NSWindow.appearance
     /// whenever the store bumps `themeRevision`, so a mid-session theme switch
     /// doesn't leave borderless-menu popups (rendered by AppKit, not SwiftUI)
@@ -1594,6 +1603,10 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
         // titlebar with no per-frame recomputation.
         w.contentView = NoSafeAreaHostingView(rootView: root)
         window = w
+        // ReviewView's .task performs this model's initial load. Becoming key
+        // below is synchronous and must not launch the same full scan again;
+        // later key transitions still refresh changes made while unfocused.
+        skipNextKeyReload = !w.isKeyWindow
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -1631,8 +1644,12 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
-        guard notification.object as? NSWindow === window,
-              let model else { return }
+        guard notification.object as? NSWindow === window else { return }
+        if skipNextKeyReload {
+            skipNextKeyReload = false
+            return
+        }
+        guard let model else { return }
         Task { await model.reload() }
     }
 }

@@ -11,6 +11,22 @@ import XCTest
 /// Windows-authored diff body parses as zero add/del lines — nothing tints.
 final class ReviewDiffParsingTests: XCTestCase {
 
+    private struct NonLocalDiffRunner: GitRunner {
+        func run(_ args: [String], cwd: String?, timeout: GitTimeout) async throws -> GitResult {
+            if args.contains("--name-status") {
+                return GitResult(exitCode: 0, stdout: "M\tfile.txt\n", stderr: "")
+            }
+            if args.contains("--numstat") {
+                return GitResult(exitCode: 0, stdout: "1\t1\tfile.txt\n", stderr: "")
+            }
+            return GitResult(exitCode: 0, stdout: "", stderr: "")
+        }
+
+        func countUntrackedAdditions(repo: String, paths: [String]) async -> [String: Int] {
+            [:]
+        }
+    }
+
     private func file(_ path: String) -> GitFileChange {
         GitFileChange(path: path, kind: .modified, additions: 1, deletions: 1, isBinary: false)
     }
@@ -200,5 +216,32 @@ rename to n
         let nodes = TreeNode.build([file("a.txt"), file("a.txt")])
         XCTAssertEqual(nodes.count, 1)
         XCTAssertEqual(nodes[0].name, "a.txt")
+    }
+
+    func testChangedFilesDoesNotReadMtimeForNonLocalRunner() async throws {
+        let repo = FileManager.default.temporaryDirectory
+            .appendingPathComponent("glint-remote-mtime-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: repo) }
+        try Data("local collision".utf8).write(to: repo.appendingPathComponent("file.txt"))
+
+        let files = await GitService(runner: NonLocalDiffRunner())
+            .changedFiles(repo: repo.path, scope: .workingTree)
+
+        XCTAssertEqual(files.count, 1)
+        XCTAssertNil(files[0].modDate)
+    }
+
+    @MainActor
+    func testRevealTargetWalksUpDeletedTreeToExistingRepo() throws {
+        let repo = FileManager.default.temporaryDirectory
+            .appendingPathComponent("glint-reveal-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let deleted = repo.appendingPathComponent("removed/tree/file.txt")
+
+        let target = ReviewModel.revealTarget(fullPath: deleted.path, repo: repo.path)
+
+        XCTAssertEqual(target.standardizedFileURL, repo.standardizedFileURL)
     }
 }
