@@ -40,6 +40,7 @@ private struct WorktreePane: View {
     @State private var creating = false
     @State private var errorText: String?
     @State private var showAdvanced = false
+    @State private var branchValidationTask: Task<Void, Never>?
     @FocusState private var branchFocused: Bool
 
     private var canCreate: Bool {
@@ -81,6 +82,7 @@ private struct WorktreePane: View {
             // over the sheet's default first-responder assignment.
             DispatchQueue.main.async { branchFocused = true }
         }
+        .onDisappear { branchValidationTask?.cancel() }
     }
 
     // Why the Create button is disabled — surfaced as its tooltip so a greyed
@@ -237,6 +239,7 @@ private struct WorktreePane: View {
     }
 
     private func detect() {
+        branchValidationTask?.cancel()
         let target = (repo as NSString).expandingTildeInPath
         // Reset detecting here too: a prior probe may still be in flight with
         // detecting=true, and its stale MainActor block below is skipped by the
@@ -272,22 +275,30 @@ private struct WorktreePane: View {
     private func branchChanged() {
         if !pathEdited { recomputePath() }
         let name = branch.trimmingCharacters(in: .whitespaces)
+        branchValidationTask?.cancel()
         // Reset to "pending" so Create is disabled until the async check resolves
         // — otherwise pressing ⏎ right after typing fires against the previous
         // name's stale availability.
         branchAvailable = nil
         branchInvalid = false
         guard !name.isEmpty, let root = repoRoot else { return }
-        Task {
+        branchValidationTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: 250_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
             let valid = await store.git.isValidBranchName(name, repo: root)
+            guard !Task.isCancelled else { return }
             var exists = false
             if valid { exists = await store.git.localBranchExists(repo: root, name: name) }
-            await MainActor.run {
-                // Ignore a result that arrived after the field changed again.
-                guard branch.trimmingCharacters(in: .whitespaces) == name else { return }
-                branchInvalid = !valid
-                branchAvailable = valid && !exists
-            }
+            guard !Task.isCancelled else { return }
+            // Ignore a result that arrived after the field changed again.
+            guard repoRoot == root,
+                  branch.trimmingCharacters(in: .whitespaces) == name else { return }
+            branchInvalid = !valid
+            branchAvailable = valid && !exists
         }
     }
 

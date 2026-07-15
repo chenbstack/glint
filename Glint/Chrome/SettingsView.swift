@@ -580,21 +580,20 @@ private struct AppearancePane: View {
         SettingsCard("Opacity & blur",
                      footer: "Let the desktop show through — the terminal area and the sidebar/toolbar can be tuned separately. Background blur frosts the desktop behind the window so terminal text stays readable. Note: macOS native fullscreen disables window transparency.") {
             SettingsRow("Terminal opacity") {
-                OpacityControl(value: $store.terminalOpacity)
+                CommittedSlider(value: $store.terminalOpacity, in: 0.3...1.0) {
+                    "\(Int(($0 * 100).rounded()))%"
+                }
             }
             SettingsDivider()
             SettingsRow("Interface opacity", subtitle: "Sidebar and toolbar") {
-                OpacityControl(value: $store.chromeOpacity)
+                CommittedSlider(value: $store.chromeOpacity, in: 0.3...1.0) {
+                    "\(Int(($0 * 100).rounded()))%"
+                }
             }
             SettingsDivider()
             SettingsRow("Background blur") {
-                HStack(spacing: 10) {
-                    Slider(value: $store.backgroundBlur, in: 0...60)
-                        .frame(width: 150)
-                    Text("\(Int(store.backgroundBlur.rounded()))")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(Theme.text3)
-                        .frame(width: 38, alignment: .trailing)
+                CommittedSlider(value: $store.backgroundBlur, in: 0...60) {
+                    "\(Int($0.rounded()))"
                 }
             }
         }
@@ -693,18 +692,47 @@ private struct ThemePreviewCard: View {
     }
 }
 
-/// 透明度滑块 + 百分比标签。范围下限 0.3,避免拖到全透导致界面不可用。
-private struct OpacityControl: View {
+/// Keeps continuous drag values local and commits once when the drag ends.
+/// Keyboard changes still commit immediately. This prevents every mouse-move
+/// from rewriting UserDefaults and rebuilding Ghostty's full configuration.
+private struct CommittedSlider: View {
     @Binding var value: Double
+    let range: ClosedRange<Double>
+    let format: (Double) -> String
+    @State private var draft: Double
+    @State private var isEditing = false
+
+    init(value: Binding<Double>, in range: ClosedRange<Double>,
+         format: @escaping (Double) -> String) {
+        _value = value
+        self.range = range
+        self.format = format
+        _draft = State(initialValue: value.wrappedValue)
+    }
+
     var body: some View {
         HStack(spacing: 10) {
-            Slider(value: $value, in: 0.3...1.0)
+            Slider(value: $draft, in: range, onEditingChanged: editingChanged)
                 .frame(width: 150)
-            Text("\(Int((value * 100).rounded()))%")
+            Text(verbatim: format(draft))
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(Theme.text3)
                 .frame(width: 38, alignment: .trailing)
         }
+        .onChange(of: draft) { _, newValue in
+            if !isEditing { value = newValue }
+        }
+        .onChange(of: value) { _, newValue in
+            if !isEditing { draft = newValue }
+        }
+        .onDisappear {
+            if value != draft { value = draft }
+        }
+    }
+
+    private func editingChanged(_ editing: Bool) {
+        isEditing = editing
+        if !editing, value != draft { value = draft }
     }
 }
 

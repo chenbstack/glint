@@ -59,7 +59,7 @@ extension GitService {
                                            deletions: 0, isBinary: false)
                 }
             }
-            return Self.withMtime(map.values.sorted { $0.path < $1.path }, repo: repo)
+            return withMtime(map.values.sorted { $0.path < $1.path }, repo: repo)
 
         case .branch(let base):
             async let names = git(["diff", "\(base)...HEAD", "--name-status"], cwd: repo,
@@ -69,15 +69,16 @@ extension GitService {
             let map = Self.mergeNameNumstat(
                 nameStatus: (try? await names)?.stdout ?? "",
                 numstat: (try? await nums)?.stdout ?? "")
-            return Self.withMtime(map.values.sorted { $0.path < $1.path }, repo: repo)
+            return withMtime(map.values.sorted { $0.path < $1.path }, repo: repo)
         }
     }
 
-    /// Stat each file's working-tree path for its modification date — one cheap
-    /// syscall per file, nil-safe (a deleted/missing file yields nil). Review-only
-    /// enrichment kept here so `modDate` is populated before the model builds its
-    /// list views.
-    private static func withMtime(_ files: [GitFileChange], repo: String) -> [GitFileChange] {
+    /// Stat each LOCAL file's working-tree path for its modification date — one
+    /// cheap syscall per file, nil-safe (a deleted/missing file yields nil).
+    /// A non-local runner's `repo` belongs to another filesystem, so leave its
+    /// dates empty rather than reading an unrelated same-pathed local file.
+    private func withMtime(_ files: [GitFileChange], repo: String) -> [GitFileChange] {
+        guard runner is LocalGitRunner else { return files }
         let fm = FileManager.default
         let base = repo as NSString
         return files.map { f in

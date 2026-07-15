@@ -3432,7 +3432,7 @@ final class WorkspaceStore: ObservableObject {
 
     private func syncGitWatchers() {
         var desired: [UUID: String] = [:]
-        for ws in workspaces {
+        for ws in workspaces where !ws.archived {
             switch ws.source.kind {
             case .localRepo, .localWorktree:
                 if let path = ws.source.gitPath { desired[ws.id] = path }
@@ -3460,6 +3460,10 @@ final class WorkspaceStore: ObservableObject {
 
     func refreshGitStatus(for id: UUID) async {
         guard let ws = workspaces.first(where: { $0.id == id }) else {
+            if gitStatuses[id] != nil { gitStatuses[id] = nil }
+            return
+        }
+        guard !ws.archived else {
             if gitStatuses[id] != nil { gitStatuses[id] = nil }
             return
         }
@@ -3519,13 +3523,21 @@ final class WorkspaceStore: ObservableObject {
     /// looking at. Other plain shells are NOT timer-polled — they refresh on
     /// demand via `refreshGitStatusNow` when switched/focused, which avoids
     /// spawning N git subprocesses every tick for background terminals.
-    private func shouldTimerPoll(_ ws: Workspace) -> Bool {
-        guard effectiveGitPath(for: ws) != nil else { return false }
+    static func shouldTimerPoll(_ ws: Workspace, selectedWorkspaceID: UUID?,
+                                effectiveGitPath: String?, appIsActive: Bool) -> Bool {
+        guard appIsActive, !ws.archived else { return false }
+        guard effectiveGitPath != nil else { return false }
         if ws.id == selectedWorkspaceID { return true }
         switch ws.source.kind {
         case .localRepo, .localWorktree: return true
         default: return false
         }
+    }
+
+    private func shouldTimerPoll(_ ws: Workspace) -> Bool {
+        Self.shouldTimerPoll(ws, selectedWorkspaceID: selectedWorkspaceID,
+                             effectiveGitPath: effectiveGitPath(for: ws),
+                             appIsActive: NSApp.isActive)
     }
 
     /// Fire-and-forget single refresh, used when the *displayed* terminal
