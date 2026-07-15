@@ -30,6 +30,20 @@ final class AgentKindResolutionTests: XCTestCase {
         XCTAssertEqual(WorkspaceStore.agentKind(named: "Devin"), .devin)
     }
 
+    func testOmpExact() {
+        XCTAssertEqual(WorkspaceStore.agentKind(named: "omp"), .omp)
+    }
+
+    func testOmpPathSuffix() {
+        XCTAssertEqual(WorkspaceStore.agentKind(named: "/Users/me/.local/bin/omp"), .omp)
+    }
+
+    func testOmpDoesNotMatchSubstring() {
+        // Three-letter token must not false-positive on longer names.
+        XCTAssertNil(WorkspaceStore.agentKind(named: "compiz"))
+        XCTAssertNil(WorkspaceStore.agentKind(named: "prompt"))
+    }
+
     func testUnknownReturnsNil() {
         XCTAssertNil(WorkspaceStore.agentKind(named: "vim"))
     }
@@ -60,6 +74,10 @@ final class AgentKindResolutionTests: XCTestCase {
         XCTAssertEqual(WorkspaceStore.agentKind(forProcessName: "devin"), .devin)
     }
 
+    func testOmpProcessName() {
+        XCTAssertEqual(WorkspaceStore.agentKind(forProcessName: "omp"), .omp)
+    }
+
     func testUnknownProcessNameReturnsNil() {
         XCTAssertNil(WorkspaceStore.agentKind(forProcessName: "bash"))
     }
@@ -69,7 +87,7 @@ final class AgentKindResolutionTests: XCTestCase {
     // structurally keeps `sessionIds[kind.rawValue]` lookups from quietly
     // missing the entry the foreground poller stashed.
     func testRawValueRoundTripsThroughForProcessName() {
-        for kind in [PaneAgentKind.claude, .codex, .opencode, .devin] {
+        for kind in [PaneAgentKind.claude, .codex, .opencode, .devin, .omp] {
             XCTAssertEqual(WorkspaceStore.agentKind(forProcessName: kind.rawValue), kind,
                            "rawValue '\(kind.rawValue)' must resolve back to \(kind)")
         }

@@ -1142,6 +1142,10 @@ struct TabIcon: View {
                 AnimatedGIFView(assetName: MascotAsset.devin(for: status),
                                 animates: !reduceMotion && isBusy)
                     .frame(width: size * 1.21, height: size * 1.21)
+            case .omp:
+                AnimatedGIFView(assetName: MascotAsset.omp(for: status),
+                                animates: !reduceMotion && isBusy)
+                    .frame(width: size * 1.21, height: size * 1.21)
             default:
                 if let sf = kind.sfSymbol {
                     Image(systemName: sf)
@@ -1935,6 +1939,10 @@ private struct WorkspaceMicroIcon: View {
             if case .devin = kind { return true }
             return false
         }()
+        let isOmp: Bool = {
+            if case .omp = kind { return true }
+            return false
+        }()
         Group {
             if isClaude {
                 Image(store.claudeIconStyle == .spark ? "ClaudeSpark" : "Claude")
@@ -1948,6 +1956,11 @@ private struct WorkspaceMicroIcon: View {
                     .aspectRatio(contentMode: .fit)
             } else if isDevin {
                 Image("DevinMark")
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+            } else if isOmp {
+                Image("OmpMark")
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)

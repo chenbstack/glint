@@ -855,6 +855,347 @@ enum OpenCodeHookInstaller {
     """
 }
 
+/// Installs a TypeScript extension that forwards Oh My Pi (omp) lifecycle
+/// events to Glint's local agent socket.
+///
+/// Portable across machines (no absolute home paths, no host-specific layout):
+///   1. Writes the module to `~/.glint/hooks/omp-agent-bridge.ts` — under
+///      Glint's own dot-dir, so OMP's agent-dir gitignore cannot hide it.
+///   2. Registers the portable tilde path `~/.glint/hooks/omp-agent-bridge.ts`
+///      in `~/.omp/agent/settings.json` → `extensions` (OMP expands `~` and
+///      configured paths bypass the gitignore filter that applies to
+///      auto-discovery of `~/.omp/agent/extensions/`).
+///
+/// Why not only drop into `~/.omp/agent/extensions/`? OMP's native scan of
+/// that directory uses `gitignore: true`. Users who keep `~/.omp/agent` as a
+/// git-synced config repo with a whitelist ignore (`*`) would get a silent
+/// no-op install — Settings would say "Installed" but OMP never loads the
+/// file. The settings.json registration works for every install layout.
+///
+/// The extension maps OMP's `pi.on(...)` events onto the same Claude-
+/// compatible hook names `WorkspaceStore.handleAgentEvent` already understands.
+enum OmpHookInstaller {
+    private static let extensionFileName = "omp-agent-bridge.ts"
+    /// Marker string embedded in the generated extension body — `isInstalled`
+    /// keys off it so a hand-written file in the same path isn't treated as
+    /// Glint-managed, and so reinstalls can rewrite our own copy safely.
+    static let marker = "Glint OMP extension"
+
+    /// Tilde-form path written into settings.json so the entry stays portable
+    /// across machines / home-dir renames. OMP expands `~` for configured paths.
+    static let settingsExtensionRef = "~/.glint/hooks/\(extensionFileName)"
+
+    /// Real paths. Injectable so unit tests never write into the developer's
+    /// home directory.
+    static func defaultExtensionURL() -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".glint/hooks", isDirectory: true)
+            .appendingPathComponent(extensionFileName)
+    }
+
+    static func defaultSettingsURL() -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".omp/agent/settings.json")
+    }
+
+    /// Absolute path variants of `settingsExtensionRef` that may already live
+    /// in a settings.json from an earlier install — treated as ours on uninstall.
+    private static func knownExtensionRefs(extensionURL: URL) -> Set<String> {
+        [settingsExtensionRef, extensionURL.path, (extensionURL.path as NSString).expandingTildeInPath]
+    }
+
+    static func isInstalled(extensionURL: URL = OmpHookInstaller.defaultExtensionURL(),
+                            settingsURL: URL = OmpHookInstaller.defaultSettingsURL()) -> Bool {
+        guard let body = try? String(contentsOf: extensionURL), body.contains(marker) else {
+            return false
+        }
+        return settingsListsExtension(settingsURL: settingsURL, extensionURL: extensionURL)
+    }
+
+    /// Whether OMP itself looks installed on this Mac.
+    static func isAgentPresent() -> Bool {
+        AgentPresence.directoryExists(".omp")
+            || AgentPresence.directoryExists(".omp/agent")
+            || AgentPresence.commandExists("omp")
+    }
+
+    static func installIfNeeded(socketPath: String,
+                                extensionURL: URL = OmpHookInstaller.defaultExtensionURL(),
+                                settingsURL: URL = OmpHookInstaller.defaultSettingsURL()) {
+        do {
+            let dir = extensionURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(
+                at: dir,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+            let body = extensionBody
+            let needsWrite = (try? String(contentsOf: extensionURL)) != body
+            if needsWrite {
+                try body.write(to: extensionURL, atomically: true, encoding: .utf8)
+                try FileManager.default.setAttributes(
+                    [.posixPermissions: 0o600],
+                    ofItemAtPath: extensionURL.path
+                )
+            }
+            try mergeSettings(settingsURL: settingsURL, extensionURL: extensionURL)
+            // Drop any legacy copy under ~/.omp/agent/extensions/ that an
+            // earlier Glint build left behind — those files are invisible to
+            // OMP when the agent dir is a whitelist-gitignore repo, and only
+            // confuse "is it installed?" eyeballing.
+            removeLegacyAgentExtensionsCopy()
+            NSLog("[glint] omp extension installed at \(extensionURL.path)")
+        } catch {
+            NSLog("[glint] omp extension install failed: \(error)")
+        }
+        _ = socketPath
+    }
+
+    static func uninstall(extensionURL: URL = OmpHookInstaller.defaultExtensionURL(),
+                          settingsURL: URL = OmpHookInstaller.defaultSettingsURL()) {
+        // Always try to un-register, even if the file is already gone.
+        try? unmergeSettings(settingsURL: settingsURL, extensionURL: extensionURL)
+        if let body = try? String(contentsOf: extensionURL), body.contains(marker) {
+            try? FileManager.default.removeItem(at: extensionURL)
+            NSLog("[glint] omp extension removed from \(extensionURL.path)")
+        }
+        removeLegacyAgentExtensionsCopy()
+    }
+
+    // MARK: settings.json merge
+
+    private static func settingsListsExtension(settingsURL: URL, extensionURL: URL) -> Bool {
+        guard let data = try? Data(contentsOf: settingsURL),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let list = root["extensions"] as? [String] else {
+            return false
+        }
+        let known = knownExtensionRefs(extensionURL: extensionURL)
+        return list.contains { known.contains($0) }
+    }
+
+    private static func mergeSettings(settingsURL: URL, extensionURL: URL) throws {
+        let dir = settingsURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: dir,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+
+        var root: [String: Any] = [:]
+        if let data = try? Data(contentsOf: settingsURL), !data.isEmpty {
+            guard let parsed = try? JSONSerialization.jsonObject(with: data),
+                  let dict = parsed as? [String: Any] else {
+                let backup = settingsURL.appendingPathExtension("glint-backup")
+                try? FileManager.default.copyItem(at: settingsURL, to: backup)
+                setPosixPermissions(posixPermissions(atPath: settingsURL.path), atPath: backup.path)
+                NSLog("[glint] \(settingsURL.path) isn't a JSON object; backed up, skipping merge")
+                return
+            }
+            root = dict
+        }
+
+        var list = (root["extensions"] as? [String]) ?? []
+        let known = knownExtensionRefs(extensionURL: extensionURL)
+        // Drop every prior Glint ref (absolute or tilde form), then re-add the
+        // portable tilde form so reinstalls don't accumulate duplicates.
+        list.removeAll { known.contains($0) }
+        list.append(settingsExtensionRef)
+        root["extensions"] = list
+
+        guard let out = SafeJSON.data(
+            root,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        ) else {
+            NSLog("[glint] omp settings.json: not serializable, skipping write")
+            return
+        }
+        let mode = posixPermissions(atPath: settingsURL.path)
+        try out.write(to: settingsURL, options: [.atomic])
+        setPosixPermissions(mode, atPath: settingsURL.path)
+        NSLog("[glint] omp settings.json registered \(settingsExtensionRef)")
+    }
+
+    private static func unmergeSettings(settingsURL: URL, extensionURL: URL) throws {
+        guard FileManager.default.fileExists(atPath: settingsURL.path) else { return }
+        let data = try Data(contentsOf: settingsURL)
+        guard var root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return
+        }
+        guard var list = root["extensions"] as? [String] else { return }
+        let known = knownExtensionRefs(extensionURL: extensionURL)
+        let before = list.count
+        list.removeAll { known.contains($0) }
+        guard list.count != before else { return }
+        if list.isEmpty {
+            root.removeValue(forKey: "extensions")
+        } else {
+            root["extensions"] = list
+        }
+        if root.isEmpty {
+            try FileManager.default.removeItem(at: settingsURL)
+        } else if let out = SafeJSON.data(
+            root,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        ) {
+            let mode = posixPermissions(atPath: settingsURL.path)
+            try out.write(to: settingsURL, options: [.atomic])
+            setPosixPermissions(mode, atPath: settingsURL.path)
+        }
+        NSLog("[glint] omp settings.json unregistered \(settingsExtensionRef)")
+    }
+
+    /// Earlier builds wrote into `~/.omp/agent/extensions/`, which a
+    /// whitelist-gitignore agent repo renders invisible to OMP discovery.
+    /// Clean those up so they don't look "installed" while doing nothing.
+    private static func removeLegacyAgentExtensionsCopy() {
+        let legacy = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".omp/agent/extensions/glint-agent-bridge.ts")
+        guard let body = try? String(contentsOf: legacy), body.contains(marker) else { return }
+        try? FileManager.default.removeItem(at: legacy)
+        NSLog("[glint] removed legacy omp extension at \(legacy.path)")
+    }
+
+    /// TypeScript extension loaded by OMP's extension runner. Only arms when
+    /// the pane env vars are present, so an omp session outside Glint is a
+    /// no-op. Session id is pulled from `ctx.sessionManager` when available
+    /// and forwarded as `session_b64` for restore-on-launch.
+    static let extensionBody: String = """
+    // \(marker). Auto-generated by Glint; remove from Settings → Agents.
+    // @ts-nocheck
+    import { createConnection } from "node:net"
+    import { existsSync } from "node:fs"
+
+    const AGENT = "omp"
+    const SESSION_ID_RE = /^\(PaneAgentKind.sessionIdCharsetClass){1,\(PaneAgentKind.sessionIdMaxLength)}$/
+
+    function pickSessionId(ctx) {
+      try {
+        const id = ctx?.sessionManager?.getSessionId?.()
+        if (typeof id === "string" && SESSION_ID_RE.test(id)) return id
+      } catch {}
+      return null
+    }
+
+    function send(hook, sessionId) {
+      const pane = process.env.GLINT_PANE_ID
+      const sock = process.env.GLINT_AGENT_SOCK
+      if (!pane || !sock || !existsSync(sock)) return Promise.resolve()
+
+      const payload = { pane, hook, agent: AGENT }
+      if (sessionId) {
+        payload.session_b64 = Buffer.from(sessionId, "utf8").toString("base64")
+      }
+      const line = JSON.stringify(payload) + "\\n"
+
+      // Use end(line) so the write is flushed before the socket closes —
+      // write()+destroy() races the kernel and can drop the report.
+      return new Promise((resolve) => {
+        let done = false
+        const finish = () => {
+          if (done) return
+          done = true
+          resolve()
+        }
+        try {
+          const client = createConnection(sock, () => client.end(line))
+          client.on("error", finish)
+          client.on("close", finish)
+          const timer = setTimeout(() => {
+            try { client.destroy() } catch {}
+            finish()
+          }, 1000)
+          timer.unref?.()
+        } catch {
+          finish()
+        }
+      })
+    }
+
+    function endedInError(event) {
+      const messages = Array.isArray(event?.messages) ? event.messages : []
+      for (let i = messages.length - 1; i >= 0; i -= 1) {
+        if (messages[i]?.role === "assistant" && messages[i]?.stopReason === "error") {
+          return true
+        }
+      }
+      return false
+    }
+
+    export default function (pi) {
+      const pane = process.env.GLINT_PANE_ID
+      const sock = process.env.GLINT_AGENT_SOCK
+      if (!pane || !sock) return
+
+      // Only the interactive root session reports — subagents inherit the same
+      // env and would otherwise thrash the pane's status with nested turns.
+      let rootSession = false
+      let agentActive = false
+
+      function activateRoot(ctx) {
+        if (ctx?.hasUI !== true) return false
+        rootSession = true
+        return true
+      }
+
+      pi.on("session_start", (_event, ctx) => {
+        if (!activateRoot(ctx)) return
+        void send("SessionStart", pickSessionId(ctx))
+      })
+
+      pi.on("session_switch", (_event, ctx) => {
+        if (!activateRoot(ctx)) return
+        agentActive = false
+        void send("SessionStart", pickSessionId(ctx))
+      })
+
+      pi.on("agent_start", (_event, ctx) => {
+        if (!rootSession && !activateRoot(ctx)) return
+        agentActive = true
+        void send("UserPromptSubmit", pickSessionId(ctx))
+      })
+
+      pi.on("tool_call", (_event, ctx) => {
+        if (!rootSession) return
+        void send("PreToolUse", pickSessionId(ctx))
+      })
+
+      pi.on("tool_result", (_event, ctx) => {
+        if (!rootSession) return
+        void send("PostToolUse", pickSessionId(ctx))
+      })
+
+      pi.on("tool_approval_requested", (_event, ctx) => {
+        if (!rootSession && !activateRoot(ctx)) return
+        void send("PermissionRequest", pickSessionId(ctx))
+      })
+
+      pi.on("tool_approval_resolved", (_event, ctx) => {
+        if (!rootSession) return
+        // Mirror OpenCode's permission.replied → PreToolUse clear path: once
+        // the user answers, the next tool_call will re-assert .tool.
+        void send("PreToolUse", pickSessionId(ctx))
+      })
+
+      pi.on("session_before_compact", (_event, ctx) => {
+        if (!rootSession) return
+        void send("PreCompact", pickSessionId(ctx))
+      })
+
+      pi.on("auto_compaction_start", (_event, ctx) => {
+        if (!rootSession) return
+        void send("PreCompact", pickSessionId(ctx))
+      })
+
+      pi.on("agent_end", (event, ctx) => {
+        if (!rootSession || !agentActive) return
+        agentActive = false
+        void send(endedInError(event) ? "StopFailure" : "Stop", pickSessionId(ctx))
+      })
+    }
+    """
+}
+
 /// Opt-in shell keybindings that make modified-Enter chords behave like a
 /// plain Enter at the prompt.
 ///

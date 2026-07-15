@@ -5030,6 +5030,171 @@
           }
         }
       }
+    },
+    "Claude Code, Codex, OMP, hook routing": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code、Codex、OMP、hook 路由"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "OMP": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OMP"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Glint installs a TypeScript extension at ~/.omp/agent/extensions/glint-agent-bridge.ts so Oh My Pi sessions report status the same way as Claude.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 会在 ~/.omp/agent/extensions/glint-agent-bridge.ts 安装 TypeScript 扩展，让 Oh My Pi 会话像 Claude 一样上报状态。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Extension installed into your OMP extensions directory.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扩展已安装到你的 OMP extensions 目录。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "OMP detected — install the extension to show its status.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已检测到 OMP — 安装扩展以显示其状态。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "OMP not detected on this Mac.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 Mac 上未检测到 OMP。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "When Glint reopens, each pane that was running OMP at last quit is resumed via `omp -r <session-id>` — so multiple OMP panes in one workspace land back in their own sessions. Falls back to `omp -c` for panes whose session id wasn't captured.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 重新打开时，上次退出时在跑 OMP 的每个 pane 会通过 `omp -r <session-id>` 恢复会话，多个 OMP pane 各自回到自己的会话。未捕获 session id 时回退为 `omp -c`。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Extension file": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扩展文件"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Loaded by OMP automatically on startup; it only reports when Glint's pane environment variables are present.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OMP 启动时自动加载；仅在存在 Glint 的 pane 环境变量时上报。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "~/.omp/agent/extensions/glint-agent-bridge.ts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/.omp/agent/extensions/glint-agent-bridge.ts"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Glint writes a TypeScript extension under ~/.glint/hooks/ and registers it in ~/.omp/agent/settings.json so Oh My Pi sessions report status the same way as Claude. (OMP's auto-scan of ~/.omp/agent/extensions respects gitignore, so a file-only drop is not enough when that directory is a whitelist-git repo.)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 会把 TypeScript 扩展写到 ~/.glint/hooks/，并在 ~/.omp/agent/settings.json 中注册，让 Oh My Pi 会话像 Claude 一样上报状态。（OMP 对 ~/.omp/agent/extensions 的自动扫描会尊重 gitignore；当该目录是白名单 git 仓库时，只放文件不够。）"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Extension installed and registered with OMP.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扩展已安装并注册到 OMP。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Registered via ~/.omp/agent/settings.json; only reports when Glint's pane environment variables are present.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过 ~/.omp/agent/settings.json 注册；仅在存在 Glint 的 pane 环境变量时上报。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "~/.glint/hooks/omp-agent-bridge.ts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/.glint/hooks/omp-agent-bridge.ts"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Glint installs a portable TypeScript extension at ~/.glint/hooks/omp-agent-bridge.ts and registers that path in ~/.omp/agent/settings.json so Oh My Pi sessions report status like Claude. Uses a tilde path (not an absolute home path) so the same install works on any Mac.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 会在 ~/.glint/hooks/omp-agent-bridge.ts 安装可移植的 TypeScript 扩展，并在 ~/.omp/agent/settings.json 中注册该路径，使 Oh My Pi 会话像 Claude 一样上报状态。使用波浪线路径（而非绝对 home 路径），同一套安装在任意 Mac 上都能生效。"
+          }
+        }
+      },
+      "extractionState": "manual"
     }
   },
   "version": "1.0"

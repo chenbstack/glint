@@ -167,7 +167,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .general:    return "Startup, layout, updates"
         case .appearance: return "Theme, accent, glass"
         case .terminal:   return "Font, cursor, scrollback"
-        case .agents:     return "Claude Code, Codex, hook routing"
+        case .agents:     return "Claude Code, Codex, OMP, hook routing"
         case .shortcuts:  return "Keyboard reference"
         case .about:      return nil
         }
@@ -1107,6 +1107,7 @@ private struct AgentsPane: View {
     @State private var codexAddError: String?
     @State private var opencodeInstallFailed = false
     @State private var devinInstallFailed = false
+    @State private var ompInstallFailed = false
     @State private var newCodexHomePath = ""
     @State private var newCodexHomeLabel = ""
     @State private var codexHomeErrors: [UUID: String] = [:]
@@ -1323,6 +1324,53 @@ private struct AgentsPane: View {
             SettingsRow("Hook config",
                         subtitle: "Hooks are stored in Devin's native user config alongside your existing settings.") {
                 Text("~/.config/devin/config.json")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.text3)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+        }
+
+        SettingsCard("OMP",
+                     footer: "Glint installs a portable TypeScript extension at ~/.glint/hooks/omp-agent-bridge.ts and registers that path in ~/.omp/agent/settings.json so Oh My Pi sessions report status like Claude. Uses a tilde path (not an absolute home path) so the same install works on any Mac.") {
+            SettingsRow("Status", subtitle: ompInstallFailed
+                        ? "Install failed — check Console for [glint] logs."
+                        : (store.ompHooksInstalled
+                           ? "Extension installed and registered with OMP."
+                           : (store.ompDetected
+                              ? "OMP detected — install the extension to show its status."
+                              : "OMP not detected on this Mac."))) {
+                HStack(spacing: 8) {
+                    StatusPill(
+                        label: store.ompHooksInstalled ? "Installed" : (store.ompDetected ? "Not installed" : "Not detected"),
+                        tone: store.ompHooksInstalled ? .ok : .neutral
+                    )
+                    if store.ompHooksInstalled {
+                        Button("Uninstall") {
+                            store.uninstallOmpHooks()
+                            ompInstallFailed = false
+                        }
+                            .controlSize(.small)
+                    } else {
+                        Button("Install") {
+                            store.installOmpHooks()
+                            ompInstallFailed = !store.ompHooksInstalled
+                        }
+                            .controlSize(.small)
+                            .tint(store.accent)
+                    }
+                }
+            }
+            SettingsDivider()
+            SettingsRow("Resume session on launch",
+                        subtitle: "When Glint reopens, each pane that was running OMP at last quit is resumed via `omp -r <session-id>` — so multiple OMP panes in one workspace land back in their own sessions. Falls back to `omp -c` for panes whose session id wasn't captured.") {
+                Toggle("", isOn: $store.restoreOmpSession)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Extension file",
+                        subtitle: "Registered via ~/.omp/agent/settings.json; only reports when Glint's pane environment variables are present.") {
+                Text("~/.glint/hooks/omp-agent-bridge.ts")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.text3)
                     .lineLimit(1)

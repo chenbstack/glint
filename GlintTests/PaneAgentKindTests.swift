@@ -21,6 +21,10 @@ final class PaneAgentKindTests: XCTestCase {
         XCTAssertEqual(PaneAgentKind.devin.displayName, "Devin")
     }
 
+    func testOmpDisplayName() {
+        XCTAssertEqual(PaneAgentKind.omp.displayName, "OMP")
+    }
+
     // MARK: iconKind
 
     func testClaudeIconKind() {
@@ -37,6 +41,10 @@ final class PaneAgentKindTests: XCTestCase {
 
     func testDevinIconKind() {
         XCTAssertTrue(isIconKind(PaneAgentKind.devin.iconKind, .devin))
+    }
+
+    func testOmpIconKind() {
+        XCTAssertTrue(isIconKind(PaneAgentKind.omp.iconKind, .omp))
     }
 
     // MARK: isValid(sessionId:)
@@ -82,6 +90,8 @@ final class PaneAgentKindTests: XCTestCase {
                        "opencode --session abc-123\n")
         XCTAssertEqual(PaneAgentKind.devin.restoreCommand(sessionId: "abc-123"),
                        "devin --resume abc-123\n")
+        XCTAssertEqual(PaneAgentKind.omp.restoreCommand(sessionId: "abc-123"),
+                       "omp -r abc-123\n")
     }
 
     func testRestoreCommandNilFallsBackToContinue() {
@@ -93,6 +103,8 @@ final class PaneAgentKindTests: XCTestCase {
                        "opencode --continue\n")
         XCTAssertEqual(PaneAgentKind.devin.restoreCommand(sessionId: nil),
                        "devin --continue\n")
+        XCTAssertEqual(PaneAgentKind.omp.restoreCommand(sessionId: nil),
+                       "omp -c\n")
     }
 
     func testRestoreCommandRejectsInjectedIdAndDowngradesToContinue() {
@@ -135,7 +147,7 @@ final class PaneAgentKindTests: XCTestCase {
     private func isIconKind(_ actual: WorkspaceIconKind, _ expected: WorkspaceIconKind) -> Bool {
         switch (actual, expected) {
         case (.claude, .claude), (.codex, .codex),
-             (.opencode, .opencode), (.devin, .devin),
+             (.opencode, .opencode), (.devin, .devin), (.omp, .omp),
              (.shell, .shell), (.ssh, .ssh), (.vim, .vim),
              (.python, .python), (.node, .node), (.git, .git):
             return true

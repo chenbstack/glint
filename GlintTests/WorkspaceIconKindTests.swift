@@ -25,6 +25,10 @@ final class WorkspaceIconKindTests: XCTestCase {
         XCTAssertNil(WorkspaceIconKind.devin.sfSymbol)
     }
 
+    func testOmpHasNoSFSymbol() {
+        XCTAssertNil(WorkspaceIconKind.omp.sfSymbol)
+    }
+
     // MARK: letter
 
     func testClaudeLetter() {
@@ -41,6 +45,10 @@ final class WorkspaceIconKindTests: XCTestCase {
 
     func testDevinLetter() {
         XCTAssertEqual(WorkspaceIconKind.devin.letter, "D")
+    }
+
+    func testOmpLetter() {
+        XCTAssertEqual(WorkspaceIconKind.omp.letter, "π")
     }
 
     func testOtherLetterUsesInitial() {

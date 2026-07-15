@@ -37,6 +37,40 @@ final class MascotAssetTests: XCTestCase {
         XCTAssertEqual(MascotAsset.devin(for: .failed), "DevinFailed")
     }
 
+    // MARK: OMP
+
+    func testOmpIdle() {
+        XCTAssertEqual(MascotAsset.omp(for: .idle), "OmpIdle")
+    }
+
+    func testOmpNil() {
+        XCTAssertEqual(MascotAsset.omp(for: nil), "OmpIdle")
+    }
+
+    func testOmpThinking() {
+        XCTAssertEqual(MascotAsset.omp(for: .thinking), "OmpThinking")
+    }
+
+    func testOmpToolCall() {
+        XCTAssertEqual(MascotAsset.omp(for: .tool), "OmpToolCall")
+    }
+
+    func testOmpCompressing() {
+        XCTAssertEqual(MascotAsset.omp(for: .compacting), "OmpCompressing")
+    }
+
+    func testOmpNeedsPermission() {
+        XCTAssertEqual(MascotAsset.omp(for: .needsPermission), "OmpNeedsPermission")
+    }
+
+    func testOmpDone() {
+        XCTAssertEqual(MascotAsset.omp(for: .justCompleted), "OmpDone")
+    }
+
+    func testOmpFailed() {
+        XCTAssertEqual(MascotAsset.omp(for: .failed), "OmpFailed")
+    }
+
     // MARK: Existing agents (regression)
 
     func testClaudeIdleMascot() {

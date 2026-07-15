@@ -141,7 +141,7 @@ struct Pane: Identifiable, Codable {
     var remoteHost: String?
     var remotePath: String?
     /// Per-agent session id captured from hook events, keyed by
-    /// `PaneAgentKind.rawValue` ("claude"/"codex"/"opencode"/"devin"). When
+    /// `PaneAgentKind.rawValue` ("claude"/"codex"/"opencode"/"devin"/"omp"). When
     /// set, restore-on-launch issues the agent's `--resume <id>` /
     /// `--session <id>` form so multiple panes in one workspace don't
     /// collapse onto the most-recent session (#45). Lifecycle: entries are
@@ -815,6 +815,9 @@ final class WorkspaceStore: ObservableObject {
     /// Whether Glint's Devin hook entries are registered in `~/.config/devin/config.json`.
     @Published var devinHooksInstalled: Bool = false
 
+    /// Whether Glint's OMP extension is installed in `~/.omp/agent/extensions`.
+    @Published var ompHooksInstalled: Bool = false
+
     /// Whether Glint's modified-Enter shell keybindings are present in the
     /// user's shell rc (~/.zshrc / ~/.bashrc). Opt-in, default off.
     @Published var shellKeybindsInstalled: Bool = false
@@ -982,8 +985,13 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreDevinSession, forKey: "glint.restoreDevinSession") }
     }
 
+    /// Same as `restoreClaudeSession` but for OMP — feeds `omp -c` / `omp -r <id>`.
+    @Published var restoreOmpSession: Bool = (UserDefaults.standard.object(forKey: "glint.restoreOmpSession") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(restoreOmpSession, forKey: "glint.restoreOmpSession") }
+    }
+
     /// Maps each agent kind to the @Published toggle that gates its
-    /// session-restore-on-launch. Single source of truth: adding a fifth
+    /// session-restore-on-launch. Single source of truth: adding a new
     /// agent means adding ONE entry here, not editing two parallel switches
     /// across files (one here, one in `PaneAgentKind.restoreCommand`).
     private static let restoreToggleKeyPaths: [PaneAgentKind: ReferenceWritableKeyPath<WorkspaceStore, Bool>] = [
@@ -991,6 +999,7 @@ final class WorkspaceStore: ObservableObject {
         .codex:    \.restoreCodexSession,
         .opencode: \.restoreOpenCodeSession,
         .devin:    \.restoreDevinSession,
+        .omp:      \.restoreOmpSession,
     ]
 
     /// Whether session-restore-on-launch is enabled for `kind`. Used by
@@ -1201,6 +1210,13 @@ final class WorkspaceStore: ObservableObject {
                 isInstalled: { DevinHookInstaller.isInstalled() },
                 install: { DevinHookInstaller.installIfNeeded(socketPath: socketPath) }
             ),
+            AgentHookSpec(
+                handledKey: "glint.ompHooksAutoInstalled",
+                displayName: "OMP",
+                isPresent: OmpHookInstaller.isAgentPresent,
+                isInstalled: { OmpHookInstaller.isInstalled() },
+                install: { OmpHookInstaller.installIfNeeded(socketPath: socketPath) }
+            ),
         ]
     }
 
@@ -1248,6 +1264,7 @@ final class WorkspaceStore: ObservableObject {
             WorkspaceStore.current?.codexHooksInstalled = CodexHookInstaller.isInstalled()
             WorkspaceStore.current?.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
             WorkspaceStore.current?.devinHooksInstalled = DevinHookInstaller.isInstalled()
+            WorkspaceStore.current?.ompHooksInstalled = OmpHookInstaller.isInstalled()
         }
     }
 
@@ -1294,6 +1311,16 @@ final class WorkspaceStore: ObservableObject {
         self.devinHooksInstalled = DevinHookInstaller.isInstalled()
     }
 
+    func installOmpHooks() {
+        OmpHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
+        self.ompHooksInstalled = OmpHookInstaller.isInstalled()
+    }
+
+    func uninstallOmpHooks() {
+        OmpHookInstaller.uninstall()
+        self.ompHooksInstalled = OmpHookInstaller.isInstalled()
+    }
+
     func installShellKeybinds() {
         ShellKeybindInstaller.install()
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
@@ -1311,6 +1338,7 @@ final class WorkspaceStore: ObservableObject {
     var codexDetected: Bool { CodexHookInstaller.isAgentPresent() }
     var opencodeDetected: Bool { OpenCodeHookInstaller.isAgentPresent() }
     var devinDetected: Bool { DevinHookInstaller.isAgentPresent() }
+    var ompDetected: Bool { OmpHookInstaller.isAgentPresent() }
 
     /// Locale to inject into the SwiftUI environment. Driven by
     /// `preferredLanguage`. On macOS 14+, SwiftUI re-resolves
@@ -1536,6 +1564,7 @@ final class WorkspaceStore: ObservableObject {
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
         self.devinHooksInstalled = DevinHookInstaller.isInstalled()
+        self.ompHooksInstalled = OmpHookInstaller.isInstalled()
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
         // Defer to the next main-loop tick so this runs after
         // `applicationDidFinishLaunching`. Hitting `NSApp.dockTile` while
@@ -2248,8 +2277,14 @@ final class WorkspaceStore: ObservableObject {
         let lower = name.lowercased()
         if lower.contains("claude") { return .claude }
         if lower.contains("codex") { return .codex }
+        // "opencode" before a bare "omp" is not an issue (different strings);
+        // match exact basename-style names first so short tokens don't steal
+        // longer product names later.
         if lower.contains("opencode") { return .opencode }
         if lower.contains("devin") { return .devin }
+        // Exact match for "omp" — it's only three letters, so a substring
+        // check would false-positive on process names like "compiz".
+        if lower == "omp" || lower.hasSuffix("/omp") { return .omp }
         return nil
     }
 
@@ -3598,6 +3633,7 @@ enum WorkspaceIconKind {
     case codex
     case opencode
     case devin
+    case omp
     case ssh
     case vim
     case python
@@ -3614,7 +3650,7 @@ enum WorkspaceIconKind {
         case .python: return "chevron.left.forwardslash.chevron.right"
         case .node:   return "hexagon.fill"
         case .git:    return "arrow.triangle.branch"
-        case .claude, .codex, .opencode, .devin, .other:
+        case .claude, .codex, .opencode, .devin, .omp, .other:
             return nil
         }
     }
@@ -3626,6 +3662,7 @@ enum WorkspaceIconKind {
         case .codex:  return "λ"
         case .opencode: return "O"
         case .devin:  return "D"
+        case .omp:    return "π"
         case .other(let s):
             return s.first.map { String($0).uppercased() } ?? "?"
         default:
@@ -3854,7 +3891,7 @@ extension WorkspaceStore {
     /// workspace (all panes) and a single tab (just that tab's leaves).
     private func liveIconKind(paneIDs: [PaneID], workspaceID: UUID) -> WorkspaceIconKind {
         // Agent push-state wins over pid polling — if any pane reported a
-        // claude/codex/opencode/devin hook, surface that. With several agent panes (e.g.
+        // claude/codex/opencode/devin/omp hook, surface that. With several agent panes (e.g.
         // claude + codex side by side) the busy one wins; when all are equally
         // busy/idle, the most recently active wins. `paneIDs` may come from a
         // Dictionary's keys, so without this ordering the icon would be
@@ -3875,6 +3912,7 @@ extension WorkspaceStore {
             case .codex: return .codex
             case .opencode: return .opencode
             case .devin: return .devin
+            case .omp: return .omp
             }
         }
 
@@ -3888,6 +3926,7 @@ extension WorkspaceStore {
         if names.contains(where: { $0 == "codex" || $0.contains("codex") }) { return .codex }
         if names.contains(where: { $0 == "opencode" || $0.contains("opencode") }) { return .opencode }
         if names.contains(where: { $0 == "devin" || $0.contains("devin") }) { return .devin }
+        if names.contains(where: { $0 == "omp" || $0.hasSuffix("/omp") }) { return .omp }
         if names.contains(where: { $0 == "vim" || $0 == "nvim" || $0 == "vi" }) { return .vim }
         if names.contains(where: { $0 == "python" || $0 == "python3" || $0 == "ipython" }) { return .python }
         if names.contains(where: { $0 == "node" || $0 == "deno" || $0 == "bun" }) { return .node }

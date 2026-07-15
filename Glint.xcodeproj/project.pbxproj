@@ -22,6 +22,7 @@
 		2E52C3AC5AD998CD3604D6BE /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */; };
 		3194A1545E36E400BC2C33E6 /* PaneSessionIdMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 797C4E86D052EF8A68DD9B39 /* PaneSessionIdMigrationTests.swift */; };
 		34997DD4A4F9B64A754FE77F /* DevinHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */; };
+		3521283B78CD4A34A8725243 /* OmpHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1228ACED02A84EE4A7AE5C78 /* OmpHookInstallerTests.swift */; };
 		370FA310A4B7CC8489BF51DE /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 712159D2C27AD5B865820384 /* WhatsNewView.swift */; };
 		3932A4CFEFF6FB81AE283645 /* AgentHookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */; };
 		3CB9F41E3B1CB4A8790D9159 /* GhosttyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC6FFB5185C403F6F44A1687 /* GhosttyManager.swift */; };
@@ -99,6 +100,7 @@
 		0D5B5D0462A1225A56E6EE85 /* AEBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AEBridge.m; sourceTree = "<group>"; };
 		0D751E30DFF2EFA6F705A374 /* GhosttyTickSchedulerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTickSchedulerTests.swift; sourceTree = "<group>"; };
 		0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevinHookInstallerTests.swift; sourceTree = "<group>"; };
+		1228ACED02A84EE4A7AE5C78 /* OmpHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmpHookInstallerTests.swift; sourceTree = "<group>"; };
 		0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageReaderTests.swift; sourceTree = "<group>"; };
 		150EEF32284061D527E51866 /* GlintTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintTheme.swift; sourceTree = "<group>"; };
 		16137B405E48DBE262A15B6D /* PaneSurfaceRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSurfaceRepresentable.swift; sourceTree = "<group>"; };
@@ -216,6 +218,7 @@
 				26141150D2DB4C0589558ECC /* CodexHookInstallerTests.swift */,
 				0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */,
 				0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */,
+				1228ACED02A84EE4A7AE5C78 /* OmpHookInstallerTests.swift */,
 				0D751E30DFF2EFA6F705A374 /* GhosttyTickSchedulerTests.swift */,
 				65BE76E8E627A5347D565968 /* GitRefreshCoordinatorTests.swift */,
 				49C888E59D1091BFC22A9EA4 /* GitRepositoryWatcherTests.swift */,
@@ -480,6 +483,7 @@
 				0FEECB27EB1ACE11E29ECCEF /* CodexHookInstallerTests.swift in Sources */,
 				FEBC3158CB471E9ABDF931BB /* CodexUsageReaderTests.swift in Sources */,
 				34997DD4A4F9B64A754FE77F /* DevinHookInstallerTests.swift in Sources */,
+				3521283B78CD4A34A8725243 /* OmpHookInstallerTests.swift in Sources */,
 				180444BD20493AE4822BD372 /* GhosttyTickSchedulerTests.swift in Sources */,
 				2D9012046800A06555DEA381 /* GitRefreshCoordinatorTests.swift in Sources */,
 				0FB9792E290FC2A8B527B2D0 /* GitRepositoryWatcherTests.swift in Sources */,
