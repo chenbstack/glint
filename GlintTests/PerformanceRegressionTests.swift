@@ -44,6 +44,103 @@ final class PerformanceRegressionTests: XCTestCase {
         ))
     }
 
+    func testTerminalOfflinePolicyAllowsOnlyIdleShellPromptsPastTimeout() {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+
+        XCTAssertTrue(TerminalOfflinePolicy.shouldTakeOffline(
+            enabled: true,
+            hasLiveSurface: true,
+            inactiveSince: now.addingTimeInterval(-300),
+            now: now,
+            timeout: 300,
+            needsConfirmQuit: false,
+            foregroundProcessName: "zsh"
+        ))
+    }
+
+    func testTerminalOfflinePolicyKeepsFocusedOrRecentlyUsedTerminalLive() {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+
+        XCTAssertFalse(TerminalOfflinePolicy.shouldTakeOffline(
+            enabled: true,
+            hasLiveSurface: true,
+            inactiveSince: nil,
+            now: now,
+            timeout: 300,
+            needsConfirmQuit: false,
+            foregroundProcessName: "zsh"
+        ))
+        XCTAssertFalse(TerminalOfflinePolicy.shouldTakeOffline(
+            enabled: true,
+            hasLiveSurface: true,
+            inactiveSince: now.addingTimeInterval(-299),
+            now: now,
+            timeout: 300,
+            needsConfirmQuit: false,
+            foregroundProcessName: "zsh"
+        ))
+    }
+
+    func testTerminalOfflinePolicyKeepsBusyAndLongLivedProcessesLive() {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        let inactiveSince = now.addingTimeInterval(-600)
+
+        for process in ["ssh", "vim", "claude", "codex", "tmux"] {
+            XCTAssertFalse(TerminalOfflinePolicy.shouldTakeOffline(
+                enabled: true,
+                hasLiveSurface: true,
+                inactiveSince: inactiveSince,
+                now: now,
+                timeout: 300,
+                needsConfirmQuit: false,
+                foregroundProcessName: process
+            ), "\(process) must not be taken offline")
+        }
+        XCTAssertFalse(TerminalOfflinePolicy.shouldTakeOffline(
+            enabled: true,
+            hasLiveSurface: true,
+            inactiveSince: inactiveSince,
+            now: now,
+            timeout: 300,
+            needsConfirmQuit: true,
+            foregroundProcessName: "zsh"
+        ), "A shell with unsubmitted input must stay live")
+    }
+
+    func testTerminalOfflinePolicyRequiresOptInAndLiveSurface() {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        let inactiveSince = now.addingTimeInterval(-600)
+
+        XCTAssertFalse(TerminalOfflinePolicy.shouldTakeOffline(
+            enabled: false,
+            hasLiveSurface: true,
+            inactiveSince: inactiveSince,
+            now: now,
+            timeout: 300,
+            needsConfirmQuit: false,
+            foregroundProcessName: "zsh"
+        ))
+        XCTAssertFalse(TerminalOfflinePolicy.shouldTakeOffline(
+            enabled: true,
+            hasLiveSurface: false,
+            inactiveSince: inactiveSince,
+            now: now,
+            timeout: 300,
+            needsConfirmQuit: false,
+            foregroundProcessName: "zsh"
+        ))
+        XCTAssertFalse(TerminalOfflinePolicy.shouldTakeOffline(
+            enabled: true,
+            hasLiveSurface: true,
+            inactiveSince: inactiveSince,
+            now: now,
+            timeout: 300,
+            promptStateDetectionEnabled: false,
+            needsConfirmQuit: false,
+            foregroundProcessName: "zsh"
+        ), "Offlining must stop when Ghostty cannot report prompt state")
+    }
+
     func testCancellingLocalRunnerTerminatesSubprocessPromptly() async {
         let runner = LocalGitRunner(gitPath: "/bin/sleep")
         let clock = ContinuousClock()

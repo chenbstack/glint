@@ -4,6 +4,31 @@ import AppKit
 import Darwin
 import UserNotifications
 
+enum TerminalOfflinePolicy {
+    private static let idleShells: Set<String> = [
+        "zsh", "bash", "fish", "sh", "dash", "ksh", "login",
+    ]
+
+    static func shouldTakeOffline(enabled: Bool,
+                                  hasLiveSurface: Bool,
+                                  inactiveSince: Date?,
+                                  now: Date,
+                                  timeout: TimeInterval,
+                                  promptStateDetectionEnabled: Bool = true,
+                                  needsConfirmQuit: Bool,
+                                  foregroundProcessName: String?) -> Bool {
+        guard enabled,
+              hasLiveSurface,
+              promptStateDetectionEnabled,
+              !needsConfirmQuit,
+              let inactiveSince,
+              now.timeIntervalSince(inactiveSince) >= timeout,
+              let process = foregroundProcessName?.lowercased(),
+              idleShells.contains(process) else { return false }
+        return true
+    }
+}
+
 // MARK: - Domain types
 
 enum SplitDirection: String, Codable, Hashable {
@@ -788,6 +813,35 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
+    static let idleTerminalTimeoutChoices = [60, 300, 600, 900, 1_800, 3_600]
+
+    /// Opt-in memory saving: release inactive Ghostty surfaces only when they
+    /// are sitting at a plain shell prompt. The pane itself remains and wakes
+    /// in its last directory when selected again.
+    @Published var freeIdleTerminalsEnabled: Bool =
+        (UserDefaults.standard.object(forKey: "glint.freeIdleTerminalsEnabled") as? Bool) ?? false {
+        didSet {
+            UserDefaults.standard.set(freeIdleTerminalsEnabled,
+                                      forKey: "glint.freeIdleTerminalsEnabled")
+            if freeIdleTerminalsEnabled { resetIdleTerminalTimeouts() }
+        }
+    }
+
+    @Published var idleTerminalTimeoutSeconds: Int = {
+        let saved = UserDefaults.standard.integer(forKey: "glint.idleTerminalTimeoutSeconds")
+        return WorkspaceStore.idleTerminalTimeoutChoices.contains(saved) ? saved : 300
+    }() {
+        didSet {
+            guard Self.idleTerminalTimeoutChoices.contains(idleTerminalTimeoutSeconds) else {
+                idleTerminalTimeoutSeconds = 300
+                return
+            }
+            UserDefaults.standard.set(idleTerminalTimeoutSeconds,
+                                      forKey: "glint.idleTerminalTimeoutSeconds")
+            resetIdleTerminalTimeouts()
+        }
+    }
+
     /// Which Claude icon family the UI draws: the animated robot mascot, or
     /// the spark mark (StatusIconsPreview.jsx port — see
     /// scripts/generate_claude_spark_icons.py). Completion has no spark
@@ -1441,7 +1495,9 @@ final class WorkspaceStore: ObservableObject {
             // scheduledTimer fires on the main run loop, so this is already the
             // main actor — assumeIsolated avoids allocating a Task per fallback.
             MainActor.assumeIsolated {
-                guard let self, NSApp.isActive else { return }
+                guard let self else { return }
+                self.offlineIdleTerminals()
+                guard NSApp.isActive else { return }
                 self.captureCwdsFromLiveSurfaces()
                 self.flushScrollback()
                 self.fallbackGitTick += 1
@@ -1535,6 +1591,21 @@ final class WorkspaceStore: ObservableObject {
             }
         })
 
+        // Start the idle grace period at the moment the app loses focus rather
+        // than at the next 30-second fallback tick.
+        observerTokens.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                let now = Date()
+                self?.surfaceViews.values.forEach {
+                    $0.applicationDidResignActive(now: now)
+                }
+            }
+        })
+
         // "✓ done" is an unread badge cleared by *seeing* the workspace.
         // Selecting it is one way; the other is ⌘Tab-ing back to Glint while
         // already on it — without this, the badge would outlast the look.
@@ -1544,8 +1615,14 @@ final class WorkspaceStore: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                guard let self, let id = self.selectedWorkspaceID else { return }
-                self.acknowledgeCompletionIfNeeded(for: id)
+                guard let self else { return }
+                let now = Date()
+                self.surfaceViews.values.forEach {
+                    $0.applicationDidBecomeActive(now: now)
+                }
+                if let id = self.selectedWorkspaceID {
+                    self.acknowledgeCompletionIfNeeded(for: id)
+                }
                 self.captureCwdsFromLiveSurfaces()
                 self.flushScrollback()
                 self.refreshAllGitStatuses()
@@ -1606,6 +1683,20 @@ final class WorkspaceStore: ObservableObject {
     struct WorkspacePaneKey: Hashable {
         let workspace: UUID
         let pane: PaneID
+    }
+
+    private func resetIdleTerminalTimeouts(now: Date = Date()) {
+        for view in surfaceViews.values {
+            view.resetIdleTimeout(now: now)
+        }
+    }
+
+    private func offlineIdleTerminals(now: Date = Date()) {
+        guard freeIdleTerminalsEnabled else { return }
+        let timeout = TimeInterval(idleTerminalTimeoutSeconds)
+        for view in surfaceViews.values {
+            view.takeOfflineIfEligible(enabled: true, timeout: timeout, now: now)
+        }
     }
 
     func surfaceView(workspaceID: UUID, paneID: PaneID, cwd: String?) -> GhosttySurfaceView {
@@ -2193,7 +2284,7 @@ final class WorkspaceStore: ObservableObject {
 
     /// Queue a command to run in a freshly created pane once its surface comes
     /// up. Reuses the same one-shot channel as the worktree sheet
-    /// (`pendingInitialInput` → `GhosttySurfaceView.initialInput`); a nil/empty
+    /// (`pendingInitialInput` → `GhosttySurfaceView.pendingInitialInput`); a nil/empty
     /// command leaves the pane a bare shell. Call right after creating the pane,
     /// before its surface is built, so the lookup finds the entry.
     private func queueInitialInput(_ command: String?, codexHome: String? = nil,
