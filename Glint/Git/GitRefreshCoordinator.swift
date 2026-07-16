@@ -57,7 +57,8 @@ final class GitRefreshCoordinator {
             pending[id]?.cancel()
             let now = Date()
             let elapsed = lastDispatch[id].map { now.timeIntervalSince($0) } ?? .infinity
-            let currentCount = coalescedWatcherRequestCount[id] ?? 0
+            let currentCount = source == .commandFinished
+                ? 0 : coalescedWatcherRequestCount[id] ?? 0
             let currentInterval = currentCount >= Self.stormThreshold
                 ? stormInterval : minInterval
             if elapsed >= currentInterval {

@@ -110,6 +110,27 @@ final class GitRefreshCoordinatorTests: XCTestCase {
         wait(for: [trailing], timeout: 0.45)
     }
 
+    /// A command completing after watcher events must bypass an active storm
+    /// backoff once the base interval has elapsed.
+    func testCommandCompletionBypassesActiveWatcherStormBackoff() {
+        let coordinator = GitRefreshCoordinator(minInterval: 0.2)
+        let id = UUID()
+        let immediate = expectation(description: "immediate watcher refresh")
+        let command = expectation(description: "command refresh")
+
+        coordinator.request(id, source: .fileWatcher) { immediate.fulfill() }
+        wait(for: [immediate], timeout: 0.5)
+
+        coordinator.request(id, source: .fileWatcher) {}
+        coordinator.request(id, source: .fileWatcher) {}
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            coordinator.request(id, source: .commandFinished) { command.fulfill() }
+        }
+
+        // Active storm backoff would postpone this until roughly 0.8 seconds.
+        wait(for: [command], timeout: 0.5)
+    }
+
     /// Once the window has fully elapsed, the next request is immediate again
     /// (the throttle resets) and spawns no extra trailing refresh.
     func testRequestAfterWindowRunsImmediatelyWithoutTrailing() {
