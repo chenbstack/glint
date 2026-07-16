@@ -9,6 +9,11 @@ enum TerminalOfflinePolicy {
         "zsh", "bash", "fish", "sh", "dash", "ksh", "login",
     ]
 
+    static func isIdleShell(_ processName: String?) -> Bool {
+        guard let processName else { return false }
+        return idleShells.contains(processName.lowercased())
+    }
+
     static func shouldTakeOffline(enabled: Bool,
                                   hasLiveSurface: Bool,
                                   inactiveSince: Date?,
@@ -16,15 +21,16 @@ enum TerminalOfflinePolicy {
                                   timeout: TimeInterval,
                                   promptStateDetectionEnabled: Bool = true,
                                   needsConfirmQuit: Bool,
-                                  foregroundProcessName: String?) -> Bool {
+                                  foregroundProcessName: String?,
+                                  hasUserOrJobState: Bool = false) -> Bool {
         guard enabled,
               hasLiveSurface,
               promptStateDetectionEnabled,
               !needsConfirmQuit,
+              !hasUserOrJobState,
               let inactiveSince,
               now.timeIntervalSince(inactiveSince) >= timeout,
-              let process = foregroundProcessName?.lowercased(),
-              idleShells.contains(process) else { return false }
+              isIdleShell(foregroundProcessName) else { return false }
         return true
     }
 }

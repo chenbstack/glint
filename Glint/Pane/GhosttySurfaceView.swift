@@ -834,6 +834,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
                                now: Date = Date()) -> Bool {
         refreshIdleClock(now: now)
         guard let s = surface else { return false }
+        let processName = foregroundProcessName()
+        let hasUserOrJobState = TerminalOfflinePolicy.isIdleShell(processName)
+            ? !shellStateIsDisposable(s)
+            : true
         let shouldTakeOffline = TerminalOfflinePolicy.shouldTakeOffline(
             enabled: enabled,
             hasLiveSurface: true,
@@ -842,7 +846,8 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             timeout: timeout,
             promptStateDetectionEnabled: GhosttyManager.shared.canReliablyDetectIdlePrompt,
             needsConfirmQuit: ghostty_surface_needs_confirm_quit(s),
-            foregroundProcessName: foregroundProcessName()
+            foregroundProcessName: processName,
+            hasUserOrJobState: hasUserOrJobState
         )
         guard shouldTakeOffline else { return false }
 
@@ -850,6 +855,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         if scrollbackEnabled {
             noteForegroundPidForScrollback()
             flushScrollbackToDisk()
+            ScrollbackArchive.drain()
         }
 
         surface = nil
@@ -866,6 +872,41 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         refreshAppearanceBacking()
         showOfflinePlaceholder()
         return true
+    }
+
+    /// An idle-looking shell can still own typed input or background/stopped
+    /// jobs. Both must be absent before releasing its PTY.
+    private func shellStateIsDisposable(_ s: ghostty_surface_t) -> Bool {
+        guard promptHasUnsubmittedInput(s) == false,
+              shellHasChildProcesses(s) == false else { return false }
+        return true
+    }
+
+    /// Shell integration marks input separately from the prompt. The cmux
+    /// Ghostty bridge selects only the semantic segment under the cursor, so
+    /// an empty input segment produces no selection while typed text does.
+    private func promptHasUnsubmittedInput(_ s: ghostty_surface_t) -> Bool? {
+        if hasMarkedText() || ghostty_surface_has_selection(s) { return true }
+        guard ghostty_surface_select_cursor_line(s) else { return false }
+        defer { _ = ghostty_surface_clear_selection(s) }
+
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(s, &text) else { return nil }
+        defer { ghostty_surface_free_text(s, &text) }
+        return text.text_len > 0
+    }
+
+    /// A background or stopped job remains a child of the interactive shell
+    /// even though that shell is once again the foreground PTY process.
+    private func shellHasChildProcesses(_ s: ghostty_surface_t) -> Bool? {
+        let rawPID = ghostty_surface_foreground_pid(s)
+        guard rawPID > 0, rawPID <= UInt64(Int32.max) else { return nil }
+        var childPID: pid_t = 0
+        let count = withUnsafeMutablePointer(to: &childPID) { ptr in
+            proc_listchildpids(pid_t(rawPID), ptr, Int32(MemoryLayout<pid_t>.size))
+        }
+        guard count >= 0 else { return nil }
+        return count > 0
     }
 
     private func refreshIdleClock(now: Date = Date()) {
@@ -2440,9 +2481,9 @@ enum ScrollbackArchive {
         }
     }
 
-    /// Block until every queued snapshot write has hit disk. Called on app
-    /// terminate — the writes are async on a utility queue, so without this
-    /// the process can exit with the final flush still in flight.
+    /// Block until every queued snapshot write has hit disk. Called before an
+    /// idle surface is released and on app terminate so recreation/exit cannot
+    /// race the final async write.
     static func drain() {
         queue.sync {}
     }

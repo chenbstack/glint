@@ -107,6 +107,29 @@ final class PerformanceRegressionTests: XCTestCase {
         ), "A shell with unsubmitted input must stay live")
     }
 
+    func testTerminalOfflinePolicyKeepsShellsWithUserOrJobStateLive() {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+
+        XCTAssertFalse(TerminalOfflinePolicy.shouldTakeOffline(
+            enabled: true,
+            hasLiveSurface: true,
+            inactiveSince: now.addingTimeInterval(-600),
+            now: now,
+            timeout: 300,
+            needsConfirmQuit: false,
+            foregroundProcessName: "zsh",
+            hasUserOrJobState: true
+        ))
+    }
+
+    func testConfirmCloseSurfaceEnumTagsUseGhosttyStringABI() {
+        XCTAssertFalse(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: nil))
+        XCTAssertFalse(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: "false"))
+        XCTAssertFalse(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: "unknown"))
+        XCTAssertTrue(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: "true"))
+        XCTAssertTrue(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: "always"))
+    }
+
     func testTerminalOfflinePolicyRequiresOptInAndLiveSurface() {
         let now = Date(timeIntervalSinceReferenceDate: 1_000)
         let inactiveSince = now.addingTimeInterval(-600)

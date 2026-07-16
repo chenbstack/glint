@@ -59,8 +59,14 @@ final class GhosttyManager {
     var canReliablyDetectIdlePrompt: Bool {
         guard let config else { return false }
         let key = "confirm-close-surface"
-        var mode: Int32 = 0
-        return ghostty_config_get(config, &mode, key, UInt(key.utf8.count)) && mode != 0
+        var mode: UnsafePointer<CChar>?
+        guard ghostty_config_get(config, &mode, key, UInt(key.utf8.count)),
+              let mode else { return false }
+        return Self.promptDetectionIsReliable(confirmCloseSurfaceTag: String(cString: mode))
+    }
+
+    static func promptDetectionIsReliable(confirmCloseSurfaceTag tag: String?) -> Bool {
+        tag == "true" || tag == "always"
     }
 
     private init() {
