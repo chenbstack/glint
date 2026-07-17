@@ -7,7 +7,7 @@ import Foundation
 /// agent works the same way everywhere, not just on the worktree path.
 /// `.shell` is the no-agent escape hatch (a bare shell, the default).
 enum AgentChoice: String, CaseIterable, Identifiable {
-    case claude = "Claude Code", codex = "Codex", opencode = "OpenCode", devin = "Devin", omp = "OMP", shell = "Shell only"
+    case claude = "Claude Code", codex = "Codex", opencode = "OpenCode", devin = "Devin", omp = "OMP", grok = "Grok", shell = "Shell only"
 
     /// Chip / menu label. Product names stay verbatim; only "Shell only" is UI
     /// copy, so it (and only it) is routed through the string catalog.
@@ -25,6 +25,7 @@ enum AgentChoice: String, CaseIterable, Identifiable {
         case .opencode: return "opencode"
         case .devin: return "devin"
         case .omp: return "omp"
+        case .grok: return "grok"
         case .shell: return nil
         }
     }
@@ -37,6 +38,7 @@ enum AgentChoice: String, CaseIterable, Identifiable {
         case .opencode: return "OpenCodeMark"
         case .devin: return "DevinMark"
         case .omp: return "OmpMark"
+        case .grok: return "GrokMark"
         case .shell: return nil
         }
     }

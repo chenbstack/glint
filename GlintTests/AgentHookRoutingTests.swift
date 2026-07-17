@@ -47,6 +47,15 @@ final class AgentHookRoutingTests: XCTestCase {
     func testReporterScriptParses() throws {
         let body = AgentHookInstaller.scriptBody
         XCTAssertTrue(body.contains("plutil -extract session_id"))
+        // Grok's hook payload uses camelCase sessionId; also GROK_SESSION_ID env.
+        XCTAssertTrue(body.contains("plutil -extract sessionId"))
+        XCTAssertTrue(body.contains("GROK_SESSION_ID"))
+        // Dual-hook suppression: Claude-compat entry under Grok must no-op.
+        XCTAssertTrue(body.contains("[ \"$AGENT\" != \"grok\" ]"))
+        // ask_user_question / exit_plan_mode → NeedsReply for agent=grok.
+        XCTAssertTrue(body.contains("ask_user_question"))
+        XCTAssertTrue(body.contains("exit_plan_mode"))
+        XCTAssertTrue(body.contains("NeedsReply"))
         XCTAssertFalse(body.contains("agent-debug.sock"),
                        "broadcast fallback should be gone after the direct-route revert")
         XCTAssertFalse(body.contains("cwd_b64"),
@@ -122,6 +131,159 @@ final class AgentHookRoutingTests: XCTestCase {
             "turn": "turn-123",
             "transcript": "/tmp/codex.jsonl",
         ])
+    }
+
+    /// Grok's ask_user_question blocks waiting for the user — the shared
+    /// reporter remaps PreToolUse + toolName=ask_user_question → NeedsReply
+    /// and accepts camelCase sessionId from Grok's hook payload.
+    func testReporterRemapsGrokAskUserQuestionToNeedsReply() throws {
+        let decoded = try runReporter(
+            hook: "PreToolUse",
+            agent: "grok",
+            pane: "12345678-1234-1234-1234-123456789ABC:9",
+            stdinJSON: #"{"sessionId":"019f6966-b5a8-77f0-89a4-109ba759b539","toolName":"ask_user_question","cwd":"/tmp/repo"}"#,
+            extraEnv: nil,
+            expectSocketTraffic: true
+        )
+        XCTAssertEqual(decoded, [
+            "pane": "12345678-1234-1234-1234-123456789ABC:9",
+            "hook": "NeedsReply",
+            "agent": "grok",
+            "session": "019f6966-b5a8-77f0-89a4-109ba759b539",
+        ])
+    }
+
+    /// Plan approval via exit_plan_mode is the same "blocked on user" surface.
+    func testReporterRemapsGrokExitPlanModeToNeedsReply() throws {
+        let decoded = try runReporter(
+            hook: "PreToolUse",
+            agent: "grok",
+            pane: "12345678-1234-1234-1234-123456789ABC:a",
+            stdinJSON: #"{"sessionId":"sess-plan-1","toolName":"exit_plan_mode"}"#,
+            extraEnv: nil,
+            expectSocketTraffic: true
+        )
+        XCTAssertEqual(decoded?["hook"] as? String, "NeedsReply")
+        XCTAssertEqual(decoded?["agent"] as? String, "grok")
+        XCTAssertEqual(decoded?["session"] as? String, "sess-plan-1")
+    }
+
+    /// When the payload lacks session fields, GROK_SESSION_ID still captures id.
+    func testReporterFallsBackToGrokSessionIdEnv() throws {
+        let decoded = try runReporter(
+            hook: "UserPromptSubmit",
+            agent: "grok",
+            pane: "12345678-1234-1234-1234-123456789ABC:b",
+            stdinJSON: #"{"cwd":"/tmp/repo"}"#,
+            extraEnv: ["GROK_SESSION_ID": "from-env-session-id"],
+            expectSocketTraffic: true
+        )
+        XCTAssertEqual(decoded?["hook"] as? String, "UserPromptSubmit")
+        XCTAssertEqual(decoded?["agent"] as? String, "grok")
+        XCTAssertEqual(decoded?["session"] as? String, "from-env-session-id")
+    }
+
+    /// Claude-compat dual-fire under Grok must not reach Glint — otherwise
+    /// agent=claude + PreToolUse overwrites NeedsReply from the Grok entry.
+    func testReporterSkipsClaudeEntryWhenGrokSessionIdPresent() throws {
+        let decoded = try runReporter(
+            hook: "PreToolUse",
+            agent: "claude",
+            pane: "12345678-1234-1234-1234-123456789ABC:c",
+            stdinJSON: #"{"sessionId":"should-not-matter","toolName":"ask_user_question"}"#,
+            extraEnv: ["GROK_SESSION_ID": "active-grok-session"],
+            expectSocketTraffic: false
+        )
+        XCTAssertNil(decoded, "Claude-compat report under Grok must be suppressed")
+    }
+
+    /// Ordinary Claude sessions (no GROK_SESSION_ID) still report normally.
+    func testReporterStillForwardsClaudeWithoutGrokSessionId() throws {
+        let decoded = try runReporter(
+            hook: "UserPromptSubmit",
+            agent: "claude",
+            pane: "12345678-1234-1234-1234-123456789ABC:d",
+            stdinJSON: #"{"session_id":"claude-sess-1"}"#,
+            extraEnv: nil,
+            expectSocketTraffic: true
+        )
+        XCTAssertEqual(decoded, [
+            "pane": "12345678-1234-1234-1234-123456789ABC:d",
+            "hook": "UserPromptSubmit",
+            "agent": "claude",
+            "session": "claude-sess-1",
+        ])
+    }
+
+    /// Shared helper: spin up a Unix-domain listener, run the reporter once,
+    /// return the decoded envelope (or nil when nothing was sent).
+    @discardableResult
+    private func runReporter(
+        hook: String,
+        agent: String,
+        pane: String,
+        stdinJSON: String,
+        extraEnv: [String: String]?,
+        expectSocketTraffic: Bool
+    ) throws -> [String: String]? {
+        let root = URL(fileURLWithPath: "/tmp/gr-\(UUID().uuidString)", isDirectory: true)
+        let socket = root.appendingPathComponent("agent.sock")
+        let script = root.appendingPathComponent("glint-report.sh")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try AgentHookInstaller.scriptBody.write(to: script, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let listenerOutput = Pipe()
+        let listener = Process()
+        listener.executableURL = URL(fileURLWithPath: "/usr/bin/nc")
+        listener.arguments = ["-lU", socket.path]
+        listener.standardOutput = listenerOutput
+        try listener.run()
+        defer { if listener.isRunning { listener.terminate() } }
+        let socketDeadline = Date().addingTimeInterval(1)
+        while !FileManager.default.fileExists(atPath: socket.path), Date() < socketDeadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: socket.path))
+
+        let reporter = Process()
+        reporter.executableURL = URL(fileURLWithPath: "/bin/sh")
+        reporter.arguments = [script.path, hook, agent]
+        var environment = ProcessInfo.processInfo.environment
+        environment["GLINT_PANE_ID"] = pane
+        environment["GLINT_AGENT_SOCK"] = socket.path
+        // Clear any ambient GROK_SESSION_ID from the test runner's env so
+        // Claude-path tests don't inherit a real Grok session.
+        environment.removeValue(forKey: "GROK_SESSION_ID")
+        if let extraEnv {
+            for (k, v) in extraEnv { environment[k] = v }
+        }
+        reporter.environment = environment
+        let input = Pipe()
+        reporter.standardInput = input
+        try reporter.run()
+        input.fileHandleForWriting.write(Data(stdinJSON.utf8))
+        try input.fileHandleForWriting.close()
+        reporter.waitUntilExit()
+        XCTAssertEqual(reporter.terminationStatus, 0)
+
+        if expectSocketTraffic {
+            let deadline = Date().addingTimeInterval(3)
+            while listener.isRunning && Date() < deadline {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+            }
+            XCTAssertFalse(listener.isRunning, "reporter did not connect to the Unix socket")
+            let line = listenerOutput.fileHandleForReading.readDataToEndOfFile()
+            return AgentBridge.decodeHookLine(line)
+        } else {
+            // Suppression path: no connect. Don't wait for nc -l to exit —
+            // kill after a brief grace period and assert empty output.
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            if listener.isRunning { listener.terminate() }
+            let line = listenerOutput.fileHandleForReading.readDataToEndOfFile()
+            XCTAssertTrue(line.isEmpty, "expected no socket traffic, got: \(String(data: line, encoding: .utf8) ?? "<bin>")")
+            return nil
+        }
     }
 
     func testCodexApprovalReviewerComesFromMatchingTurnContext() throws {

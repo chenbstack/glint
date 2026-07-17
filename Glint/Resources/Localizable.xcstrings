@@ -5184,6 +5184,105 @@
           }
         }
       }
+    },
+    "Claude Code, Codex, OMP, Grok, hook routing": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code、Codex、OMP、Grok、hook 路由"
+          }
+        }
+      }
+    },
+    "Grok": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grok"
+          }
+        }
+      }
+    },
+    "Hooks installed into your Grok hooks directory.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hook 已安装到你的 Grok hooks 目录。"
+          }
+        }
+      }
+    },
+    "Grok detected — install the reporter to show its status.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已检测到 Grok — 安装 reporter 即可显示其状态。"
+          }
+        }
+      }
+    },
+    "Grok not detected on this Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本机未检测到 Grok。"
+          }
+        }
+      }
+    },
+    "When Glint reopens, each pane that was running Grok at last quit is resumed via `grok --resume <session-id>` — so multiple Grok panes in one workspace land back in their own sessions. Falls back to `grok --continue` for panes whose session id wasn't captured.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 重新打开时，上次退出时正在运行 Grok 的每个窗格会通过 `grok --resume <session-id>` 恢复，因此同一工作区里的多个 Grok 窗格会回到各自会话。未捕获到 session id 的窗格会回退到 `grok --continue`。"
+          }
+        }
+      }
+    },
+    "Dedicated Glint hook file under Grok's global hooks directory; only reports when Glint's pane environment variables are present.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grok 全局 hooks 目录下的独立 Glint hook 文件；仅在存在 Glint 窗格环境变量时上报。"
+          }
+        }
+      }
+    },
+    "~/.grok/hooks/glint.json": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/.grok/hooks/glint.json"
+          }
+        }
+      }
+    },
+    "Glint writes ~/.grok/hooks/glint.json so Grok Build sessions report thinking, tools, and ask_user_question (awaiting reply). Dedicated file — not Claude's settings — so Grok is attributed as Grok. The reporter ignores Claude-compat dual-fires under Grok (GROK_SESSION_ID present).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 会写入 ~/.grok/hooks/glint.json，使 Grok Build 会话上报思考、工具调用，以及 ask_user_question（待回复）。使用独立文件（而非 Claude 的 settings），因此 Grok 会话会正确归到 Grok。在 Grok 下 reporter 会忽略 Claude 兼容 hooks 的双触发（存在 GROK_SESSION_ID 时）。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

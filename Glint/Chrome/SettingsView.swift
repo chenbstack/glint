@@ -167,7 +167,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .general:    return "Startup, layout, updates"
         case .appearance: return "Theme, accent, glass"
         case .terminal:   return "Font, cursor, scrollback"
-        case .agents:     return "Claude Code, Codex, OMP, hook routing"
+        case .agents:     return "Claude Code, Codex, OMP, Grok, hook routing"
         case .shortcuts:  return "Keyboard reference"
         case .about:      return nil
         }
@@ -1136,6 +1136,7 @@ private struct AgentsPane: View {
     @State private var opencodeInstallFailed = false
     @State private var devinInstallFailed = false
     @State private var ompInstallFailed = false
+    @State private var grokInstallFailed = false
     @State private var newCodexHomePath = ""
     @State private var newCodexHomeLabel = ""
     @State private var codexHomeErrors: [UUID: String] = [:]
@@ -1399,6 +1400,53 @@ private struct AgentsPane: View {
             SettingsRow("Extension file",
                         subtitle: "Registered via ~/.omp/agent/settings.json; only reports when Glint's pane environment variables are present.") {
                 Text("~/.glint/hooks/omp-agent-bridge.ts")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.text3)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+        }
+
+        SettingsCard("Grok",
+                     footer: "Glint writes ~/.grok/hooks/glint.json so Grok Build sessions report thinking, tools, and ask_user_question (awaiting reply). Dedicated file — not Claude's settings — so Grok is attributed as Grok. The reporter ignores Claude-compat dual-fires under Grok (GROK_SESSION_ID present).") {
+            SettingsRow("Status", subtitle: grokInstallFailed
+                        ? "Install failed — check Console for [glint] logs."
+                        : (store.grokHooksInstalled
+                           ? "Hooks installed into your Grok hooks directory."
+                           : (store.grokDetected
+                              ? "Grok detected — install the reporter to show its status."
+                              : "Grok not detected on this Mac."))) {
+                HStack(spacing: 8) {
+                    StatusPill(
+                        label: store.grokHooksInstalled ? "Installed" : (store.grokDetected ? "Not installed" : "Not detected"),
+                        tone: store.grokHooksInstalled ? .ok : .neutral
+                    )
+                    if store.grokHooksInstalled {
+                        Button("Uninstall") {
+                            store.uninstallGrokHooks()
+                            grokInstallFailed = false
+                        }
+                            .controlSize(.small)
+                    } else {
+                        Button("Install") {
+                            store.installGrokHooks()
+                            grokInstallFailed = !store.grokHooksInstalled
+                        }
+                            .controlSize(.small)
+                            .tint(store.accent)
+                    }
+                }
+            }
+            SettingsDivider()
+            SettingsRow("Resume session on launch",
+                        subtitle: "When Glint reopens, each pane that was running Grok at last quit is resumed via `grok --resume <session-id>` — so multiple Grok panes in one workspace land back in their own sessions. Falls back to `grok --continue` for panes whose session id wasn't captured.") {
+                Toggle("", isOn: $store.restoreGrokSession)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Hook config",
+                        subtitle: "Dedicated Glint hook file under Grok's global hooks directory; only reports when Glint's pane environment variables are present.") {
+                Text("~/.grok/hooks/glint.json")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.text3)
                     .lineLimit(1)

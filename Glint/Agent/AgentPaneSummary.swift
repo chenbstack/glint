@@ -15,6 +15,7 @@ extension PaneAgentKind {
         case .opencode: return .opencode
         case .devin:    return .devin
         case .omp:      return .omp
+        case .grok:     return .grok
         }
     }
 }

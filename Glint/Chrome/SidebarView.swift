@@ -851,6 +851,10 @@ private struct WorkspaceCard: View {
             if case .omp = kind { return true }
             return false
         }()
+        let isGrok: Bool = {
+            if case .grok = kind { return true }
+            return false
+        }()
         return Group {
             if isClaude {
                 ClaudeMascotIcon(status: status)
@@ -862,6 +866,8 @@ private struct WorkspaceCard: View {
                 DevinMascotIcon(status: status)
             } else if isOmp {
                 OmpMascotIcon(status: status)
+            } else if isGrok {
+                GrokMascotIcon(status: status)
             } else if let sf = kind.sfSymbol {
                 // No squircle container — a bit larger so the bare glyph
                 // holds the same visual weight as the mascots.
@@ -876,7 +882,7 @@ private struct WorkspaceCard: View {
         }
         .frame(width: 28, height: 28)
         .overlay(alignment: .bottomTrailing) {
-            if !isOpenCode && !isDevin && !isOmp {
+            if !isOpenCode && !isDevin && !isOmp && !isGrok {
                 AgentStatusDot(status: status)
                     .offset(x: 3, y: 3)
             }
@@ -893,7 +899,9 @@ private struct WorkspaceCard: View {
                                 ? Color(red: 0.16, green: 0.43, blue: 0.81).opacity(0.5)
                                 : isOmp
                                     ? Color(red: 0.72, green: 0.55, blue: 0.95).opacity(0.5)
-                                    : store.accent.opacity(0.5))
+                                    : isGrok
+                                        ? Color(red: 0.85, green: 0.85, blue: 0.88).opacity(0.45)
+                                        : store.accent.opacity(0.5))
                 : .clear,
             radius: 8
         )
@@ -1291,6 +1299,19 @@ enum MascotAsset {
         case .some(.failed): return "OmpFailed"
         }
     }
+
+    static func grok(for s: PaneAgentStatus?) -> String {
+        switch s {
+        case .none, .some(.idle): return "GrokIdle"
+        case .some(.thinking): return "GrokThinking"
+        case .some(.tool): return "GrokToolCall"
+        case .some(.compacting): return "GrokCompressing"
+        case .some(.needsPermission): return "GrokNeedsPermission"
+        case .some(.justCompleted): return "GrokDone"
+        case .some(.needsReply): return "GrokIdle"
+        case .some(.failed): return "GrokFailed"
+        }
+    }
 }
 
 /// Animated Claude mascot driven by per-status GIFs (idle / thinking /
@@ -1450,6 +1471,36 @@ private struct OmpMascotIcon: View {
 
     var body: some View {
         AnimatedGIFView(assetName: MascotAsset.omp(for: status), animates: !reduceMotion)
+            .frame(width: 34, height: 34)
+            .frame(width: 28, height: 28)
+            .scaleEffect(celebrateScale * tapScale, anchor: .bottom)
+            .onChange(of: status) { oldStatus, newStatus in
+                if newStatus == .justCompleted && oldStatus != .justCompleted {
+                    celebrateScale = 1.22
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
+                        celebrateScale = 1.0
+                    }
+                }
+            }
+            .onTapGesture {
+                tapScale = 0.85
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.5)) {
+                    tapScale = 1.0
+                }
+            }
+    }
+}
+
+/// Grok Build mark, tinted per-status like OpenCode/Devin/OMP so the corner
+/// status dot is suppressed rather than double-encoding state.
+private struct GrokMascotIcon: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let status: PaneAgentStatus?
+    @State private var celebrateScale: CGFloat = 1.0
+    @State private var tapScale: CGFloat = 1.0
+
+    var body: some View {
+        AnimatedGIFView(assetName: MascotAsset.grok(for: status), animates: !reduceMotion)
             .frame(width: 34, height: 34)
             .frame(width: 28, height: 28)
             .scaleEffect(celebrateScale * tapScale, anchor: .bottom)
