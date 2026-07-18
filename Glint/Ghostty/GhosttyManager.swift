@@ -53,6 +53,22 @@ final class GhosttyManager {
     private let tickScheduler = GhosttyTickScheduler()
     private var focusObservers: [NSObjectProtocol] = []
 
+    /// `ghostty_surface_needs_confirm_quit` reports the cursor's prompt state
+    /// only when confirm-close-surface is not disabled. With `false`, it always
+    /// returns false and cannot safely drive automatic terminal offlining.
+    var canReliablyDetectIdlePrompt: Bool {
+        guard let config else { return false }
+        let key = "confirm-close-surface"
+        var mode: UnsafePointer<CChar>?
+        guard ghostty_config_get(config, &mode, key, UInt(key.utf8.count)),
+              let mode else { return false }
+        return Self.promptDetectionIsReliable(confirmCloseSurfaceTag: String(cString: mode))
+    }
+
+    static func promptDetectionIsReliable(confirmCloseSurfaceTag tag: String?) -> Bool {
+        tag == "true" || tag == "always"
+    }
+
     private init() {
         bootstrap()
     }

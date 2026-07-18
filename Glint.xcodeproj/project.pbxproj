@@ -10,6 +10,7 @@
 		D7A100000000000000000002 /* PerformanceRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A100000000000000000001 /* PerformanceRegressionTests.swift */; };
 		04E75EAD5165E8D96C1C5517 /* MascotAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 349714D49AE52D84995314FD /* MascotAssetTests.swift */; };
 		07817DC6A98F8ED2E236CFA1 /* CodexHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E3B385162995D0F1F5B72D /* CodexHome.swift */; };
+		0D3661ECB91851F77B1E48CE /* terminfo in Resources */ = {isa = PBXBuildFile; fileRef = B957E30052DD894C5B6F1063 /* terminfo */; };
 		0FB9792E290FC2A8B527B2D0 /* GitRepositoryWatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C888E59D1091BFC22A9EA4 /* GitRepositoryWatcherTests.swift */; };
 		0FEECB27EB1ACE11E29ECCEF /* CodexHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26141150D2DB4C0589558ECC /* CodexHookInstallerTests.swift */; };
 		1115F230E14FBE3C1FC754A2 /* GhosttySurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E298AD81B1615CBBFD69F48A /* GhosttySurfaceView.swift */; };
@@ -18,6 +19,7 @@
 		175E069EE844FB32C6EE51BB /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EDE0D7C434B8E9C76C4A297 /* Persistence.swift */; };
 		180444BD20493AE4822BD372 /* GhosttyTickSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D751E30DFF2EFA6F705A374 /* GhosttyTickSchedulerTests.swift */; };
 		21C03B3AE912F4D30FA6F92C /* PaneAgentState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41DDB9C7B5A277B7924270A3 /* PaneAgentState.swift */; };
+		262CB25BEB2B28B12C162F66 /* ghostty in Resources */ = {isa = PBXBuildFile; fileRef = 1CD90B7C77381E05E8A2BA8C /* ghostty */; };
 		2D9012046800A06555DEA381 /* GitRefreshCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65BE76E8E627A5347D565968 /* GitRefreshCoordinatorTests.swift */; };
 		2DD19A3FDAE094EF32B0B9F0 /* zsh-autosuggestions.zsh in Resources */ = {isa = PBXBuildFile; fileRef = D03AFC613028C5BB0D99238D /* zsh-autosuggestions.zsh */; };
 		2E52C3AC5AD998CD3604D6BE /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */; };
@@ -108,6 +110,7 @@
 		0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageReaderTests.swift; sourceTree = "<group>"; };
 		150EEF32284061D527E51866 /* GlintTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintTheme.swift; sourceTree = "<group>"; };
 		16137B405E48DBE262A15B6D /* PaneSurfaceRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSurfaceRepresentable.swift; sourceTree = "<group>"; };
+		1CD90B7C77381E05E8A2BA8C /* ghostty */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ghostty; path = GhosttyResources/ghostty; sourceTree = SOURCE_ROOT; };
 		1E646AABA8ADCE8A2A5C6F55 /* PaneTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeView.swift; sourceTree = "<group>"; };
 		21868C7211897C87A6CAD7C3 /* ControlBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlBridge.swift; sourceTree = "<group>"; };
 		223D9249D7FF29F87D9DE3A4 /* Glint-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Glint-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -154,6 +157,7 @@
 		9E67CF5D8552AE1F51386161 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		9E982534C8CF6270BCF39106 /* ReviewWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewWindow.swift; sourceTree = "<group>"; };
 		A8C269A6E9AE87961C3356DC /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		B957E30052DD894C5B6F1063 /* terminfo */ = {isa = PBXFileReference; lastKnownFileType = folder; name = terminfo; path = GhosttyResources/terminfo; sourceTree = SOURCE_ROOT; };
 		C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectBackground.swift; sourceTree = "<group>"; };
 		C11B3335E47DDAF77A883064 /* ModalOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalOverlay.swift; sourceTree = "<group>"; };
 		C6FB2646BF84D9DCBB89FC93 /* GitRepositoryWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRepositoryWatcher.swift; sourceTree = "<group>"; };
@@ -241,6 +245,15 @@
 				83E4DF4C5180D50C381B4976 /* WorkspaceIconKindTests.swift */,
 			);
 			path = GlintTests;
+			sourceTree = "<group>";
+		};
+		62413EC8DC0D611EDA5E85CA /* GhosttyResources */ = {
+			isa = PBXGroup;
+			children = (
+				1CD90B7C77381E05E8A2BA8C /* ghostty */,
+				B957E30052DD894C5B6F1063 /* terminfo */,
+			);
+			path = GhosttyResources;
 			sourceTree = "<group>";
 		};
 		65CB88BAF642F92D3AFF7AB9 /* Chrome */ = {
@@ -367,6 +380,7 @@
 		EA6921C9B6CB486D18C07534 = {
 			isa = PBXGroup;
 			children = (
+				62413EC8DC0D611EDA5E85CA /* GhosttyResources */,
 				BB4ECEBC994408CE9F33EC5A /* Glint */,
 				5F9010EBEE9DCDE13D866A74 /* GlintTests */,
 				846EE2A0E01AF110EE275AFD /* Frameworks */,
@@ -471,6 +485,8 @@
 				A91EFEF0FEA392A0745724DE /* AppIcon.icon in Resources */,
 				942ED7C1C1A2E823BA52F67A /* Assets.xcassets in Resources */,
 				FCB67525DF16A4DCF9B2AF7A /* Localizable.xcstrings in Resources */,
+				262CB25BEB2B28B12C162F66 /* ghostty in Resources */,
+				0D3661ECB91851F77B1E48CE /* terminfo in Resources */,
 				47BB527385B84454ABF8FC40 /* themes.json in Resources */,
 				2DD19A3FDAE094EF32B0B9F0 /* zsh-autosuggestions.zsh in Resources */,
 			);

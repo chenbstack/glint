@@ -97,6 +97,8 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             archive
 
+          scripts/verify-ghostty-resources.sh build/Glint.xcarchive/Products/Applications/Glint.app
+
       - name: Export .app
         run: |
           set -euo pipefail

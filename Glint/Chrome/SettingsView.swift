@@ -1032,6 +1032,26 @@ private struct TerminalPane: View {
             }
         }
 
+        SettingsCard("Memory", footer: "Releases inactive shell sessions and recreates them in the same folder when you return. Running commands, SSH sessions, agents, tmux, and the focused terminal are never touched.") {
+            SettingsRow("Free idle terminals",
+                        subtitle: store.freeIdleTerminalsEnabled
+                        ? "Only inactive shell prompts are eligible."
+                        : "Off — terminal sessions stay live.") {
+                Toggle("", isOn: $store.freeIdleTerminalsEnabled)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            if store.freeIdleTerminalsEnabled {
+                SettingsDivider()
+                SettingsRow("Release after", subtitle: "Time without focus.") {
+                    GlintDropdown(selection: $store.idleTerminalTimeoutSeconds,
+                                  items: WorkspaceStore.idleTerminalTimeoutChoices.map {
+                                      (value: $0, label: idleTerminalTimeoutLabel(for: $0))
+                                  },
+                                  listWidth: 150)
+                }
+            }
+        }
+
         SettingsCard("Paste") {
             SettingsRow("Warn before pasting multi-line text",
                         subtitle: "Ask first when the clipboard contains newlines or control characters — a multi-line paste into a shell prompt runs each line immediately.") {
@@ -1097,6 +1117,18 @@ private struct TerminalPane: View {
         return String(format: String(localized: "%d MB (~%@ lines)"),
                       mb,
                       scrollbackLineRangeLabel(for: bytes))
+    }
+
+    private func idleTerminalTimeoutLabel(for seconds: Int) -> String {
+        switch seconds {
+        case 60: return "1 minute"
+        case 300: return "5 minutes"
+        case 600: return "10 minutes"
+        case 900: return "15 minutes"
+        case 1_800: return "30 minutes"
+        case 3_600: return "1 hour"
+        default: return "5 minutes"
+        }
     }
 
     private func scrollbackLineRangeLabel(for bytes: Int) -> String {

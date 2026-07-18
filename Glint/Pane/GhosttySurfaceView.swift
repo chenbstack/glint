@@ -41,7 +41,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// instead of touching the surface. Used to let the IME observe a chord
     /// (e.g. Shift+Return) without emitting its text/command side-effects.
     private var keyTextAccumulator: [String]?
-    private let initialCwd: String?
+    /// Directory used the next time a surface is created. Updated before an
+    /// idle surface is released so waking the pane returns to the same folder.
+    private var launchCwd: String?
     /// Identifier (`"<wsuuid>:<paneSeq>"`) passed into the pty as
     /// `$GLINT_PANE_ID` so CLI-agent hooks can address us back.
     private let paneKey: String?
@@ -56,7 +58,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// the session — ghostty handles the timing (waits until the shell is
     /// ready). Used to auto-resume `claude --continue` / `codex resume --last`
     /// when the corresponding setting is on. nil = no initial input.
-    private let initialInput: String?
+    /// One-shot launch input. Cleared after the first successful surface
+    /// creation so waking an offline terminal never re-runs an agent command.
+    private var pendingInitialInput: String?
     /// Latest cwd pushed by ghostty via OSC 7 / PWD action. Preferred over
     /// proc_pidinfo polling because it's event-driven.
     var cachedCwd: String?
@@ -111,6 +115,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// the final window width. -1 = no probe yet.
     private var lastRestoreProbeCols = -1
 
+    /// Nil while this pane is the active first responder; otherwise the point
+    /// from which the configurable idle timeout is measured.
+    private var inactiveSince: Date?
+    private(set) var isTakenOffline = false
+
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
     override var isFlipped: Bool { false }
@@ -139,11 +148,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
          agentSocketPath: String? = nil,
          topAligned: Bool = true,
          initialInput: String? = nil) {
-        self.initialCwd = initialCwd
+        self.launchCwd = initialCwd
         self.paneKey = paneKey
         self.agentSocketPath = agentSocketPath
         self.topAligned = topAligned
-        self.initialInput = initialInput
+        self.pendingInitialInput = initialInput
         super.init(frame: frame)
         wantsLayer = true
         // Placeholder until ghostty installs its IOSurfaceLayer. Opaque mode:
@@ -229,8 +238,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         guard window != nil else {
             // Detached (e.g. switched to another workspace). Occlusion was
             // pushed false above; nothing to draw.
+            noteInactive()
             return
         }
+
+        refreshIdleClock()
 
         if surface == nil {
             createSurface()
@@ -305,6 +317,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     }
 
     private func createSurface() {
+        removeOfflinePlaceholder()
         // Memory-profiling escape hatch: launch with GLINT_NO_SURFACE=1 to
         // measure the app's footprint without any ghostty renderer.
         if ProcessInfo.processInfo.environment["GLINT_NO_SURFACE"] != nil {
@@ -330,7 +343,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // working_directory lives only while cfg is alive — strdup so the
         // C string outlives this scope; ghostty copies it during surface_new.
         var cwdBuf: UnsafeMutablePointer<CChar>? = nil
-        if let cwd = initialCwd, !cwd.isEmpty {
+        if let cwd = launchCwd, !cwd.isEmpty {
             cwdBuf = strdup(cwd)
             cfg.working_directory = UnsafePointer(cwdBuf)
         }
@@ -340,7 +353,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // bytes into the PTY after the shell is ready, so callers don't have
         // to time the injection themselves.
         var inputBuf: UnsafeMutablePointer<CChar>? = nil
-        if let input = initialInput, !input.isEmpty {
+        if let input = pendingInitialInput, !input.isEmpty {
             inputBuf = strdup(input)
             cfg.initial_input = UnsafePointer(inputBuf)
         }
@@ -385,6 +398,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         }
         self.surface = s
         focusUpdateGate.reset()
+        pendingInitialInput = nil
+        isTakenOffline = false
+        removeOfflinePlaceholder()
         // ghostty just swapped in its IOSurfaceLayer — re-stamp the
         // opaque/clear backing onto the NEW layer (init's settings were on the
         // discarded placeholder layer).
@@ -753,6 +769,50 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         surfaceErrorStack = nil
     }
 
+    private var offlinePlaceholderStack: NSStackView?
+
+    private func showOfflinePlaceholder() {
+        guard offlinePlaceholderStack == nil else { return }
+
+        let title = NSTextField(labelWithString: String(localized: "Idle terminal released"))
+        title.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        title.textColor = NSColor(red: 0.925, green: 0.929, blue: 0.949, alpha: 1.0)
+        title.alignment = .center
+
+        let detail = NSTextField(labelWithString: String(localized: "Reopens in the same folder."))
+        detail.font = NSFont.systemFont(ofSize: 11)
+        detail.textColor = NSColor(red: 0.60, green: 0.62, blue: 0.69, alpha: 1.0)
+        detail.alignment = .center
+
+        let wake = NSButton(title: String(localized: "Reopen Terminal"),
+                            target: self,
+                            action: #selector(wakeOfflineTerminal(_:)))
+        wake.bezelStyle = .rounded
+        wake.controlSize = .regular
+
+        let stack = NSStackView(views: [title, detail, wake])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        offlinePlaceholderStack = stack
+    }
+
+    private func removeOfflinePlaceholder() {
+        offlinePlaceholderStack?.removeFromSuperview()
+        offlinePlaceholderStack = nil
+    }
+
+    @objc private func wakeOfflineTerminal(_ sender: Any?) {
+        guard ensureLiveSurface() else { return }
+        window?.makeFirstResponder(self)
+    }
+
     @objc private func retrySurfaceCreation(_ sender: Any?) {
         guard surface == nil else { return }
         // createSurface removes the placeholder itself on success.
@@ -763,6 +823,146 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // keyboard focus to the freshly created surface.
         pushDisplayIDToGhostty()
         window?.makeFirstResponder(self)
+    }
+
+    /// Start a fresh grace period when the preference is enabled or changed.
+    func resetIdleTimeout(now: Date = Date(), workspaceIsSelected: Bool) {
+        if TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: NSApp.isActive,
+            workspaceIsSelected: workspaceIsSelected,
+            viewIsFirstResponder: window?.firstResponder === self
+        ) {
+            inactiveSince = nil
+        } else {
+            inactiveSince = now
+        }
+    }
+
+    func applicationDidResignActive(now: Date = Date()) {
+        noteInactive(now: now)
+    }
+
+    func applicationDidBecomeActive(now: Date = Date(), workspaceIsSelected: Bool) {
+        if TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: true,
+            workspaceIsSelected: workspaceIsSelected,
+            viewIsFirstResponder: window?.firstResponder === self
+        ) {
+            _ = ensureLiveSurface()
+            inactiveSince = nil
+        } else {
+            noteInactive(now: now)
+        }
+    }
+
+    @discardableResult
+    func takeOfflineIfEligible(enabled: Bool,
+                               timeout: TimeInterval,
+                               now: Date = Date(),
+                               workspaceIsSelected: Bool) -> Bool {
+        refreshIdleClock(now: now, workspaceIsSelected: workspaceIsSelected)
+        guard let s = surface else { return false }
+        let processName = foregroundProcessName()
+        let hasUserOrJobState = TerminalOfflinePolicy.isIdleShell(processName)
+            ? !shellStateIsDisposable(s)
+            : true
+        let shouldTakeOffline = TerminalOfflinePolicy.shouldTakeOffline(
+            enabled: enabled,
+            hasLiveSurface: true,
+            inactiveSince: inactiveSince,
+            now: now,
+            timeout: timeout,
+            promptStateDetectionEnabled: GhosttyManager.shared.canReliablyDetectIdlePrompt,
+            needsConfirmQuit: ghostty_surface_needs_confirm_quit(s),
+            foregroundProcessName: processName,
+            hasUserOrJobState: hasUserOrJobState
+        )
+        guard shouldTakeOffline else { return false }
+
+        if let cwd = currentCwd(), !cwd.isEmpty { launchCwd = cwd }
+        if scrollbackEnabled {
+            noteForegroundPidForScrollback()
+            flushScrollbackToDisk()
+            ScrollbackArchive.drain()
+        }
+
+        surface = nil
+        ghostty_surface_free(s)
+        pendingVisibleRedraw = false
+        pendingRestoreData = nil
+        markedTextValue = NSAttributedString(string: "")
+        isTakenOffline = true
+
+        // Ghostty owns and replaces this layer while the surface is alive.
+        // Install a fresh backing layer for the lightweight placeholder.
+        layer = nil
+        wantsLayer = true
+        refreshAppearanceBacking()
+        showOfflinePlaceholder()
+        return true
+    }
+
+    /// An idle-looking shell can still own typed input or background/stopped
+    /// jobs. Both must be absent before releasing its PTY.
+    private func shellStateIsDisposable(_ s: ghostty_surface_t) -> Bool {
+        guard promptHasUnsubmittedInput(s) == false,
+              shellHasChildProcesses(s) == false else { return false }
+        return true
+    }
+
+    /// Shell integration marks input separately from the prompt. The cmux
+    /// Ghostty bridge selects only the semantic segment under the cursor, so
+    /// an empty input segment produces no selection while typed text does.
+    private func promptHasUnsubmittedInput(_ s: ghostty_surface_t) -> Bool? {
+        if hasMarkedText() || ghostty_surface_has_selection(s) { return true }
+        guard ghostty_surface_select_cursor_line(s) else { return false }
+        defer { _ = ghostty_surface_clear_selection(s) }
+
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(s, &text) else { return nil }
+        defer { ghostty_surface_free_text(s, &text) }
+        return text.text_len > 0
+    }
+
+    /// A background or stopped job remains a child of the interactive shell
+    /// even though that shell is once again the foreground PTY process.
+    private func shellHasChildProcesses(_ s: ghostty_surface_t) -> Bool? {
+        let rawPID = ghostty_surface_foreground_pid(s)
+        guard rawPID > 0, rawPID <= UInt64(Int32.max) else { return nil }
+        var childPID: pid_t = 0
+        let count = withUnsafeMutablePointer(to: &childPID) { ptr in
+            proc_listchildpids(pid_t(rawPID), ptr, Int32(MemoryLayout<pid_t>.size))
+        }
+        guard count >= 0 else { return nil }
+        return count > 0
+    }
+
+    private func refreshIdleClock(now: Date = Date(), workspaceIsSelected: Bool = true) {
+        if TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: NSApp.isActive,
+            workspaceIsSelected: workspaceIsSelected,
+            viewIsFirstResponder: window?.firstResponder === self
+        ) {
+            inactiveSince = nil
+        } else {
+            noteInactive(now: now)
+        }
+    }
+
+    private func noteInactive(now: Date = Date()) {
+        if inactiveSince == nil { inactiveSince = now }
+    }
+
+    @discardableResult
+    private func ensureLiveSurface() -> Bool {
+        guard surface == nil else { return true }
+        createSurface()
+        guard surface != nil else { return false }
+        pushDisplayIDToGhostty()
+        pushOcclusionToGhostty()
+        pendingVisibleRedraw = true
+        syncSurfaceSize(pointsSize: bounds.size)
+        return true
     }
 
     /// Best-effort current cwd: prefers the cached value pushed via ghostty's
@@ -1146,13 +1346,16 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     // MARK: - focus
 
     override func becomeFirstResponder() -> Bool {
+        _ = ensureLiveSurface()
         let ok = super.becomeFirstResponder()
+        if ok { inactiveSince = nil }
         setGhosttyFocus(true)
         return ok
     }
 
     override func resignFirstResponder() -> Bool {
         let ok = super.resignFirstResponder()
+        if ok { noteInactive() }
         setGhosttyFocus(false)
         return ok
     }
@@ -1160,6 +1363,15 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// Explicit focus sync — splits / SwiftUI rebuilds don't always route
     /// firstResponder cleanly, so the SwiftUI layer pokes us directly.
     func setGhosttyFocus(_ flag: Bool) {
+        // Idle-clock bookkeeping only — the focus VALUE pushed to ghostty is
+        // the caller's flag unchanged (altering it to flag && isActive left
+        // surface focus stale until the next updateNSView pass).
+        if flag && NSApp.isActive {
+            _ = ensureLiveSurface()
+            inactiveSince = nil
+        } else {
+            noteInactive()
+        }
         guard let s = surface, focusUpdateGate.shouldApply(flag) else { return }
         ghostty_surface_set_focus(s, flag)
     }
@@ -1433,6 +1645,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     private var swallowingFocusClick = false
 
     override func mouseDown(with event: NSEvent) {
+        if surface == nil {
+            guard ensureLiveSurface() else { return }
+            window?.makeFirstResponder(self)
+            swallowingFocusClick = true
+            return
+        }
         if window?.firstResponder !== self {
             window?.makeFirstResponder(self)
             swallowingFocusClick = true
@@ -2297,9 +2515,9 @@ enum ScrollbackArchive {
         }
     }
 
-    /// Block until every queued snapshot write has hit disk. Called on app
-    /// terminate — the writes are async on a utility queue, so without this
-    /// the process can exit with the final flush still in flight.
+    /// Block until every queued snapshot write has hit disk. Called before an
+    /// idle surface is released and on app terminate so recreation/exit cannot
+    /// race the final async write.
     static func drain() {
         queue.sync {}
     }

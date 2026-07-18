@@ -48,7 +48,10 @@ struct PaneView: View {
         if ProcessInfo.processInfo.environment["GLINT_LOG_VISIBLE"] != nil {
             NSLog("[glint.visible] PaneView.body pane=\(paneID.value) ws=\(workspaceID.uuidString.prefix(8))")
         }
-        let isFocused = focusedPane == paneID
+        let isFocused = TerminalFocusPolicy.isPaneFocused(
+            workspaceIsSelected: workspaceID == store.selectedWorkspaceID,
+            paneIsFocused: focusedPane == paneID
+        )
         return ZStack {
             paneBacking
             PaneSurfaceRepresentable(

@@ -27,6 +27,14 @@ targets:
       - path: Glint
         excludes:
           - "**/.DS_Store"
+      # Folder references preserve Ghostty's required runtime layout under
+      # Contents/Resources.
+      - path: GhosttyResources/ghostty
+        type: folder
+        buildPhase: resources
+      - path: GhosttyResources/terminfo
+        type: folder
+        buildPhase: resources
     resources:
       - Glint/Resources
     settings:
