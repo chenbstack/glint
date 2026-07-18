@@ -172,11 +172,33 @@ final class GhosttyManager {
     /// IOSurfaceLayer and the pane container so the two can't diverge — clear +
     /// non-opaque when translucent, theme-bg + opaque otherwise.
     func applyTerminalBacking(to layer: CALayer?) {
-        guard let layer else { return }
-        let transparent = terminalIsTransparent
-        layer.isOpaque = !transparent
-        layer.backgroundColor = transparent ? NSColor.clear.cgColor
-                                            : currentBackgroundColor.cgColor
+        Self.applyTerminalBacking(
+            to: layer,
+            transparent: terminalIsTransparent,
+            opaqueBackgroundColor: currentBackgroundColor.cgColor
+        )
+    }
+
+    /// Diff-based backing update used by the high-frequency representable
+    /// refresh path. Returns whether the layer actually changed.
+    @discardableResult
+    static func applyTerminalBacking(to layer: CALayer?,
+                                     transparent: Bool,
+                                     opaqueBackgroundColor: CGColor) -> Bool {
+        guard let layer else { return false }
+        let desiredOpaque = !transparent
+        let desiredBackground = transparent ? NSColor.clear.cgColor : opaqueBackgroundColor
+        var changed = false
+
+        if layer.isOpaque != desiredOpaque {
+            layer.isOpaque = desiredOpaque
+            changed = true
+        }
+        if layer.backgroundColor.map({ !CFEqual($0, desiredBackground) }) ?? true {
+            layer.backgroundColor = desiredBackground
+            changed = true
+        }
+        return changed
     }
 
     /// Ask ghostty to install the NSVisualEffectView-backed window blur. This

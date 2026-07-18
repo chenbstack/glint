@@ -3,6 +3,23 @@ import Darwin
 import QuartzCore
 import GhosttyKit
 
+/// Tracks the last focus state sent across the Ghostty C boundary. SwiftUI can
+/// re-run `updateNSView` for unrelated sidebar changes, so identical focus
+/// values must be a no-op instead of waking the renderer each time.
+struct SurfaceFocusUpdateGate {
+    private var lastApplied: Bool?
+
+    mutating func shouldApply(_ focused: Bool) -> Bool {
+        guard lastApplied != focused else { return false }
+        lastApplied = focused
+        return true
+    }
+
+    mutating func reset() {
+        lastApplied = nil
+    }
+}
+
 /// AppKit view hosting one `ghostty_surface_t`.
 ///
 /// We give ghostty an `NSView*` via `ghostty_surface_config_s.platform.macos.nsview`.
@@ -17,6 +34,7 @@ import GhosttyKit
 final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     private var surface: ghostty_surface_t?
+    private var focusUpdateGate = SurfaceFocusUpdateGate()
     private var trackingArea: NSTrackingArea?
     private var markedTextValue: NSAttributedString = NSAttributedString(string: "")
     /// While non-nil, `insertText`/`doCommand(by:)` divert into this buffer
@@ -366,6 +384,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             return
         }
         self.surface = s
+        focusUpdateGate.reset()
         // ghostty just swapped in its IOSurfaceLayer — re-stamp the
         // opaque/clear backing onto the NEW layer (init's settings were on the
         // discarded placeholder layer).
@@ -1128,20 +1147,20 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     override func becomeFirstResponder() -> Bool {
         let ok = super.becomeFirstResponder()
-        if let s = surface { ghostty_surface_set_focus(s, true) }
+        setGhosttyFocus(true)
         return ok
     }
 
     override func resignFirstResponder() -> Bool {
         let ok = super.resignFirstResponder()
-        if let s = surface { ghostty_surface_set_focus(s, false) }
+        setGhosttyFocus(false)
         return ok
     }
 
     /// Explicit focus sync — splits / SwiftUI rebuilds don't always route
     /// firstResponder cleanly, so the SwiftUI layer pokes us directly.
     func setGhosttyFocus(_ flag: Bool) {
-        guard let s = surface else { return }
+        guard let s = surface, focusUpdateGate.shouldApply(flag) else { return }
         ghostty_surface_set_focus(s, flag)
     }
 

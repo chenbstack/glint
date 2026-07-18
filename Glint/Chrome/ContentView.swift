@@ -738,6 +738,10 @@ private struct TabBarPlan: Equatable {
 /// (Safari-style). Active chips get a faint fill and an accent underline.
 private struct TabChip: View {
     @EnvironmentObject var store: WorkspaceStore
+    /// Intentionally unread: installing the object subscribes this view to
+    /// pane-activity invalidation, so the `store.agentSummary`/`tabAgentStatus`
+    /// reads below re-render on status changes. Do not remove as "unused".
+    @EnvironmentObject private var activity: PaneActivityStore
     let ws: Workspace
     let tab: WorkspaceTab
     let isActive: Bool
@@ -1173,6 +1177,10 @@ struct TabIcon: View {
 /// the workspace switcher's dropdown, with select-on-click and hover-close.
 private struct TabOverflowChip: View {
     @EnvironmentObject var store: WorkspaceStore
+    /// Intentionally unread: installing the object subscribes this view to
+    /// pane-activity invalidation, so the `store.agentSummary`/`tabAgentStatus`
+    /// reads below re-render on status changes. Do not remove as "unused".
+    @EnvironmentObject private var activity: PaneActivityStore
     let ws: Workspace
     let tabs: [WorkspaceTab]
     @State private var isOpen = false
@@ -1205,6 +1213,7 @@ private struct TabOverflowChip: View {
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             TabOverflowPopover(ws: ws, tabs: tabs) { isOpen = false }
                 .environmentObject(store)
+                .environmentObject(activity)
         }
     }
 
@@ -1325,6 +1334,10 @@ private struct TabOverflowPopover: View {
 /// that swaps the breathing status dot for a close (×) on hover.
 private struct TabOverflowRow: View {
     @EnvironmentObject var store: WorkspaceStore
+    /// Intentionally unread: installing the object subscribes this view to
+    /// pane-activity invalidation, so the `store.agentSummary`/`tabAgentStatus`
+    /// reads below re-render on status changes. Do not remove as "unused".
+    @EnvironmentObject private var activity: PaneActivityStore
     let ws: Workspace
     let tab: WorkspaceTab
     let onSelect: () -> Void
@@ -1636,6 +1649,10 @@ struct SparkShape: Shape {
 /// a chevron that animates between closed/open.
 private struct WorkspaceSwitcher: View {
     @EnvironmentObject var store: WorkspaceStore
+    /// Intentionally unread: installing the object subscribes this view to
+    /// pane-activity invalidation, so the `store.agentSummary`/`tabAgentStatus`
+    /// reads below re-render on status changes. Do not remove as "unused".
+    @EnvironmentObject private var activity: PaneActivityStore
     @State private var isOpen = false
     @State private var hover = false
 
@@ -1686,6 +1703,7 @@ private struct WorkspaceSwitcher: View {
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             WorkspaceSwitcherPopover { isOpen = false }
                 .environmentObject(store)
+                .environmentObject(activity)
         }
     }
 
@@ -1812,6 +1830,10 @@ private struct WorkspaceSwitcherPopover: View {
 
 private struct WorkspaceSwitcherRow: View {
     @EnvironmentObject var store: WorkspaceStore
+    /// Intentionally unread: installing the object subscribes this view to
+    /// pane-activity invalidation, so the `store.agentSummary`/`tabAgentStatus`
+    /// reads below re-render on status changes. Do not remove as "unused".
+    @EnvironmentObject private var activity: PaneActivityStore
     let ws: Workspace
     let isCurrent: Bool
     let onSelect: () -> Void

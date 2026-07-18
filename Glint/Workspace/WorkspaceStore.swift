@@ -515,14 +515,24 @@ final class WorkspaceStore: ObservableObject {
     @Published var workspaces: [Workspace]
     @Published var selectedWorkspaceID: UUID?
     @Published var sidebarCollapsed: Bool
+    /// High-frequency, non-persistent pane state is published separately so
+    /// agent hooks and foreground-process changes don't invalidate every view
+    /// that observes the workspace model (including the terminal subtree).
+    let activity: PaneActivityStore
     /// Latest foreground-process name per (workspace, pane). Event-driven with
     /// a slow fallback capture; drives the workspace card icon. Non-persistent.
-    @Published var paneProcesses: [WorkspacePaneKey: String] = [:]
+    var paneProcesses: [WorkspacePaneKey: String] {
+        get { activity.paneProcesses }
+        set { activity.paneProcesses = newValue }
+    }
     /// CLI-agent state per pane (push-driven via AgentBridge hooks).
     /// Beats `paneProcesses` for icon/state because hooks carry live
     /// status (thinking/permission/…) a process-name capture can't know.
     /// Non-persistent.
-    @Published var paneAgentState: [WorkspacePaneKey: PaneAgentState] = [:]
+    var paneAgentState: [WorkspacePaneKey: PaneAgentState] {
+        get { activity.paneAgentState }
+        set { activity.paneAgentState = newValue }
+    }
 
     /// Drives the command-palette overlay. Toggled by the toolbar's ⌘
     /// button and the ⌘⇧P global shortcut. Mutually exclusive with the agent
@@ -1406,7 +1416,12 @@ final class WorkspaceStore: ObservableObject {
     /// created by GlintApp as a @StateObject).
     static private(set) weak var current: WorkspaceStore?
 
-    init() {
+    convenience init() {
+        self.init(activity: PaneActivityStore())
+    }
+
+    init(activity: PaneActivityStore) {
+        self.activity = activity
         let loaded = Persistence.load() ?? PersistedState.fresh
         self.workspaces = loaded.workspaces
         let shouldRestore = (UserDefaults.standard.object(forKey: "glint.restoreLastWorkspace") as? Bool) ?? true
@@ -3776,6 +3791,12 @@ enum AppIconPreset: String, CaseIterable, Identifiable {
         case .graphite: return "石墨"
         }
     }
+}
+
+@MainActor
+final class PaneActivityStore: ObservableObject {
+    @Published var paneProcesses: [WorkspaceStore.WorkspacePaneKey: String] = [:]
+    @Published var paneAgentState: [WorkspaceStore.WorkspacePaneKey: PaneAgentState] = [:]
 }
 
 extension WorkspaceStore {
