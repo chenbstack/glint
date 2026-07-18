@@ -334,8 +334,16 @@ final class GhosttyManager {
         // ghostty 把多行 `font-family` 当 fallback 链(声明序为优先级)。
         // 顺序:主字体 → 用户指定的 CJK 兜底(可空) → Menlo 终极兜底。
         let cjkLine = cjkFamily.isEmpty ? "" : "\nfont-family = \(cjkFamily)"
+        // `term`: bundling ghostty's terminfo (needed so shell integration can
+        // emit OSC 133 for idle-prompt detection) makes ghostty default TERM
+        // to xterm-ghostty for every new shell (Exec.zig picks cfg.term once a
+        // resources dir exists). Pin the pre-bundle value: xterm-ghostty
+        // breaks ssh to any host without that terminfo entry, and nothing in
+        // Glint needs the richer entry locally. Shell integration and OSC 133
+        // are independent of TERM, so prompt detection keeps working.
         let overrides = """
-        \(colorBlock)cursor-style = \(cursorStyle)
+        \(colorBlock)term = xterm-256color
+        cursor-style = \(cursorStyle)
         cursor-style-blink = \(cursorBlink)
         font-family = \(family)\(cjkLine)
         font-family = Menlo
@@ -473,6 +481,7 @@ final class GhosttyManager {
         case GHOSTTY_ACTION_COMMAND_FINISHED:
             if let view {
                 DispatchQueue.main.async {
+                    view.noteCommandEndedForIdleTracking()
                     NotificationCenter.default.post(name: .ghosttyCommandFinished, object: view)
                 }
             }

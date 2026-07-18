@@ -147,12 +147,39 @@ final class PerformanceRegressionTests: XCTestCase {
         XCTAssertTrue(TerminalFocusPolicy.protectsFromIdleOfflining(
             appIsActive: true,
             workspaceIsSelected: true,
-            viewIsFirstResponder: true
+            viewIsFirstResponder: true,
+            viewIsAttachedToWindow: true
         ))
         XCTAssertFalse(TerminalFocusPolicy.protectsFromIdleOfflining(
             appIsActive: true,
             workspaceIsSelected: false,
-            viewIsFirstResponder: true
+            viewIsFirstResponder: true,
+            viewIsAttachedToWindow: true
+        ))
+    }
+
+    func testVisiblePaneIsProtectedEvenWithoutKeyboardFocus() {
+        // Keyboard focus parked in the sidebar/search must not let the pane
+        // the user is looking at be swapped for the offline placeholder.
+        XCTAssertTrue(TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: true,
+            workspaceIsSelected: true,
+            viewIsFirstResponder: false,
+            viewIsAttachedToWindow: true
+        ))
+        // Detached views (other workspace/tab) are the release candidates.
+        XCTAssertFalse(TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: true,
+            workspaceIsSelected: true,
+            viewIsFirstResponder: false,
+            viewIsAttachedToWindow: false
+        ))
+        // An inactive app protects nothing — wake happens on reactivation.
+        XCTAssertFalse(TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: false,
+            workspaceIsSelected: true,
+            viewIsFirstResponder: false,
+            viewIsAttachedToWindow: true
         ))
     }
 

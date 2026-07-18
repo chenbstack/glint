@@ -41,10 +41,16 @@ enum TerminalFocusPolicy {
         workspaceIsSelected && paneIsFocused
     }
 
+    /// A pane the user can currently SEE must never be swapped for the
+    /// offline placeholder in front of them — keyboard focus may legitimately
+    /// live in the sidebar/search for long stretches. `viewIsAttachedToWindow`
+    /// is the visibility proxy: workspace/tab switches detach pane views.
     static func protectsFromIdleOfflining(appIsActive: Bool,
                                           workspaceIsSelected: Bool,
-                                          viewIsFirstResponder: Bool) -> Bool {
-        appIsActive && workspaceIsSelected && viewIsFirstResponder
+                                          viewIsFirstResponder: Bool,
+                                          viewIsAttachedToWindow: Bool) -> Bool {
+        appIsActive && workspaceIsSelected
+            && (viewIsFirstResponder || viewIsAttachedToWindow)
     }
 }
 

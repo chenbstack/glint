@@ -118,6 +118,14 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// Nil while this pane is the active first responder; otherwise the point
     /// from which the configurable idle timeout is measured.
     private var inactiveSince: Date?
+    /// True once any user input (keystroke, IME commit, paste, control-socket
+    /// injection) reached the surface after the last OSC 133 command end.
+    /// While set, the pane is treated as holding unsubmitted prompt input and
+    /// is never idle-released — the grid-level probe can't see typed text
+    /// whose trailing blank cell was never semantically stamped, so this is
+    /// the fail-closed superset. Cleared when a command finishes (the shell
+    /// consumed the line) or a fresh surface spawns.
+    private var typedSinceCommandEnd = false
     private(set) var isTakenOffline = false
 
     override var acceptsFirstResponder: Bool { true }
@@ -400,6 +408,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         focusUpdateGate.reset()
         pendingInitialInput = nil
         isTakenOffline = false
+        typedSinceCommandEnd = false
         removeOfflinePlaceholder()
         // ghostty just swapped in its IOSurfaceLayer — re-stamp the
         // opaque/clear backing onto the NEW layer (init's settings were on the
@@ -830,7 +839,8 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         if TerminalFocusPolicy.protectsFromIdleOfflining(
             appIsActive: NSApp.isActive,
             workspaceIsSelected: workspaceIsSelected,
-            viewIsFirstResponder: window?.firstResponder === self
+            viewIsFirstResponder: window?.firstResponder === self,
+            viewIsAttachedToWindow: window != nil
         ) {
             inactiveSince = nil
         } else {
@@ -846,7 +856,8 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         if TerminalFocusPolicy.protectsFromIdleOfflining(
             appIsActive: true,
             workspaceIsSelected: workspaceIsSelected,
-            viewIsFirstResponder: window?.firstResponder === self
+            viewIsFirstResponder: window?.firstResponder === self,
+            viewIsAttachedToWindow: window != nil
         ) {
             _ = ensureLiveSurface()
             inactiveSince = nil
@@ -861,7 +872,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
                                now: Date = Date(),
                                workspaceIsSelected: Bool) -> Bool {
         refreshIdleClock(now: now, workspaceIsSelected: workspaceIsSelected)
-        guard let s = surface else { return false }
+        // Cheap guards first: the disposability probes below mutate selection
+        // state (queueing renders) and walk the process tree, so they must
+        // not run on every 30s sweep for panes that can't qualify anyway.
+        guard enabled, let s = surface,
+              let idleStart = inactiveSince,
+              now.timeIntervalSince(idleStart) >= timeout else { return false }
         let processName = foregroundProcessName()
         let hasUserOrJobState = TerminalOfflinePolicy.isIdleShell(processName)
             ? !shellStateIsDisposable(s)
@@ -881,6 +897,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
         if let cwd = currentCwd(), !cwd.isEmpty { launchCwd = cwd }
         if scrollbackEnabled {
+            // Force the final capture: flushScrollbackToDisk early-outs on a
+            // clean dirty flag, and output can have arrived without any of
+            // its usual dirty signals — this flush is the last chance.
+            markScrollbackDirty()
             noteForegroundPidForScrollback()
             flushScrollbackToDisk()
             ScrollbackArchive.drain()
@@ -913,15 +933,34 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// Shell integration marks input separately from the prompt. The cmux
     /// Ghostty bridge selects only the semantic segment under the cursor, so
     /// an empty input segment produces no selection while typed text does.
+    ///
+    /// The probe alone has false negatives (typed text whose trailing blank
+    /// cell was never stamped `.input` reads as empty), so the primary guard
+    /// is `typedSinceCommandEnd`; the probe stays as a second opinion for
+    /// input the tracker can't have seen (e.g. text echoed by the pty side).
     private func promptHasUnsubmittedInput(_ s: ghostty_surface_t) -> Bool? {
+        if typedSinceCommandEnd { return true }
         if hasMarkedText() || ghostty_surface_has_selection(s) { return true }
-        guard ghostty_surface_select_cursor_line(s) else { return false }
+        // selectCursorLine also fails when the cursor is scrolled out of the
+        // viewport — that must read as "unknown" (protected), not "no input".
+        guard ghostty_surface_select_cursor_line(s) else { return nil }
         defer { _ = ghostty_surface_clear_selection(s) }
 
         var text = ghostty_text_s()
         guard ghostty_surface_read_selection(s, &text) else { return nil }
         defer { ghostty_surface_free_text(s, &text) }
         return text.text_len > 0
+    }
+
+    /// Any user input headed for the pty — physical keys, IME commits,
+    /// pastes, control-socket injections. See `typedSinceCommandEnd`.
+    fileprivate func noteUserInputForIdleTracking() {
+        typedSinceCommandEnd = true
+    }
+
+    /// OSC 133 command end: the shell consumed whatever was typed.
+    func noteCommandEndedForIdleTracking() {
+        typedSinceCommandEnd = false
     }
 
     /// A background or stopped job remains a child of the interactive shell
@@ -941,7 +980,8 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         if TerminalFocusPolicy.protectsFromIdleOfflining(
             appIsActive: NSApp.isActive,
             workspaceIsSelected: workspaceIsSelected,
-            viewIsFirstResponder: window?.firstResponder === self
+            viewIsFirstResponder: window?.firstResponder === self,
+            viewIsAttachedToWindow: window != nil
         ) {
             inactiveSince = nil
         } else {
@@ -1380,6 +1420,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     override func keyDown(with event: NSEvent) {
         guard let s = surface else { super.keyDown(with: event); return }
+        noteUserInputForIdleTracking()
         let mods = event.modifierFlags
         // ⌘V (keycode 9): handle explicitly. Embedded ghostty's default
         // keybindings don't include cmd+v=paste_from_clipboard (standalone
@@ -2033,6 +2074,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         guard let str = NSPasteboard.general.string(forType: .string),
               !str.isEmpty else { return }
         guard confirmUnsafeTextInjection(str) else { return }
+        noteUserInputForIdleTracking()
         str.withCString { ptr in
             ghostty_surface_text(s, ptr, UInt(strlen(ptr)))
         }
@@ -2081,6 +2123,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// thread only (ghostty surface APIs are not thread-safe).
     func injectText(_ text: String) {
         guard let s = surface, !text.isEmpty else { return }
+        noteUserInputForIdleTracking()
         // UTF-8 length, not strlen: a control-socket payload can carry an
         // embedded NUL (a literal NUL byte), and strlen would truncate the paste at
         // it. withCString's buffer is exactly utf8.count bytes + a NUL, so
@@ -2334,6 +2377,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             return
         }
         guard !text.isEmpty, let s = surface else { return }
+        noteUserInputForIdleTracking()
         text.withCString { ptr in
             // text_input is the IME-aware commit path. Use it for all
             // printable input; surface_text leaves preedit state behind,
