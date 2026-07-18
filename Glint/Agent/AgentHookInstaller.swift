@@ -49,6 +49,7 @@ enum AgentPresence {
             "\(home)/.local/bin", "\(home)/bin",
             "\(home)/.bun/bin", "\(home)/.deno/bin",
             "\(home)/.npm-global/bin", "\(home)/.opencode/bin",
+            "\(home)/.grok/bin",
         ]
         if let path = ProcessInfo.processInfo.environment["PATH"] {
             dirs.append(contentsOf: path.split(separator: ":").map(String.init))
@@ -126,6 +127,7 @@ enum AgentHookInstaller {
         { AgentHookInstaller.isInstalled() },
         { CodexHookInstaller.isInstalled() },
         { DevinHookInstaller.isInstalled() },
+        { GrokHookInstaller.isInstalled() },
     ]
 
     /// Delete the shared reporter script iff no installed agent still
@@ -367,6 +369,18 @@ enum AgentHookInstaller {
     PANE="${GLINT_PANE_ID:-}"
     SOCK="${GLINT_AGENT_SOCK:-}"
 
+    # Grok injects GROK_SESSION_ID on every hook process and, by default, also
+    # loads ~/.claude/settings.json hooks for Claude Code compatibility. That
+    # dual-fires Glint's Claude entry (agent defaults to "claude", no ask
+    # remap) alongside ~/.grok/hooks/glint.json (agent=grok). Last writer wins
+    # in WorkspaceStore and can wipe NeedsReply / mis-key session ids under
+    # "claude". Skip non-grok reports when this env is set so only the
+    # dedicated Grok hook owns the pane state.
+    if [ -n "${GROK_SESSION_ID:-}" ] && [ "$AGENT" != "grok" ]; then
+      cat >/dev/null 2>&1
+      exit 0
+    fi
+
     # Always exits 0 — a missing pane/socket or a `nc` failure is silently
     # swallowed so a transient bridge outage can never block an agent hook.
     if [ -z "$PANE" ] || [ -z "$SOCK" ] || [ ! -S "$SOCK" ]; then
@@ -387,7 +401,25 @@ enum AgentHookInstaller {
     if TMP=$(/usr/bin/mktemp "${TMPDIR:-/tmp}/glint-hook.XXXXXX"); then
       trap '/bin/rm -f "$TMP"' EXIT HUP INT TERM
       cat >"$TMP"
+      # Claude/Codex use snake_case; Grok's hook payload uses camelCase
+      # `sessionId`. Try both, then fall back to GROK_SESSION_ID env (set on
+      # every Grok hook process).
       SESSION=$(/usr/bin/plutil -extract session_id raw -o - "$TMP" 2>/dev/null || true)
+      if [ -z "$SESSION" ]; then
+        SESSION=$(/usr/bin/plutil -extract sessionId raw -o - "$TMP" 2>/dev/null || true)
+      fi
+      if [ -z "$SESSION" ] && [ -n "${GROK_SESSION_ID:-}" ]; then
+        SESSION="$GROK_SESSION_ID"
+      fi
+      # Grok's ask_user_question (and exit_plan_mode plan approval) block the
+      # turn waiting for the user — same semantics as OMP's `ask` tool. Remap
+      # PreToolUse → NeedsReply so the sidebar shows "awaiting reply".
+      if [ "$HOOK" = "PreToolUse" ] && [ "$AGENT" = "grok" ]; then
+        TOOL=$(/usr/bin/plutil -extract toolName raw -o - "$TMP" 2>/dev/null || true)
+        case "$TOOL" in
+          ask_user_question|exit_plan_mode) HOOK="NeedsReply" ;;
+        esac
+      fi
       if [ "$HOOK" = "PermissionRequest" ] && [ "$AGENT" = "codex" ]; then
         TRANSCRIPT=$(/usr/bin/plutil -extract transcript_path raw -o - "$TMP" 2>/dev/null || true)
         TURN=$(/usr/bin/plutil -extract turn_id raw -o - "$TMP" 2>/dev/null || true)
@@ -1617,5 +1649,158 @@ enum DevinHookInstaller {
             return false
         }
         return da == db
+    }
+}
+
+/// Installs Glint hook entries for Grok Build CLI into
+/// `~/.grok/hooks/glint.json`.
+///
+/// Grok discovers hooks from several sources (including Claude's settings for
+/// compat). We write a **dedicated** file under `~/.grok/hooks/` so:
+///   1. Grok sessions report `agent=grok` (not Claude's `claude` argv), and
+///   2. uninstall only removes Glint's Grok file — never rewrites
+///      `~/.claude/settings.json`.
+///
+/// Schema matches Claude's hooks subtree. The shared `glint-report.sh`
+/// remaps Grok's `ask_user_question` / `exit_plan_mode` PreToolUse events to
+/// `NeedsReply` so the sidebar surfaces "awaiting reply".
+enum GrokHookInstaller {
+    /// Events Grok documents and Glint's status machine reacts to.
+    /// Grok has no `PermissionRequest` hook (approvals are TUI-native); it
+    /// does expose `StopFailure` and `PreCompact`, which we register.
+    /// (Internal, not private, so tests can assert the exact set.)
+    static let hookEvents: [String] = [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "PreCompact",
+        "Stop",
+        "StopFailure",
+    ]
+
+    /// Marker filename under `~/.grok/hooks/`. Other user/plugin hook files
+    /// stay untouched.
+    static let hooksFileName = "glint.json"
+
+    static func defaultHooksURL() -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".grok/hooks/\(hooksFileName)")
+    }
+
+    static func isInstalled(hooksURL: URL = GrokHookInstaller.defaultHooksURL()) -> Bool {
+        guard let data = try? Data(contentsOf: hooksURL),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let hooks = root["hooks"] as? [String: Any] else {
+            return false
+        }
+        for (_, bucket) in hooks {
+            guard let arr = bucket as? [Any] else { continue }
+            for entry in arr {
+                guard let group = entry as? [String: Any],
+                      let inner = group["hooks"] as? [[String: Any]] else { continue }
+                if inner.contains(where: { ($0["command"] as? String)?.contains("glint-report.sh") == true }) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /// Whether Grok Build itself looks installed on this Mac.
+    /// Prefer binary / config signals over a bare `~/.grok` directory: installing
+    /// hooks creates `~/.grok/hooks/`, which would otherwise permanently mark
+    /// the agent "detected" even when `grok` was never on PATH.
+    static func isAgentPresent() -> Bool {
+        AgentPresence.commandExists("grok")
+            || AgentPresence.fileExists(".grok/config.toml")
+            || AgentPresence.fileExists(".grok/version.json")
+            || AgentPresence.fileExists(".grok/bin/grok")
+    }
+
+    /// Events where Grok rejects a `matcher` field entirely (docs: lifecycle
+    /// events reject a matcher; empty/omitted matches everything on tool
+    /// events). We omit matcher for *all* Glint entries so SessionStart /
+    /// UserPromptSubmit / Stop never get dropped for carrying `"*"`.
+    static let lifecycleEventsRejectingMatcher: Set<String> = [
+        "SessionStart",
+        "SessionEnd",
+        "UserPromptSubmit",
+        "Stop",
+    ]
+
+    static func installIfNeeded(socketPath: String) {
+        guard let scriptPath = AgentHookInstaller.ensureReporterScript() else { return }
+        mergeGrokHooks(scriptPath: scriptPath)
+        _ = socketPath
+    }
+
+    /// Remove Glint's `~/.grok/hooks/glint.json`. The shared reporter is only
+    /// deleted when no other agent still references it. Injectable `hooksURL`
+    /// keeps unit tests off the developer's real Grok config.
+    static func uninstall(hooksURL: URL = GrokHookInstaller.defaultHooksURL()) {
+        if FileManager.default.fileExists(atPath: hooksURL.path) {
+            try? FileManager.default.removeItem(at: hooksURL)
+            NSLog("[glint] grok hooks removed from \(hooksURL.path)")
+        }
+        if hooksURL == GrokHookInstaller.defaultHooksURL() {
+            AgentHookInstaller.removeReporterScriptIfUnused()
+        }
+    }
+
+    static func mergeGrokHooks(scriptPath: String,
+                               hooksURL: URL = GrokHookInstaller.defaultHooksURL()) {
+        let dir = hooksURL.deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(
+                at: dir,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+        } catch {
+            NSLog("[glint] couldn't create ~/.grok/hooks: \(error)")
+            return
+        }
+
+        // Dedicated file owned by Glint — rewrite the full hooks map rather
+        // than merging into an unknown multi-purpose document. Other files
+        // in ~/.grok/hooks/ are left alone.
+        //
+        // Do NOT put `"matcher": "*"` on these entries. Grok treats matcher as
+        // a regex for tool events only, and lifecycle events (SessionStart,
+        // UserPromptSubmit, Stop, …) *reject* a matcher — official plugins
+        // omit it entirely. Empty/omitted matcher = match-all for tool events.
+        var hooks: [String: Any] = [:]
+        for event in hookEvents {
+            let entry: [String: Any] = [
+                "hooks": [[
+                    "type": "command",
+                    "command": "\(scriptPath) \(event) grok",
+                ]],
+            ]
+            hooks[event] = [entry] as [Any]
+        }
+        let root: [String: Any] = ["hooks": hooks]
+        guard let data = SafeJSON.data(
+            root,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        ) else {
+            NSLog("[glint] ~/.grok/hooks/glint.json: hook tree not serializable, skipping write")
+            return
+        }
+        // Skip rewrite when content is identical (idempotent install).
+        if let existing = try? Data(contentsOf: hooksURL), existing == data {
+            return
+        }
+        do {
+            let mode = FileManager.default.fileExists(atPath: hooksURL.path)
+                ? posixPermissions(atPath: hooksURL.path)
+                : 0o600
+            try data.write(to: hooksURL, options: [.atomic])
+            setPosixPermissions(mode, atPath: hooksURL.path)
+            NSLog("[glint] grok hooks written to \(hooksURL.path)")
+        } catch {
+            NSLog("[glint] writing ~/.grok/hooks/glint.json failed: \(error)")
+        }
     }
 }

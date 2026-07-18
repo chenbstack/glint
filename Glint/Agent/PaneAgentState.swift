@@ -7,6 +7,7 @@ enum PaneAgentKind: String, Codable {
     case opencode
     case devin
     case omp
+    case grok
 
     /// Human-facing label for the per-pane summary popover.
     var displayName: String {
@@ -16,6 +17,7 @@ enum PaneAgentKind: String, Codable {
         case .opencode: return "OpenCode"
         case .devin:    return "Devin"
         case .omp:      return "OMP"
+        case .grok:     return "Grok"
         }
     }
 
@@ -78,6 +80,8 @@ enum PaneAgentKind: String, Codable {
             return validated.map { "devin --resume \($0)\n" } ?? "devin --continue\n"
         case .omp:
             return validated.map { "omp -r \($0)\n" } ?? "omp -c\n"
+        case .grok:
+            return validated.map { "grok --resume \($0)\n" } ?? "grok --continue\n"
         }
     }
 }

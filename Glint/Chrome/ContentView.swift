@@ -1148,6 +1148,10 @@ struct TabIcon: View {
                 AnimatedGIFView(assetName: MascotAsset.omp(for: status),
                                 animates: !reduceMotion && isBusy)
                     .frame(width: size * 1.21, height: size * 1.21)
+            case .grok:
+                AnimatedGIFView(assetName: MascotAsset.grok(for: status),
+                                animates: !reduceMotion && isBusy)
+                    .frame(width: size * 1.21, height: size * 1.21)
             default:
                 if let sf = kind.sfSymbol {
                     Image(systemName: sf)
@@ -1952,6 +1956,10 @@ private struct WorkspaceMicroIcon: View {
             if case .omp = kind { return true }
             return false
         }()
+        let isGrok: Bool = {
+            if case .grok = kind { return true }
+            return false
+        }()
         Group {
             if isClaude {
                 Image(store.claudeIconStyle == .spark ? "ClaudeSpark" : "Claude")
@@ -1970,6 +1978,11 @@ private struct WorkspaceMicroIcon: View {
                     .aspectRatio(contentMode: .fit)
             } else if isOmp {
                 Image("OmpMark")
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+            } else if isGrok {
+                Image("GrokMark")
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)

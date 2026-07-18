@@ -141,7 +141,7 @@ struct Pane: Identifiable, Codable {
     var remoteHost: String?
     var remotePath: String?
     /// Per-agent session id captured from hook events, keyed by
-    /// `PaneAgentKind.rawValue` ("claude"/"codex"/"opencode"/"devin"/"omp"). When
+    /// `PaneAgentKind.rawValue` ("claude"/"codex"/"opencode"/"devin"/"omp"/"grok"). When
     /// set, restore-on-launch issues the agent's `--resume <id>` /
     /// `--session <id>` form so multiple panes in one workspace don't
     /// collapse onto the most-recent session (#45). Lifecycle: entries are
@@ -818,6 +818,9 @@ final class WorkspaceStore: ObservableObject {
     /// Whether Glint's OMP extension is registered in `~/.omp/agent/settings.json`.
     @Published var ompHooksInstalled: Bool = false
 
+    /// Whether Glint's Grok Build hooks are registered in `~/.grok/hooks/glint.json`.
+    @Published var grokHooksInstalled: Bool = false
+
     /// Whether Glint's modified-Enter shell keybindings are present in the
     /// user's shell rc (~/.zshrc / ~/.bashrc). Opt-in, default off.
     @Published var shellKeybindsInstalled: Bool = false
@@ -990,6 +993,11 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreOmpSession, forKey: "glint.restoreOmpSession") }
     }
 
+    /// Same as `restoreClaudeSession` but for Grok Build — feeds `grok --continue` / `grok --resume <id>`.
+    @Published var restoreGrokSession: Bool = (UserDefaults.standard.object(forKey: "glint.restoreGrokSession") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(restoreGrokSession, forKey: "glint.restoreGrokSession") }
+    }
+
     /// Maps each agent kind to the @Published toggle that gates its
     /// session-restore-on-launch. Single source of truth: adding a new
     /// agent means adding ONE entry here, not editing two parallel switches
@@ -1000,6 +1008,7 @@ final class WorkspaceStore: ObservableObject {
         .opencode: \.restoreOpenCodeSession,
         .devin:    \.restoreDevinSession,
         .omp:      \.restoreOmpSession,
+        .grok:     \.restoreGrokSession,
     ]
 
     /// Whether session-restore-on-launch is enabled for `kind`. Used by
@@ -1217,6 +1226,13 @@ final class WorkspaceStore: ObservableObject {
                 isInstalled: { OmpHookInstaller.isInstalled() },
                 install: { OmpHookInstaller.installIfNeeded(socketPath: socketPath) }
             ),
+            AgentHookSpec(
+                handledKey: "glint.grokHooksAutoInstalled",
+                displayName: "Grok",
+                isPresent: GrokHookInstaller.isAgentPresent,
+                isInstalled: { GrokHookInstaller.isInstalled() },
+                install: { GrokHookInstaller.installIfNeeded(socketPath: socketPath) }
+            ),
         ]
     }
 
@@ -1265,6 +1281,7 @@ final class WorkspaceStore: ObservableObject {
             WorkspaceStore.current?.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
             WorkspaceStore.current?.devinHooksInstalled = DevinHookInstaller.isInstalled()
             WorkspaceStore.current?.ompHooksInstalled = OmpHookInstaller.isInstalled()
+            WorkspaceStore.current?.grokHooksInstalled = GrokHookInstaller.isInstalled()
         }
     }
 
@@ -1321,6 +1338,16 @@ final class WorkspaceStore: ObservableObject {
         self.ompHooksInstalled = OmpHookInstaller.isInstalled()
     }
 
+    func installGrokHooks() {
+        GrokHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
+        self.grokHooksInstalled = GrokHookInstaller.isInstalled()
+    }
+
+    func uninstallGrokHooks() {
+        GrokHookInstaller.uninstall()
+        self.grokHooksInstalled = GrokHookInstaller.isInstalled()
+    }
+
     func installShellKeybinds() {
         ShellKeybindInstaller.install()
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
@@ -1339,6 +1366,7 @@ final class WorkspaceStore: ObservableObject {
     var opencodeDetected: Bool { OpenCodeHookInstaller.isAgentPresent() }
     var devinDetected: Bool { DevinHookInstaller.isAgentPresent() }
     var ompDetected: Bool { OmpHookInstaller.isAgentPresent() }
+    var grokDetected: Bool { GrokHookInstaller.isAgentPresent() }
 
     /// Locale to inject into the SwiftUI environment. Driven by
     /// `preferredLanguage`. On macOS 14+, SwiftUI re-resolves
@@ -1565,6 +1593,7 @@ final class WorkspaceStore: ObservableObject {
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
         self.devinHooksInstalled = DevinHookInstaller.isInstalled()
         self.ompHooksInstalled = OmpHookInstaller.isInstalled()
+        self.grokHooksInstalled = GrokHookInstaller.isInstalled()
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
         // Defer to the next main-loop tick so this runs after
         // `applicationDidFinishLaunching`. Hitting `NSApp.dockTile` while
@@ -2298,6 +2327,7 @@ final class WorkspaceStore: ObservableObject {
         // Exact match for "omp" — it's only three letters, so a substring
         // check would false-positive on process names like "compiz".
         if lower == "omp" || lower.hasSuffix("/omp") { return .omp }
+        if lower.contains("grok") { return .grok }
         return nil
     }
 
@@ -3659,6 +3689,7 @@ enum WorkspaceIconKind {
     case opencode
     case devin
     case omp
+    case grok
     case ssh
     case vim
     case python
@@ -3675,7 +3706,7 @@ enum WorkspaceIconKind {
         case .python: return "chevron.left.forwardslash.chevron.right"
         case .node:   return "hexagon.fill"
         case .git:    return "arrow.triangle.branch"
-        case .claude, .codex, .opencode, .devin, .omp, .other:
+        case .claude, .codex, .opencode, .devin, .omp, .grok, .other:
             return nil
         }
     }
@@ -3688,6 +3719,7 @@ enum WorkspaceIconKind {
         case .opencode: return "O"
         case .devin:  return "D"
         case .omp:    return "π"
+        case .grok:   return "G"
         case .other(let s):
             return s.first.map { String($0).uppercased() } ?? "?"
         default:
@@ -3938,6 +3970,7 @@ extension WorkspaceStore {
             case .opencode: return .opencode
             case .devin: return .devin
             case .omp: return .omp
+            case .grok: return .grok
             }
         }
 
@@ -3952,6 +3985,7 @@ extension WorkspaceStore {
         if names.contains(where: { $0 == "opencode" || $0.contains("opencode") }) { return .opencode }
         if names.contains(where: { $0 == "devin" || $0.contains("devin") }) { return .devin }
         if names.contains(where: { $0 == "omp" || $0.hasSuffix("/omp") }) { return .omp }
+        if names.contains(where: { $0 == "grok" || $0.contains("grok") }) { return .grok }
         if names.contains(where: { $0 == "vim" || $0 == "nvim" || $0 == "vi" }) { return .vim }
         if names.contains(where: { $0 == "python" || $0 == "python3" || $0 == "ipython" }) { return .python }
         if names.contains(where: { $0 == "node" || $0 == "deno" || $0 == "bun" }) { return .node }
