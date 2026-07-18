@@ -1529,7 +1529,7 @@ final class WorkspaceStore: ObservableObject {
                 // callback that follows this same change ~0.5s later doesn't
                 // spawn a second `git status` (the in-flight gate only merges
                 // runs that overlap in time; a fast git finishes first).
-                self.gitRefreshCoordinator.request(wsID) { [weak self] in
+                self.gitRefreshCoordinator.request(wsID, source: .commandFinished) { [weak self] in
                     self?.refreshGitStatusNow(for: wsID)
                 }
             }
@@ -3498,7 +3498,7 @@ final class WorkspaceStore: ObservableObject {
             let paths = GitRepositoryWatcher.watchPaths(for: path)
             let watcher = GitRepositoryWatcher(paths: paths) { [weak self] in
                 guard NSApp.isActive else { return }
-                self?.gitRefreshCoordinator.request(id) { [weak self] in
+                self?.gitRefreshCoordinator.request(id, source: .fileWatcher) { [weak self] in
                     self?.refreshGitStatusNow(for: id)
                 }
             }

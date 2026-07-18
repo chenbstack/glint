@@ -11,16 +11,24 @@ import Foundation
 /// one `git commit` spawned two subprocesses. This coordinator closes that gap:
 /// once a refresh has been dispatched for a workspace, further refreshes
 /// requested within `minInterval` coalesce into ONE trailing refresh at the
-/// interval boundary. A sustained storm (build, rebase, checkout) thus
-/// refreshes at most once per `minInterval`, never zero — the trailing refresh
-/// always runs, so a genuine change can't be dropped while the storm throttles.
+/// interval boundary. A second coalesced watcher request indicates a sustained
+/// filesystem storm (build, rebase, checkout), so the trailing refresh backs
+/// off to four times the base interval. The trailing refresh still always runs,
+/// so a genuine change can't be dropped while the storm throttles.
 ///
 /// Only the push-based event channels route through here. Pull-based refreshes
 /// (workspace/pane switch, popover open, the active-only fallback timer) call
 /// `refreshGitStatus` / `refreshGitStatusNow` directly and stay immediate.
 final class GitRefreshCoordinator {
+    enum Source {
+        case commandFinished
+        case fileWatcher
+    }
+
     private let minInterval: TimeInterval
+    private let stormInterval: TimeInterval
     private let queue = DispatchQueue(label: "app.glint.git-refresh")
+    private static let stormThreshold = 2
     /// Last time a refresh for this workspace was actually dispatched (immediate
     /// path, or a trailing fire). The elapsed-since guard is what folds a
     /// trailing FSEvents callback back into the refresh the command-finished
@@ -29,9 +37,14 @@ final class GitRefreshCoordinator {
     /// One in-flight trailing work item per workspace, so a fresher request can
     /// cancel a not-yet-fired trailing refresh and replace it.
     private var pending: [UUID: DispatchWorkItem] = [:]
+    /// Requests coalesced since the last actual dispatch. A normal shell
+    /// command produces one watcher follow-up; several follow-ups in the same
+    /// window mean filesystem churn rather than one logical command.
+    private var coalescedWatcherRequestCount: [UUID: Int] = [:]
 
     init(minInterval: TimeInterval = 1.5) {
         self.minInterval = minInterval
+        self.stormInterval = minInterval * 4
     }
 
     /// Request a refresh of `id`. `run` runs on the main actor immediately when
@@ -39,20 +52,30 @@ final class GitRefreshCoordinator {
     /// once at the interval boundary. Repeated requests within the window
     /// coalesce: a fresher request cancels any not-yet-fired trailing refresh
     /// and replaces it, so only the most recent request's `run` survives.
-    func request(_ id: UUID, run: @escaping () -> Void) {
+    func request(_ id: UUID, source: Source, run: @escaping () -> Void) {
         queue.async { [self] in
             pending[id]?.cancel()
             let now = Date()
             let elapsed = lastDispatch[id].map { now.timeIntervalSince($0) } ?? .infinity
-            if elapsed >= minInterval {
+            let currentCount = source == .commandFinished
+                ? 0 : coalescedWatcherRequestCount[id] ?? 0
+            let currentInterval = currentCount >= Self.stormThreshold
+                ? stormInterval : minInterval
+            if elapsed >= currentInterval {
                 lastDispatch[id] = now
                 pending[id] = nil
+                coalescedWatcherRequestCount[id] = 0
                 DispatchQueue.main.async(execute: run)
             } else {
-                let delay = minInterval - elapsed
+                let nextCount = currentCount + (source == .fileWatcher ? 1 : 0)
+                coalescedWatcherRequestCount[id] = nextCount
+                let targetInterval = nextCount >= Self.stormThreshold
+                    ? stormInterval : minInterval
+                let delay = targetInterval - elapsed
                 let item = DispatchWorkItem { [self] in
                     lastDispatch[id] = Date()
                     pending[id] = nil
+                    coalescedWatcherRequestCount[id] = 0
                     DispatchQueue.main.async(execute: run)
                 }
                 pending[id] = item
@@ -61,12 +84,15 @@ final class GitRefreshCoordinator {
         }
     }
 
-    /// Drop any not-yet-fired trailing refresh for `id` (e.g. its workspace was
-    /// removed). Does not affect a refresh already dispatched to the main queue.
+    /// Drop any not-yet-fired trailing refresh and throttle history for `id`
+    /// (e.g. its workspace was archived or removed). Does not affect a refresh
+    /// already dispatched to the main queue.
     func cancel(_ id: UUID) {
         queue.async { [self] in
             pending[id]?.cancel()
             pending[id] = nil
+            lastDispatch[id] = nil
+            coalescedWatcherRequestCount[id] = nil
         }
     }
 }
