@@ -52,6 +52,19 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.26-beta.4",
+            en: [
+                "Grok Build joins the built-in agent lineup: live status in the sidebar and tabs, one-click hook install in Settings → Agents, and per-pane session restore on relaunch.",
+                "New in Settings → Memory: automatically release terminals left idle at an empty shell prompt. A released pane frees its renderer and shell, keeps its scrollback and folder, and comes back instantly on click or focus. Terminals running commands or agents, holding typed-but-unsent input, or with background jobs are never touched — and the feature is off by default.",
+                "Snappier under load: per-pane agent status updates no longer re-render the whole window, duplicate focus churn stops waking the terminal renderer, and Git status refresh backs off while an agent is rapidly writing files instead of re-scanning on every burst."
+            ],
+            zh: [
+                "Grok Build 加入内置 Agent 阵容：侧边栏和标签页实时显示状态，设置 → Agents 一键安装 hook，重启后每个窗格恢复各自会话。",
+                "设置 → 内存新增「自动释放空闲终端」：停在空 shell 提示符上闲置的终端会自动释放渲染器和 shell 进程，滚动历史和所在目录保留，点击或聚焦即刻恢复。正在跑命令或 Agent、有已输入未回车内容、有后台任务的终端一律不受影响——该功能默认关闭。",
+                "高负载下更流畅：单个窗格的 Agent 状态更新不再重绘整个窗口，重复的焦点事件不再唤醒终端渲染器，Agent 高频写文件时 Git 状态刷新会自动退避，不再每次风暴都全量扫描。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.26-beta.3",
             en: [
                 "Oh My Pi (OMP) joins Claude, Codex, OpenCode, and Devin as a first-class agent: live status in the sidebar and tabs, one-click hook install in Settings → Agents, and per-pane session restore on relaunch.",
