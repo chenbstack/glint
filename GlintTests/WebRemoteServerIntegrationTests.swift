@@ -150,6 +150,22 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         )
     }
 
+    func testVanishedSelectedInterfaceFailsLoudly() async throws {
+        // A user-chosen NIC that no longer exists must surface `.failed` — never
+        // silently fall back to a 0.0.0.0 wildcard bind (that would widen
+        // exposure, the opposite of picking a NIC).
+        WebRemoteServer.shared.stop()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+
+        let failed = expectation(description: "vanished interface reports .failed")
+        WebRemoteServer.shared.setStatusHandler { status in
+            if case .failed = status { failed.fulfill() }
+        }
+        WebRemoteServer.shared.setListenInterface("glint-definitely-not-an-interface")
+        WebRemoteServer.shared.start()
+        try await fulfillment(of: [failed], timeout: 10)
+    }
+
     // MARK: - Helpers
 
     private func request(_ path: String, method: String = "GET") async throws -> (Data, HTTPURLResponse) {

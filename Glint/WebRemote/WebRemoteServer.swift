@@ -130,6 +130,9 @@ final class WebRemoteServer: @unchecked Sendable {
     private var runID: UUID?
     private var token = ""
     private var listenInterface = WebRemoteListenTarget.loopback
+    private var lastBoundAddress: String?
+    private var pathMonitor: NWPathMonitor?
+    private var pathRestartScheduled = false
     private var terminalSizeRevision: UInt64 = 0
     private var assetCache: [String: Data] = [:]
     private var statusHandler: ((WebRemoteStatus) -> Void)?
@@ -254,7 +257,17 @@ final class WebRemoteServer: @unchecked Sendable {
         runID = currentRun
 
         do {
+            let isExplicitWildcard = listenInterface == WebRemoteListenTarget.any
             let bindAddress = WebRemoteListenTarget.bindAddress(for: listenInterface)
+            // A user-chosen NIC that currently has no IPv4 must fail loudly.
+            // bindAddress returns nil both for "explicit All interfaces" and
+            // for "selected NIC vanished"; conflating them would silently widen
+            // exposure to 0.0.0.0 — the opposite of picking a NIC.
+            guard isExplicitWildcard || bindAddress != nil else {
+                failLocked("Selected interface is no longer available.")
+                return
+            }
+            lastBoundAddress = bindAddress
             // Restrict the listener to the chosen local address instead of the
             // default wildcard (0.0.0.0 + ::). loopback → 127.0.0.1, a named
             // interface → its current IPv4. The endpoint's port must be 0
@@ -301,8 +314,48 @@ final class WebRemoteServer: @unchecked Sendable {
             }
             http.start(queue: queue)
             webSocket.start(queue: queue)
+            startPathMonitorLocked(currentRun)
         } catch {
             failLocked(error.localizedDescription)
+        }
+    }
+
+    /// Watch for the bound NIC's IPv4 changing while the server runs (DHCP
+    /// renewal, Wi-Fi switch, sleep/wake). loopback and explicit-wildcard are
+    /// address-stable / address-agnostic and skip the monitor. On a real
+    /// change we coalesce into a single rebind (stop+start re-resolves the
+    /// current IPv4 and refreshes the access URLs); a vanished NIC rebinds and
+    /// then fails loudly via the guard in `startLocked`.
+    private func startPathMonitorLocked(_ runID: UUID) {
+        pathMonitor?.cancel()
+        guard listenInterface != WebRemoteListenTarget.loopback,
+              listenInterface != WebRemoteListenTarget.any,
+              lastBoundAddress != nil
+        else {
+            pathMonitor = nil
+            return
+        }
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] _ in
+            self?.handlePathUpdate(runID: runID)
+        }
+        monitor.start(queue: queue)
+        pathMonitor = monitor
+    }
+
+    private func handlePathUpdate(runID: UUID) {
+        guard runID == self.runID, !pathRestartScheduled else { return }
+        let current = WebRemoteAddressResolver.currentIPv4(forInterface: listenInterface)
+        guard current != lastBoundAddress else { return }
+        // NWPathMonitor can fire a burst of updates on a topology change; wait
+        // for things to settle, then rebind once.
+        pathRestartScheduled = true
+        queue.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, self.pathRestartScheduled else { return }
+            self.pathRestartScheduled = false
+            guard self.runID == runID else { return }
+            webRemoteLogger.info("Web remote interface address changed; rebinding")
+            self.startLocked()
         }
     }
 
@@ -365,6 +418,10 @@ final class WebRemoteServer: @unchecked Sendable {
         clients.removeAll()
         readyListeners.removeAll()
         token = ""
+        pathMonitor?.cancel()
+        pathMonitor = nil
+        pathRestartScheduled = false
+        lastBoundAddress = nil
         updateSubscribedPanesLocked()
         releaseTerminalSizes(controlledPanes)
         if emitStatus {
@@ -384,6 +441,10 @@ final class WebRemoteServer: @unchecked Sendable {
         clients.removeAll()
         readyListeners.removeAll()
         token = ""
+        pathMonitor?.cancel()
+        pathMonitor = nil
+        pathRestartScheduled = false
+        lastBoundAddress = nil
         updateSubscribedPanesLocked()
         releaseTerminalSizes(controlledPanes)
         webRemoteLogger.error("Web remote failed: \(message, privacy: .public)")
