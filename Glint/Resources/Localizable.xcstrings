@@ -5635,6 +5635,83 @@
           }
         }
       }
+    },
+    "Listen on": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "监听网卡"
+          }
+        }
+      }
+    },
+    "Localhost only": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅本机"
+          }
+        }
+      }
+    },
+    "Only this Mac (127.0.0.1) can connect.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅本机（127.0.0.1）可连接。"
+          }
+        }
+      }
+    },
+    "Reachable from any network this Mac joins (least secure).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本机加入的任何网络均可访问（最不安全）。"
+          }
+        }
+      }
+    },
+    "All interfaces (less secure)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部网卡（较不安全）"
+          }
+        }
+      }
+    },
+    "Refresh interfaces": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新网卡列表"
+          }
+        }
+      }
+    },
+    "Selected interface is no longer available. Pick another or use All interfaces.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所选网卡已不可用。请另选一个或使用“全部网卡”。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

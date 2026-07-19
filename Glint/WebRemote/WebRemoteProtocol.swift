@@ -235,8 +235,52 @@ enum WebRemoteHTTPResponse {
     }
 }
 
+/// A non-loopback, up, IPv4 interface this Mac can bind the web remote to.
+/// The BSD name (e.g. "en0") is the stable identity; `address` is its current
+/// IPv4 and may change across DHCP/sleep — re-resolve at bind time.
+struct WebRemoteInterface: Hashable, Identifiable {
+    var id: String { name }
+    let name: String
+    let displayName: String
+    let address: String
+}
+
 enum WebRemoteAddressResolver {
+    /// All non-loopback IPv4 addresses, priority-sorted and de-duplicated by
+    /// address. Used to populate the "All interfaces" access URLs.
     static func localIPv4Addresses() -> [String] {
+        sortedEntries()
+            .map(\.address)
+            .reduce(into: [String]()) { result, address in
+                if !result.contains(address) { result.append(address) }
+            }
+    }
+
+    /// One entry per interface (first IPv4 wins), priority-sorted. Drives the
+    /// "Listen on" picker.
+    static func interfaces() -> [WebRemoteInterface] {
+        var seen = Set<String>()
+        return sortedEntries().compactMap { entry in
+            guard !seen.contains(entry.interface) else { return nil }
+            seen.insert(entry.interface)
+            return WebRemoteInterface(
+                name: entry.interface,
+                displayName: entry.interface,
+                address: entry.address
+            )
+        }
+    }
+
+    /// Current IPv4 of a named interface, if it is up and non-loopback.
+    static func currentIPv4(forInterface name: String) -> String? {
+        interfaces().first { $0.name == name }?.address
+    }
+
+    /// Raw getifaddrs walk: every (interface, IPv4) pair that is up and not
+    /// loopback, sorted by the URL/picker display priority. Single source for
+    /// `localIPv4Addresses()` (dedup by address) and `interfaces()` (dedup by
+    /// interface name).
+    private static func sortedEntries() -> [(priority: Int, interface: String, address: String)] {
         var head: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&head) == 0, let first = head else { return [] }
         defer { freeifaddrs(head) }
@@ -256,29 +300,37 @@ enum WebRemoteAddressResolver {
                 .assumingMemoryBound(to: sockaddr_in.self).pointee.sin_addr
             var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
             guard inet_ntop(AF_INET, &address, &buffer, socklen_t(INET_ADDRSTRLEN)) != nil else { continue }
-            let value = String(cString: buffer)
-            let priority: Int
-            if interface == "en0" {
-                priority = 0
-            } else if interface.hasPrefix("en") {
-                priority = 1
-            } else if interface.hasPrefix("utun") {
-                priority = 2
-            } else {
-                priority = 3
-            }
-            values.append((priority, interface, value))
+            values.append((priority(for: interface), interface, String(cString: buffer)))
         }
 
-        return values
-            .sorted {
-                if $0.priority != $1.priority { return $0.priority < $1.priority }
-                if $0.interface != $1.interface { return $0.interface < $1.interface }
-                return $0.address < $1.address
-            }
-            .map(\.address)
-            .reduce(into: [String]()) { result, address in
-                if !result.contains(address) { result.append(address) }
-            }
+        return values.sorted {
+            if $0.priority != $1.priority { return $0.priority < $1.priority }
+            if $0.interface != $1.interface { return $0.interface < $1.interface }
+            return $0.address < $1.address
+        }
+    }
+
+    private static func priority(for interface: String) -> Int {
+        if interface == "en0" { return 0 }
+        if interface.hasPrefix("en") { return 1 }
+        if interface.hasPrefix("utun") { return 2 }
+        return 3
+    }
+}
+
+/// Persisted choice of which local address the web remote binds to.
+/// Stored as a string key in UserDefaults: `loopback`, `any`, or an interface
+/// name (e.g. `en0`) resolved to its current IPv4 at bind time.
+enum WebRemoteListenTarget {
+    static let loopback = "loopback"
+    static let any = "any"
+
+    /// The IPv4 to bind, or `nil` for a wildcard listener (all interfaces).
+    static func bindAddress(for key: String) -> String? {
+        switch key {
+        case Self.loopback: return "127.0.0.1"
+        case Self.any: return nil
+        default: return WebRemoteAddressResolver.currentIPv4(forInterface: key)
+        }
     }
 }

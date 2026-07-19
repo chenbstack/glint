@@ -1,0 +1,198 @@
+import XCTest
+@testable import Glint
+
+/// End-to-end tests that drive `WebRemoteServer.shared` over real sockets on the
+/// loopback interface. They cover the HTTP asset layer (including the allowlist
+/// and HEAD handling) and the WebSocket authentication flow (including the
+/// exponential backoff that throttles online token guessing).
+///
+/// These tests bind the project's real ports (43871 HTTP / 43872 WS) on
+/// 127.0.0.1, so they will conflict with a concurrently running Glint whose web
+/// remote is enabled. The server is started fresh in `setUp` and stopped in
+/// `tearDown`; test methods run serially within the class.
+final class WebRemoteServerIntegrationTests: XCTestCase {
+    private static let httpOrigin = "http://127.0.0.1:43871"
+    private static let webSocketURL = URL(string: "ws://127.0.0.1:43872/control")!
+
+    private var urlSession: URLSession!
+    private var readyToken: String?
+
+    override func setUp() async throws {
+        try await super.setUp()
+        urlSession = URLSession(configuration: .ephemeral)
+        readyToken = nil
+
+        let ready = expectation(description: "WebRemoteServer reports .ready")
+        WebRemoteServer.shared.setStatusHandler { [weak self] status in
+            guard case let .ready(urls) = status,
+                  let url = urls.first,
+                  let token = WebRemoteAccessURL.token(from: url)
+            else { return }
+            self?.readyToken = token
+            ready.fulfill()
+        }
+        // Bind to loopback only — never touch a real NIC from tests.
+        WebRemoteServer.shared.setListenInterface(WebRemoteListenTarget.loopback)
+        WebRemoteServer.shared.start()
+        try await fulfillment(of: [ready], timeout: 10)
+        XCTAssertNotNil(readyToken, "Server should expose an access token in its ready URL")
+    }
+
+    override func tearDown() async throws {
+        WebRemoteServer.shared.stop()
+        // stop() is asynchronous on the server queue; let NWListener cancel.
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        urlSession.invalidateAndCancel()
+        urlSession = nil
+        try await super.tearDown()
+    }
+
+    // MARK: - HTTP layer
+
+    func testHTTPServesIndexHtml() async throws {
+        let (data, http) = try await request("/")
+        XCTAssertEqual(http.statusCode, 200)
+        XCTAssertNotNil(http.value(forHTTPHeaderField: "Content-Type")?.range(of: "text/html"))
+        XCTAssertFalse(data.isEmpty)
+    }
+
+    func testHTTPServesAppJavaScript() async throws {
+        let (data, http) = try await request("/app.js")
+        XCTAssertEqual(http.statusCode, 200)
+        XCTAssertNotNil(http.value(forHTTPHeaderField: "Content-Type")?.range(of: "text/javascript"))
+        XCTAssertFalse(data.isEmpty)
+    }
+
+    func testHTTPServesVendoredXterm() async throws {
+        let (data, http) = try await request("/xterm.mjs")
+        XCTAssertEqual(http.statusCode, 200)
+        XCTAssertFalse(data.isEmpty)
+    }
+
+    func testHTTPReturns404ForUnknownAsset() async throws {
+        let (data, http) = try await request("/favicon.ico")
+        XCTAssertEqual(http.statusCode, 404)
+        XCTAssertFalse(data.isEmpty, "404 should still carry a short text body")
+    }
+
+    func testHTTPHeadOmitsBodyButKeepsContentLength() async throws {
+        let (data, http) = try await request("/app.js", method: "HEAD")
+        XCTAssertEqual(http.statusCode, 200)
+        XCTAssertTrue(data.isEmpty, "HEAD must not return a body")
+        XCTAssertNotNil(http.value(forHTTPHeaderField: "Content-Length"))
+    }
+
+    // MARK: - WebSocket authentication
+
+    func testWebSocketRejectsWrongTokenThenAcceptsCorrectToken() async throws {
+        guard let token = readyToken else { return XCTFail("No token captured in setUp") }
+        let task = makeWebSocket()
+        defer { task.cancel(with: .goingAway, reason: nil) }
+
+        try await send(task, ["type": "authenticate", "token": "definitely-not-the-token"])
+        let bad = try await receiveJSON(task)
+        XCTAssertEqual(bad["type"] as? String, "error")
+        XCTAssertEqual(bad["code"] as? String, "unauthorized")
+
+        try await send(task, ["type": "authenticate", "token": token])
+        let good = try await receiveJSON(task)
+        // `sendState` no-ops without a WorkspaceStore, so only `authenticated`
+        // arrives — that is enough to prove the token was accepted.
+        XCTAssertEqual(good["type"] as? String, "authenticated")
+    }
+
+    func testAuthenticationBackoffGrowsAcrossConsecutiveFailures() async throws {
+        let task = makeWebSocket()
+        defer { task.cancel(with: .goingAway, reason: nil) }
+
+        func timedFailure() async throws -> TimeInterval {
+            let start = Date()
+            try await send(task, ["type": "authenticate", "token": "wrong"])
+            let reply = try await receiveJSON(task)
+            XCTAssertEqual(reply["code"] as? String, "unauthorized")
+            return Date().timeIntervalSince(start)
+        }
+
+        let first = try await timedFailure()    // ~0.25s
+        let second = try await timedFailure()   // ~0.5s
+
+        // Exponential: the second failure must wait materially longer than the
+        // first, yet stay far below the 16s cap. Loose thresholds absorb CI
+        // scheduler jitter (expected ratio is ~2x).
+        XCTAssertGreaterThan(second, first)
+        XCTAssertGreaterThanOrEqual(second, first * 1.4)
+        XCTAssertLessThan(second, 3.0)
+    }
+
+    // MARK: - Pure-function behaviour
+
+    func testAuthBackoffCurveIsMonotonicAndCapped() {
+        let expected: [TimeInterval] = [0.25, 0.5, 1, 2, 4, 8, 16, 16]
+        for (count, want) in zip(1 ... 8, expected) {
+            XCTAssertEqual(
+                WebRemoteServer.authBackoffSeconds(forFailures: count),
+                want,
+                accuracy: 0.0001,
+                "count \(count)"
+            )
+        }
+        // Out-of-range inputs clamp, never grow unbounded.
+        XCTAssertEqual(WebRemoteServer.authBackoffSeconds(forFailures: 0), 0.25, accuracy: 0.0001)
+        XCTAssertEqual(WebRemoteServer.authBackoffSeconds(forFailures: 1_000), 16, accuracy: 0.0001)
+    }
+
+    func testListenTargetBindAddressResolvesSpecialCases() {
+        XCTAssertEqual(WebRemoteListenTarget.bindAddress(for: WebRemoteListenTarget.loopback), "127.0.0.1")
+        XCTAssertNil(WebRemoteListenTarget.bindAddress(for: WebRemoteListenTarget.any))
+        XCTAssertNil(
+            WebRemoteListenTarget.bindAddress(for: "glint-definitely-not-an-interface"),
+            "An unknown interface name must not resolve to a bind address"
+        )
+    }
+
+    // MARK: - Helpers
+
+    private func request(_ path: String, method: String = "GET") async throws -> (Data, HTTPURLResponse) {
+        var req = URLRequest(url: URL(string: Self.httpOrigin + path)!)
+        req.httpMethod = method
+        req.timeoutInterval = 5
+        let (data, response) = try await urlSession.data(for: req)
+        return (data, try XCTUnwrap(response as? HTTPURLResponse))
+    }
+
+    private func makeWebSocket() -> URLSessionWebSocketTask {
+        let task = urlSession.webSocketTask(with: Self.webSocketURL)
+        task.resume()
+        return task
+    }
+
+    private func send(_ task: URLSessionWebSocketTask, _ object: [String: Any]) async throws {
+        let text = String(data: try JSONSerialization.data(withJSONObject: object), encoding: .utf8) ?? "{}"
+        try await task.send(.string(text))
+    }
+
+    /// Receive one JSON object, bounded by a timeout so a misbehaving server
+    /// fails the test instead of hanging it.
+    private func receiveJSON(_ task: URLSessionWebSocketTask) async throws -> [String: Any] {
+        try await withThrowingTaskGroup(of: [String: Any].self) { group in
+            group.addTask {
+                let message = try await task.receive()
+                switch message {
+                case let .string(text):
+                    return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+                case let .data(data):
+                    return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+                @unknown default:
+                    throw URLError(.badServerResponse)
+                }
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: 6_000_000_000)
+                throw URLError(.timedOut)
+            }
+            guard let result = try await group.next() else { throw URLError(.timedOut) }
+            group.cancelAll()
+            return result
+        }
+    }
+}

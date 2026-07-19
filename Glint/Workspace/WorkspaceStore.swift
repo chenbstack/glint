@@ -1131,6 +1131,31 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
+    /// Which local address the web remote binds: `loopback`, `any`, or an
+    /// interface name (e.g. `en0`). Defaults to loopback — the safest choice;
+    /// users who want LAN access pick a NIC or "All interfaces" explicitly.
+    @Published var webRemoteListenInterface: String = {
+        let key = "glint.webRemoteListenInterface"
+        let stored = UserDefaults.standard.string(forKey: key)
+        return stored?.isEmpty == false ? stored! : WebRemoteListenTarget.loopback
+    }() {
+        didSet {
+            guard oldValue != webRemoteListenInterface else { return }
+            UserDefaults.standard.set(webRemoteListenInterface, forKey: "glint.webRemoteListenInterface")
+            WebRemoteServer.shared.setListenInterface(webRemoteListenInterface)
+            if webRemoteEnabled { WebRemoteServer.shared.start() }
+        }
+    }
+
+    /// Bind targets currently available on this Mac, for the "Listen on" menu.
+    /// Snapshotted at init; call `refreshWebRemoteInterfaces()` to rescan after
+    /// networks change (e.g. joining a different Wi-Fi).
+    @Published private(set) var webRemoteInterfaceOptions: [WebRemoteInterface] = WebRemoteAddressResolver.interfaces()
+
+    func refreshWebRemoteInterfaces() {
+        webRemoteInterfaceOptions = WebRemoteAddressResolver.interfaces()
+    }
+
     @Published private(set) var webRemoteStatus: WebRemoteStatus = .stopped
     @Published private var webRemoteControlledPanes = Set<WorkspacePaneKey>()
 

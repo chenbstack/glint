@@ -100,6 +100,17 @@ final class WebRemoteServer: @unchecked Sendable {
 
     private static let maxIngressOutputBytes = 256 * 1024
     private static let maxSelectionOutputBytes = 512 * 1024
+    private static let authFailureCountCap = 7
+
+    /// Delay before answering a failed `authenticate`, growing exponentially
+    /// with the per-connection failure count to throttle online token guessing.
+    /// 0.25s → 0.5s → 1s → … → 16s (capped at the 7th failure). Honest clients
+    /// almost never fail auth, so this only bites brute-forcers.
+    static func authBackoffSeconds(forFailures count: Int) -> TimeInterval {
+        let safe = min(max(count, 1), authFailureCountCap)
+        let multiplier = pow(2.0, Double(safe - 1))
+        return min(0.25 * multiplier, 16)
+    }
 
     private enum ListenerKind: Hashable {
         case http
@@ -118,6 +129,7 @@ final class WebRemoteServer: @unchecked Sendable {
     private var readyListeners = Set<ListenerKind>()
     private var runID: UUID?
     private var token = ""
+    private var listenInterface = WebRemoteListenTarget.loopback
     private var terminalSizeRevision: UInt64 = 0
     private var assetCache: [String: Data] = [:]
     private var statusHandler: ((WebRemoteStatus) -> Void)?
@@ -145,6 +157,15 @@ final class WebRemoteServer: @unchecked Sendable {
     func resetAccessKey() {
         queue.async { [weak self] in
             self?.resetAccessKeyLocked()
+        }
+    }
+
+    /// Stage a new bind target. Takes effect on the next `start()`; the store
+    /// calls `start()` right after when the server is enabled, which
+    /// stop→start rebinds.
+    func setListenInterface(_ key: String) {
+        queue.async { [weak self] in
+            self?.listenInterface = key
         }
     }
 
@@ -233,6 +254,16 @@ final class WebRemoteServer: @unchecked Sendable {
         runID = currentRun
 
         do {
+            let bindAddress = WebRemoteListenTarget.bindAddress(for: listenInterface)
+            // Restrict the listener to the chosen local address instead of the
+            // default wildcard (0.0.0.0 + ::). loopback → 127.0.0.1, a named
+            // interface → its current IPv4. The endpoint's port must be 0
+            // ("any"); a concrete port collides with the listener's `on:` and
+            // fails with EINVAL (NWError 22).
+            let localEndpoint: NWEndpoint? = bindAddress.flatMap { address in
+                IPv4Address(address).map { .hostPort(host: .ipv4($0), port: 0) }
+            }
+
             let httpParameters = NWParameters.tcp
             httpParameters.allowLocalEndpointReuse = true
             guard let httpPort = NWEndpoint.Port(rawValue: Self.httpPort),
@@ -241,12 +272,18 @@ final class WebRemoteServer: @unchecked Sendable {
                 failLocked("Invalid web remote port.")
                 return
             }
+            httpParameters.requiredLocalEndpoint = localEndpoint
 
             let http = try NWListener(using: httpParameters, on: httpPort)
-            http.service = NWListener.Service(name: "Glint Remote", type: "_http._tcp")
+            // Advertising via mDNS only makes sense when the listener is
+            // reachable from the LAN; skip it for loopback.
+            if listenInterface != WebRemoteListenTarget.loopback {
+                http.service = NWListener.Service(name: "Glint Remote", type: "_http._tcp")
+            }
 
             let webSocketParameters = NWParameters.tcp
             webSocketParameters.allowLocalEndpointReuse = true
+            webSocketParameters.requiredLocalEndpoint = localEndpoint
             let options = NWProtocolWebSocket.Options()
             options.autoReplyPing = true
             webSocketParameters.defaultProtocolStack.applicationProtocols.insert(options, at: 0)
@@ -300,8 +337,20 @@ final class WebRemoteServer: @unchecked Sendable {
     }
 
     private func accessURLsLocked() -> [String] {
-        let addresses = WebRemoteAddressResolver.localIPv4Addresses()
-        let hosts = addresses.isEmpty ? ["127.0.0.1"] : addresses
+        let hosts: [String]
+        switch listenInterface {
+        case WebRemoteListenTarget.loopback:
+            hosts = ["127.0.0.1"]
+        case WebRemoteListenTarget.any:
+            let addresses = WebRemoteAddressResolver.localIPv4Addresses()
+            hosts = addresses.isEmpty ? ["127.0.0.1"] : addresses
+        default:
+            // Named interface: show its current IPv4. If the interface has gone
+            // away, fall back to loopback for display — the bind itself will
+            // fail and surface `.failed`.
+            let address = WebRemoteAddressResolver.currentIPv4(forInterface: listenInterface)
+            hosts = [address ?? "127.0.0.1"]
+        }
         return hosts.map { "http://\($0):\(Self.httpPort)/#token=\(token)" }
     }
 
@@ -480,13 +529,23 @@ final class WebRemoteServer: @unchecked Sendable {
         }
 
         if type == "authenticate" {
-            guard WebRemoteAccessToken.matches(object["token"] as? String, expected: token) else {
-                sendError("unauthorized", to: clientID)
+            // A previous failure is still inside its backoff window; ignore the
+            // new attempt — the scheduled `completeAuthFailure` will answer it.
+            // This caps a flooding attacker at one pending timer per client.
+            guard !client.authBackoffPending else { return }
+            if WebRemoteAccessToken.matches(object["token"] as? String, expected: token) {
+                client.authFailureCount = 0
+                client.authenticated = true
+                sendJSON(["type": "authenticated"], to: clientID)
+                sendState(to: clientID)
                 return
             }
-            client.authenticated = true
-            sendJSON(["type": "authenticated"], to: clientID)
-            sendState(to: clientID)
+            client.authFailureCount = min(client.authFailureCount + 1, Self.authFailureCountCap)
+            client.authBackoffPending = true
+            let delay = Self.authBackoffSeconds(forFailures: client.authFailureCount)
+            queue.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.completeAuthFailure(for: clientID)
+            }
             return
         }
 
@@ -714,6 +773,12 @@ final class WebRemoteServer: @unchecked Sendable {
         ], to: clientID)
     }
 
+    private func completeAuthFailure(for clientID: UUID) {
+        guard let client = clients[clientID] else { return }
+        client.authBackoffPending = false
+        sendError("unauthorized", to: clientID)
+    }
+
     private func updateSubscribedPanesLocked() {
         let panes = Set(clients.values.flatMap { client -> [String] in
             guard client.authenticated else { return [] }
@@ -773,6 +838,8 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
     var pendingSelectionOutput = WebRemoteOutputBuffer(byteLimit: 0)
     var terminalSize: WebRemoteTerminalSize?
     var terminalSizeRevision: UInt64 = 0
+    var authFailureCount = 0
+    var authBackoffPending = false
 
     private static let maxQueuedOutputBytes = 512 * 1024
     private let connection: NWConnection

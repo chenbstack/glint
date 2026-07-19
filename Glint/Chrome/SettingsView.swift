@@ -1119,6 +1119,27 @@ private struct TerminalPane: View {
                 Toggle("", isOn: $store.webRemoteEnabled)
                     .toggleStyle(.switch).labelsHidden()
             }
+            if store.webRemoteEnabled {
+                SettingsDivider()
+                SettingsRow("Listen on", subtitle: webRemoteListenSubtitle) {
+                    HStack(spacing: 6) {
+                        Picker("Listen on", selection: $store.webRemoteListenInterface) {
+                            Text("Localhost only").tag(WebRemoteListenTarget.loopback)
+                            ForEach(store.webRemoteInterfaceOptions) { iface in
+                                Text(verbatim: "\(iface.name) (\(iface.address))").tag(iface.name)
+                            }
+                            Text("All interfaces (less secure)").tag(WebRemoteListenTarget.any)
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        Button(action: { store.refreshWebRemoteInterfaces() }) {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Refresh interfaces")
+                    }
+                }
+            }
             if !store.webRemoteAccessURLs.isEmpty {
                 SettingsDivider()
                 SettingsRow("Access URL", subtitle: displayURL(store.webRemoteAccessURLs[0])) {
@@ -1181,6 +1202,20 @@ private struct TerminalPane: View {
                 format: String(localized: "Could not start: %@"),
                 message
             )
+        }
+    }
+
+    private var webRemoteListenSubtitle: String {
+        switch store.webRemoteListenInterface {
+        case WebRemoteListenTarget.loopback:
+            return String(localized: "Only this Mac (127.0.0.1) can connect.")
+        case WebRemoteListenTarget.any:
+            return String(localized: "Reachable from any network this Mac joins (least secure).")
+        default:
+            if let iface = store.webRemoteInterfaceOptions.first(where: { $0.name == store.webRemoteListenInterface }) {
+                return iface.address
+            }
+            return String(localized: "Selected interface is no longer available. Pick another or use All interfaces.")
         }
     }
 

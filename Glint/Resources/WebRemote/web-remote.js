@@ -195,6 +195,8 @@ let selectedPane = sessionStorage.getItem("glint-selected-pane") || "";
 let lastState;
 let token = loadToken();
 let paneRetryTimer;
+let paneRetryCount = 0;
+const paneRetryLimit = 40;
 let controllingPane = "";
 let resizeTimer;
 let lastSentTerminalSize = "";
@@ -278,6 +280,7 @@ function handleMessage(raw) {
     case "snapshot":
       if (message.pane !== selectedPane) return;
       clearTimeout(paneRetryTimer);
+      paneRetryCount = 0;
       terminal.reset();
       terminal.write(decodeBase64(message.data), () => {
         controllingPane = message.pane;
@@ -385,6 +388,12 @@ function handleError(code) {
     return;
   }
   if (code === "pane-not-ready" && selectedPane) {
+    paneRetryCount += 1;
+    if (paneRetryCount > paneRetryLimit) {
+      clearTimeout(paneRetryTimer);
+      setStatus("error", t("terminal_not_ready"));
+      return;
+    }
     clearTimeout(paneRetryTimer);
     paneRetryTimer = setTimeout(sendPaneSelection, 250);
     return;
@@ -494,6 +503,8 @@ function renderState(state) {
 function selectPane(pane) {
   selectedPane = pane;
   controllingPane = "";
+  clearTimeout(paneRetryTimer);
+  paneRetryCount = 0;
   sessionStorage.setItem("glint-selected-pane", pane);
   if (lastState) {
     const workspace = lastState.workspaces.find(item => item.panes?.some(value => value.id === pane));
