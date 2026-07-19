@@ -1114,7 +1114,7 @@ private struct TerminalPane: View {
         }
 
         SettingsCard("Web remote control",
-                     footer: "Serves Glint's bundled browser terminal on this Mac for trusted LAN or VPN use. The copied link or access key grants terminal input; traffic is not TLS-encrypted. Off by default, with no cloud relay or mobile app required.") {
+                     footer: "Serves Glint's bundled browser terminal on this Mac for trusted LAN or VPN use. The copied link or access key grants terminal input; traffic is not TLS-encrypted. Off by default.") {
             SettingsRow("Allow browser control", subtitle: webRemoteStatusText) {
                 Toggle("", isOn: $store.webRemoteEnabled)
                     .toggleStyle(.switch).labelsHidden()

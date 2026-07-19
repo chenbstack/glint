@@ -564,13 +564,13 @@
         }
       }
     },
-    "Serves Glint's bundled browser terminal on this Mac for trusted LAN or VPN use. The copied link or access key grants terminal input; traffic is not TLS-encrypted. Off by default, with no cloud relay or mobile app required.": {
+    "Serves Glint's bundled browser terminal on this Mac for trusted LAN or VPN use. The copied link or access key grants terminal input; traffic is not TLS-encrypted. Off by default.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在这台 Mac 上提供 Glint 内置的浏览器终端，供可信的局域网或 VPN 使用。复制的链接或访问密钥可直接输入终端；流量未使用 TLS 加密。默认关闭，无需云中继或移动 App。"
+            "value": "在这台 Mac 上提供 Glint 内置的浏览器终端，供可信的局域网或 VPN 使用。复制的链接或访问密钥可直接输入终端；流量未使用 TLS 加密。默认关闭。"
           }
         }
       }
