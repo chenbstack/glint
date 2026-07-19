@@ -30,6 +30,7 @@ final class WebRemoteServer: @unchecked Sendable {
     private var readyListeners = Set<ListenerKind>()
     private var runID: UUID?
     private var token = ""
+    private var terminalSizeRevision: UInt64 = 0
     private var assetCache: [String: Data] = [:]
     private var statusHandler: ((WebRemoteStatus) -> Void)?
 
@@ -56,6 +57,15 @@ final class WebRemoteServer: @unchecked Sendable {
     func resetAccessKey() {
         queue.async { [weak self] in
             self?.resetAccessKeyLocked()
+        }
+    }
+
+    func refreshTheme() {
+        queue.async { [weak self] in
+            guard let self else { return }
+            clients.values
+                .filter(\.authenticated)
+                .forEach { self.sendState(to: $0.id) }
         }
     }
 
@@ -316,8 +326,9 @@ final class WebRemoteServer: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self else { return }
             guard let client = clients.removeValue(forKey: id) else { return }
+            let affectedPanes = Set([client.subscribedPane, client.pendingPane].compactMap { $0 })
             updateSubscribedPanesLocked()
-            releaseTerminalSizes(Set([client.subscribedPane, client.pendingPane].compactMap { $0 }))
+            affectedPanes.forEach { self.reconcileTerminalSizeLocked(for: $0) }
         }
     }
 
@@ -406,6 +417,7 @@ final class WebRemoteServer: @unchecked Sendable {
             var message: [String: Any] = [
                 "type": "state",
                 "workspaces": store.webRemoteWorkspacePayload(),
+                "theme": store.webRemoteThemePayload(),
             ]
             if let selected = store.selectedWorkspaceID {
                 message["selectedWorkspace"] = selected.uuidString
@@ -425,24 +437,18 @@ final class WebRemoteServer: @unchecked Sendable {
             sendError("selection-in-progress", to: clientID)
             return
         }
-        let paneIsInUse = clients.contains { id, candidate in
-            id != clientID && (candidate.subscribedPane == pane || candidate.pendingPane == pane)
-        }
-        guard !paneIsInUse else {
-            sendError("pane-in-use", to: clientID)
-            return
-        }
 
         let previousPane = client.subscribedPane
         client.subscribedPane = nil
         client.pendingPane = pane
+        client.terminalSize = nil
         updateSubscribedPanesLocked()
+        if let previousPane {
+            reconcileTerminalSizeLocked(for: previousPane)
+        }
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let store = WorkspaceStore.current else { return }
-            if let previousPane {
-                store.webRemoteReleaseTerminalSize(pane: previousPane)
-            }
             if let error = store.controlFocus(pane: pane, activateApp: false) {
                 self.queue.async { [weak self] in
                     self?.finishSelectionFailure(error, pane: pane, clientID: clientID)
@@ -461,6 +467,7 @@ final class WebRemoteServer: @unchecked Sendable {
                 case let .success(snapshot):
                     client.pendingPane = nil
                     client.subscribedPane = pane
+                    recordTerminalSizeLocked(size, for: client)
                     updateSubscribedPanesLocked()
                     sendJSON([
                         "type": "snapshot",
@@ -484,7 +491,7 @@ final class WebRemoteServer: @unchecked Sendable {
         guard let client = clients[clientID], client.pendingPane == pane else { return }
         client.pendingPane = nil
         updateSubscribedPanesLocked()
-        releaseTerminalSizes([pane])
+        reconcileTerminalSizeLocked(for: pane)
         sendError(error, to: clientID)
     }
 
@@ -493,6 +500,8 @@ final class WebRemoteServer: @unchecked Sendable {
         size: WebRemoteTerminalSize,
         for clientID: UUID
     ) {
+        guard let client = clients[clientID] else { return }
+        recordTerminalSizeLocked(size, for: client)
         DispatchQueue.main.async { [weak self] in
             guard let self, let store = WorkspaceStore.current else { return }
             if let error = store.webRemoteSetTerminalSize(pane: pane, size: size) {
@@ -573,6 +582,30 @@ final class WebRemoteServer: @unchecked Sendable {
         })
     }
 
+    private func recordTerminalSizeLocked(
+        _ size: WebRemoteTerminalSize,
+        for client: WebRemoteClientConnection
+    ) {
+        terminalSizeRevision &+= 1
+        client.terminalSize = size
+        client.terminalSizeRevision = terminalSizeRevision
+    }
+
+    private func reconcileTerminalSizeLocked(for pane: String) {
+        let size = clients.values
+            .filter { $0.authenticated && $0.subscribedPane == pane && $0.terminalSize != nil }
+            .max { $0.terminalSizeRevision < $1.terminalSizeRevision }?
+            .terminalSize
+        DispatchQueue.main.async {
+            guard let store = WorkspaceStore.current else { return }
+            if let size {
+                _ = store.webRemoteSetTerminalSize(pane: pane, size: size)
+            } else {
+                store.webRemoteReleaseTerminalSize(pane: pane)
+            }
+        }
+    }
+
     private func releaseTerminalSizes(_ panes: Set<String>) {
         guard !panes.isEmpty else { return }
         DispatchQueue.main.async {
@@ -587,6 +620,8 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
     var authenticated = false
     var subscribedPane: String?
     var pendingPane: String?
+    var terminalSize: WebRemoteTerminalSize?
+    var terminalSizeRevision: UInt64 = 0
 
     private let connection: NWConnection
     private weak var server: WebRemoteServer?

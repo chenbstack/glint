@@ -938,6 +938,7 @@ final class WorkspaceStore: ObservableObject {
         didSet {
             UserDefaults.standard.set(accentName, forKey: "glint.accentName")
             GhosttyManager.shared.reloadConfig()
+            WebRemoteServer.shared.refreshTheme()
         }
     }
 
@@ -952,6 +953,7 @@ final class WorkspaceStore: ObservableObject {
             GhosttyManager.shared.reloadConfig()
             GhosttyManager.shared.syncWindowAppearance()   // 浅/暗主题 → 玻璃材质跟随
             themeRevision &+= 1
+            WebRemoteServer.shared.refreshTheme()
         }
     }
 
@@ -968,6 +970,7 @@ final class WorkspaceStore: ObservableObject {
         GhosttyManager.shared.reloadConfig()
         GhosttyManager.shared.syncWindowAppearance()
         themeRevision &+= 1
+        WebRemoteServer.shared.refreshTheme()
     }
 
     // MARK: 透明度与模糊
@@ -2784,6 +2787,30 @@ final class WorkspaceStore: ObservableObject {
                 "panes": panes,
             ]
         }
+    }
+
+    func webRemoteThemePayload() -> [String: Any] {
+        let theme = Theme.current
+        let accentColor = accent
+        return [
+            "id": theme.id,
+            "dark": theme.isDark,
+            "background": "#\(theme.background.rgbHex)",
+            "foreground": "#\(theme.foreground.rgbHex)",
+            "cursor": "#\(accentColor.rgbHex)",
+            "selectionBackground": "#\(accentColor.rgbHex)",
+            "selectionForeground": "#\(theme.foreground.rgbHex)",
+            "palette": theme.palette.map { "#\($0.rgbHex)" },
+            "chrome": [
+                "window": "#\(theme.bgWindow.rgbHex)",
+                "pane": "#\(theme.bgPane.rgbHex)",
+                "sidebar": "#\(theme.bgSidebar.rgbHex)",
+                "text1": "#\(theme.text1.rgbHex)",
+                "text3": "#\(theme.text3.rgbHex)",
+                "text4": "#\(theme.text4.rgbHex)",
+                "accent": "#\(accentColor.rgbHex)",
+            ],
+        ]
     }
 
     func webRemoteTerminalSnapshot(pane: String) -> WebRemoteTerminalSnapshotResult {

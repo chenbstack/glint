@@ -27,7 +27,6 @@ const translations = {
     open_sidebar: "打开项目与终端",
     opening_project: "正在打开项目…",
     operation_failed: "操作失败：{code}",
-    pane_in_use: "这个终端正在被另一个网页控制",
     project_opened: "项目已打开。",
     projects_and_terminals: "项目与终端",
     quick_keys: "快捷键",
@@ -74,7 +73,6 @@ const translations = {
     open_sidebar: "Open projects and terminals",
     opening_project: "Opening project…",
     operation_failed: "Operation failed: {code}",
-    pane_in_use: "This terminal is controlled by another browser",
     project_opened: "Project opened.",
     projects_and_terminals: "Projects and terminals",
     quick_keys: "Quick keys",
@@ -145,6 +143,31 @@ const elements = {
 };
 localizeDocument();
 
+const defaultTerminalTheme = {
+  background: "#0b0c11",
+  foreground: "#e8e9ee",
+  cursor: "#ff9a4d",
+  cursorAccent: "#0b0c11",
+  selectionBackground: "#5e5ce6",
+  selectionForeground: "#e8e9ee",
+  black: "#171923",
+  red: "#ff6b73",
+  green: "#53d68a",
+  yellow: "#f3c969",
+  blue: "#76a9ff",
+  magenta: "#c792ea",
+  cyan: "#63d6d1",
+  white: "#e8e9ee",
+  brightBlack: "#626879",
+  brightRed: "#ff8b91",
+  brightGreen: "#79e5a4",
+  brightYellow: "#ffe08a",
+  brightBlue: "#9fc2ff",
+  brightMagenta: "#d8a8f2",
+  brightCyan: "#8be8e3",
+  brightWhite: "#ffffff",
+};
+
 const terminal = new Terminal({
   allowProposedApi: false,
   convertEol: false,
@@ -154,29 +177,7 @@ const terminal = new Terminal({
   fontSize: matchMedia("(max-width: 480px)").matches ? 12 : 13,
   lineHeight: 1.16,
   scrollback: 5000,
-  theme: {
-    background: "#0b0c11",
-    foreground: "#e8e9ee",
-    cursor: "#ff9a4d",
-    cursorAccent: "#0b0c11",
-    selectionBackground: "#5e5ce655",
-    black: "#171923",
-    red: "#ff6b73",
-    green: "#53d68a",
-    yellow: "#f3c969",
-    blue: "#76a9ff",
-    magenta: "#c792ea",
-    cyan: "#63d6d1",
-    white: "#e8e9ee",
-    brightBlack: "#626879",
-    brightRed: "#ff8b91",
-    brightGreen: "#79e5a4",
-    brightYellow: "#ffe08a",
-    brightBlue: "#9fc2ff",
-    brightMagenta: "#d8a8f2",
-    brightCyan: "#8be8e3",
-    brightWhite: "#ffffff",
-  },
+  theme: defaultTerminalTheme,
 });
 const fitAddon = new FitAddon();
 terminal.loadAddon(fitAddon);
@@ -197,6 +198,7 @@ let paneRetryTimer;
 let controllingPane = "";
 let resizeTimer;
 let lastSentTerminalSize = "";
+let appliedThemeSignature = "";
 const mobileSidebarLayout = matchMedia(
   "(max-width: 760px), (max-width: 900px) and (max-height: 520px) and (orientation: landscape)"
 );
@@ -269,6 +271,7 @@ function handleMessage(raw) {
       break;
     case "state":
       lastState = message;
+      applyTheme(message.theme);
       renderState(message);
       chooseInitialPane(message);
       break;
@@ -306,6 +309,72 @@ function handleMessage(raw) {
   }
 }
 
+function applyTheme(theme) {
+  if (!theme || !Array.isArray(theme.palette) || theme.palette.length !== 16) return;
+  const colors = [
+    theme.background,
+    theme.foreground,
+    theme.cursor,
+    theme.selectionBackground,
+    theme.selectionForeground,
+    ...theme.palette,
+  ];
+  if (!colors.every(color => /^#[0-9a-f]{6}$/i.test(color))) return;
+
+  const chrome = theme.chrome || {};
+  const signature = [
+    theme.id,
+    theme.dark,
+    ...colors,
+    chrome.window,
+    chrome.pane,
+    chrome.sidebar,
+    chrome.text1,
+    chrome.text3,
+    chrome.text4,
+    chrome.accent,
+  ].join("|");
+  if (signature === appliedThemeSignature) return;
+  appliedThemeSignature = signature;
+
+  const root = document.documentElement;
+  root.dataset.theme = theme.dark ? "dark" : "light";
+  root.style.setProperty("--bg", chrome.window || theme.background);
+  root.style.setProperty("--panel", chrome.sidebar || theme.background);
+  root.style.setProperty("--panel-2", chrome.pane || theme.background);
+  root.style.setProperty("--terminal-bg", theme.background);
+  root.style.setProperty("--text", chrome.text1 || theme.foreground);
+  root.style.setProperty("--muted", chrome.text3 || theme.foreground);
+  root.style.setProperty("--faint", chrome.text4 || theme.foreground);
+  root.style.setProperty("--accent", chrome.accent || theme.cursor);
+  root.style.setProperty("--accent-2", theme.palette[1]);
+
+  terminal.options.theme = {
+    background: theme.background,
+    foreground: theme.foreground,
+    cursor: theme.cursor,
+    cursorAccent: theme.background,
+    selectionBackground: theme.selectionBackground,
+    selectionForeground: theme.selectionForeground,
+    black: theme.palette[0],
+    red: theme.palette[1],
+    green: theme.palette[2],
+    yellow: theme.palette[3],
+    blue: theme.palette[4],
+    magenta: theme.palette[5],
+    cyan: theme.palette[6],
+    white: theme.palette[7],
+    brightBlack: theme.palette[8],
+    brightRed: theme.palette[9],
+    brightGreen: theme.palette[10],
+    brightYellow: theme.palette[11],
+    brightBlue: theme.palette[12],
+    brightMagenta: theme.palette[13],
+    brightCyan: theme.palette[14],
+    brightWhite: theme.palette[15],
+  };
+}
+
 function handleError(code) {
   if (code === "unauthorized") {
     authenticated = false;
@@ -334,7 +403,6 @@ function errorLabel(code) {
     "unknown-workspace": t("unknown_workspace"),
     "workspace-archived": t("workspace_archived"),
     "terminal-not-ready": t("terminal_not_ready"),
-    "pane-in-use": t("pane_in_use"),
     "selection-in-progress": t("selection_in_progress"),
     "unknown-command": t("unknown_command"),
   };
