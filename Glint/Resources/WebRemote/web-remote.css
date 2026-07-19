@@ -38,12 +38,19 @@
 
 * { box-sizing: border-box; }
 
-html, body {
+html {
   width: 100%;
   height: 100%;
   height: 100dvh;
+  overflow: hidden;
+}
+
+body {
+  width: 100%;
+  height: var(--visual-viewport-height, 100dvh);
   margin: 0;
   overflow: hidden;
+  transform: translateY(var(--visual-viewport-offset-top, 0px));
   background:
     radial-gradient(circle at 12% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 31rem),
     var(--bg);
@@ -54,7 +61,6 @@ button { cursor: pointer; }
 
 .app-shell {
   height: 100%;
-  height: 100dvh;
   min-height: 0;
   display: grid;
   grid-template-rows: 64px minmax(0, 1fr);
@@ -312,7 +318,7 @@ input:focus {
 
 dialog {
   width: min(410px, calc(100vw - 32px));
-  max-height: calc(100dvh - 24px);
+  max-height: calc(var(--visual-viewport-height, 100dvh) - 24px);
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--text) 11%, transparent);
   border-radius: 15px;

@@ -696,6 +696,14 @@ function scheduleTerminalResize() {
   }, 120);
 }
 
+function syncVisualViewport() {
+  const viewport = window.visualViewport;
+  const height = Math.max(1, Math.round(viewport?.height || window.innerHeight));
+  const offsetTop = Math.max(0, Math.round(viewport?.offsetTop || 0));
+  document.documentElement.style.setProperty("--visual-viewport-height", `${height}px`);
+  document.documentElement.style.setProperty("--visual-viewport-offset-top", `${offsetTop}px`);
+}
+
 function decodeBase64(value) {
   const binary = atob(value);
   return Uint8Array.from(binary, character => character.charCodeAt(0));
@@ -710,8 +718,11 @@ function encodeBase64(bytes) {
   return btoa(binary);
 }
 
-window.addEventListener("resize", fitTerminal);
+window.addEventListener("resize", syncVisualViewport);
+window.visualViewport?.addEventListener("resize", syncVisualViewport);
+window.visualViewport?.addEventListener("scroll", syncVisualViewport);
 new ResizeObserver(fitTerminal).observe(elements.terminal);
+syncVisualViewport();
 setInterval(() => {
   if (authenticated) send({ type: "list" });
 }, 3000);
