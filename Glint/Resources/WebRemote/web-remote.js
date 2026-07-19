@@ -1,5 +1,53 @@
 import { Terminal } from "/xterm.mjs";
 import { FitAddon } from "/addon-fit.mjs";
+import {
+  hmacSha256,
+  hkdfExtractExpand,
+  hkdfExpand,
+  aesGcmSeal,
+  aesGcmOpen,
+} from "/crypto.mjs";
+
+// Crypto labels — must match the Swift server's WebRemoteCrypto byte-for-byte.
+const PROOF_LABEL = "glint-webremote/v1/proof";
+const SESSION_INFO = "glint-webremote/v1/session";
+const C2S_INFO = "c2s";
+const S2C_INFO = "s2c";
+
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i += 1) {
+    bytes[i] = Number.parseInt(hex.substr(i * 2, 2), 16);
+  }
+  return bytes;
+}
+
+function concatBytes(...parts) {
+  let length = 0;
+  for (const part of parts) length += part.length;
+  const out = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
+}
+
+// 12-byte GCM nonce: 4 zero bytes + 8-byte big-endian counter (matches Swift).
+function nonceFor(counter) {
+  const nonce = new Uint8Array(12);
+  new DataView(nonce.buffer).setBigUint64(4, BigInt(counter), false);
+  return nonce;
+}
+
+function counterFromNonce(nonce) {
+  return Number(new DataView(nonce.buffer, nonce.byteOffset, nonce.byteLength)
+    .getBigUint64(4, false));
+}
 
 const language = (navigator.languages?.[0] || navigator.language || "en")
   .toLowerCase()
@@ -204,6 +252,17 @@ let authenticated = false;
 let selectedPane = sessionStorage.getItem("glint-selected-pane") || "";
 let lastState;
 let token = loadToken();
+// Challenge-response + encryption session. `pendingChallenge` is set when the
+// server sends auth-challenge; once both `token` and `pendingChallenge` are
+// present, `tryAuthenticate()` derives the keys and sends the proof. The token
+// never leaves the browser — only its HMAC over the challenge does. `encrypted`
+// flips true on the first binary frame the server sends back.
+let pendingChallenge = null;
+let c2sKey = null;
+let s2cKey = null;
+let sendCounter = 0;
+let receiveCounter = 0;
+let encrypted = false;
 let paneRetryTimer;
 let paneRetryCount = 0;
 const paneRetryLimit = 40;
@@ -240,17 +299,24 @@ function connect() {
   }
   authenticated = false;
   controllingPane = "";
+  resetSession();
   setStatus("connecting", t("connecting"));
   socket = new WebSocket(websocketURL());
+  socket.binaryType = "arraybuffer";
   socket.addEventListener("open", () => {
     reconnectDelay = 500;
-    if (token) {
-      send({ type: "authenticate", token });
+    // The server issues an auth-challenge as soon as the socket opens; we wait
+    // for it rather than sending the token ourselves.
+    if (!token) showAuth();
+  });
+  socket.addEventListener("message", event => {
+    const data = event.data;
+    if (typeof data === "string") {
+      handleMessage(data);        // plaintext: auth-challenge / handshake error
     } else {
-      showAuth();
+      onEncryptedFrame(data);     // binary: encrypted frame
     }
   });
-  socket.addEventListener("message", event => handleMessage(event.data));
   socket.addEventListener("close", () => {
     authenticated = false;
     controllingPane = "";
@@ -261,9 +327,91 @@ function connect() {
   socket.addEventListener("error", () => setStatus("error", t("unable_connect")));
 }
 
+function resetSession() {
+  pendingChallenge = null;
+  c2sKey = null;
+  s2cKey = null;
+  sendCounter = 0;
+  receiveCounter = 0;
+  encrypted = false;
+}
+
+/// Derive the session keys from the access key + server challenge, returning the
+/// base64 HMAC proof to send. Sets c2s/s2c keys and zeroes the counters.
+function deriveSession(accessKey, challengeB64) {
+  const tokenKey = hexToBytes(accessKey);
+  const challenge = decodeBase64(challengeB64);
+  const proof = hmacSha256(
+    tokenKey,
+    concatBytes(textEncoder.encode(PROOF_LABEL), challenge)
+  );
+  const sessionKey = hkdfExtractExpand(
+    tokenKey,
+    challenge,
+    textEncoder.encode(SESSION_INFO),
+    32
+  );
+  c2sKey = hkdfExpand(sessionKey, textEncoder.encode(C2S_INFO), 32);
+  s2cKey = hkdfExpand(sessionKey, textEncoder.encode(S2C_INFO), 32);
+  sendCounter = 0;
+  receiveCounter = 0;
+  encrypted = false;
+  return encodeBase64(proof);
+}
+
+/// Send the proof once both the access key and the challenge are known.
+function tryAuthenticate() {
+  if (!token || !pendingChallenge) return;
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  const proof = deriveSession(token, pendingChallenge);
+  // The proof is the last plaintext frame; encryption turns on only when the
+  // server's first binary reply arrives.
+  send({ type: "authenticate", proof });
+}
+
+function encryptFrame(json) {
+  const nonce = nonceFor(sendCounter);
+  const body = aesGcmSeal(c2sKey, nonce, textEncoder.encode(json));
+  const frame = new Uint8Array(nonce.length + body.length);
+  frame.set(nonce, 0);
+  frame.set(body, nonce.length);
+  sendCounter += 1;
+  return frame;
+}
+
+function decryptFrame(frame) {
+  if (!s2cKey || frame.length <= 12 + 16) return null;
+  const nonce = frame.subarray(0, 12);
+  const body = frame.subarray(12);
+  const counter = counterFromNonce(nonce);
+  if (counter < receiveCounter) return null;   // replay guard
+  try {
+    const plain = aesGcmOpen(s2cKey, nonce, body);
+    receiveCounter = counter + 1;
+    return textDecoder.decode(plain);
+  } catch {
+    return null;
+  }
+}
+
+function onEncryptedFrame(buffer) {
+  const json = decryptFrame(new Uint8Array(buffer));
+  if (json === null) {
+    // Tamper / replay / key mismatch — drop the socket and let it reconnect.
+    socket?.close();
+    return;
+  }
+  encrypted = true;
+  handleMessage(json);
+}
+
 function send(message) {
-  if (socket?.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify(message));
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  const json = JSON.stringify(message);
+  if (encrypted && c2sKey) {
+    socket.send(encryptFrame(json));
+  } else {
+    socket.send(json);
   }
 }
 
@@ -275,6 +423,10 @@ function handleMessage(raw) {
     return;
   }
   switch (message.type) {
+    case "auth-challenge":
+      pendingChallenge = message.challenge;
+      tryAuthenticate();
+      break;
     case "authenticated":
       authenticated = true;
       setStatus("connected", t("connected"));
@@ -416,6 +568,7 @@ function handleError(code) {
   if (code === "unauthorized") {
     authenticated = false;
     token = "";
+    encrypted = false;          // proof failed; we're still in the handshake
     sessionStorage.removeItem("glint-session-token");
     elements.authError.textContent = t("unauthorized");
     showAuth();
@@ -613,7 +766,8 @@ elements.authForm.addEventListener("submit", event => {
   sessionStorage.setItem("glint-session-token", token);
   elements.authError.textContent = "";
   if (socket?.readyState === WebSocket.OPEN) {
-    send({ type: "authenticate", token });
+    // Challenge may already be in hand; otherwise tryAuthenticate waits for it.
+    tryAuthenticate();
   } else {
     connect();
   }

@@ -1,3 +1,4 @@
+import CryptoKit
 import Darwin
 import Foundation
 import Security
@@ -166,16 +167,175 @@ struct WebRemoteAccessToken {
 
     static func matches(_ provided: String?, expected: String) -> Bool {
         guard let provided else { return false }
-        let lhs = Array(provided.utf8)
-        let rhs = Array(expected.utf8)
-        var difference = UInt8(lhs.count == rhs.count ? 0 : 1)
-        let count = max(lhs.count, rhs.count)
+        return WebRemoteCrypto.constantTimeEquals(Data(provided.utf8), Data(expected.utf8))
+    }
+}
+
+/// End-to-end crypto for the web remote. The access token never crosses the
+/// wire: the browser proves it knows the token with an HMAC challenge-response,
+/// and both sides derive per-direction AES-256-GCM keys from (token, challenge)
+/// via HKDF. Everything after the handshake is encrypted, so a passive sniffer
+/// on the LAN sees only the random challenge and the proof — not the token, not
+/// terminal content, not project paths.
+///
+/// Threat model: defends against *passive* sniffing only. Not forward-secret
+/// (the session key derives from the long-lived token). Matches the JS client's
+/// vendored `crypto.mjs` byte-for-byte: HMAC-SHA256, HKDF (extract+expand),
+/// AES-256-GCM with the 16-byte tag appended to the ciphertext.
+enum WebRemoteCrypto {
+    static let nonceLength = 12       // AES-GCM standard nonce
+    static let tagLength = 16         // AES-GCM authentication tag
+    static let challengeLength = 32
+    static let keyLength = 32         // AES-256
+
+    /// Domain-separation labels shared with the client.
+    private static let proofLabel = Data("glint-webremote/v1/proof".utf8)
+    private static let sessionInfo = Data("glint-webremote/v1/session".utf8)
+    private static let c2sInfo = Data("c2s".utf8)
+    private static let s2cInfo = Data("s2c".utf8)
+
+    /// Constant-time equality for secrets (proofs / tokens). Length differences
+    /// are folded into the accumulator so timing doesn't leak the length.
+    static func constantTimeEquals(_ lhs: Data, _ rhs: Data) -> Bool {
+        let left = Array(lhs)
+        let right = Array(rhs)
+        var difference = UInt8(left.count == right.count ? 0 : 1)
+        let count = max(left.count, right.count)
         for index in 0 ..< count {
-            let left = index < lhs.count ? lhs[index] : 0
-            let right = index < rhs.count ? rhs[index] : 0
-            difference |= left ^ right
+            let l = index < left.count ? left[index] : 0
+            let r = index < right.count ? right[index] : 0
+            difference |= l ^ r
         }
         return difference == 0
+    }
+
+    /// Decode the 64-char lowercase-hex token into its 32 raw bytes. Returns nil
+    /// for anything that isn't exactly 64 lowercase hex digits.
+    static func tokenKey(from token: String) -> Data? {
+        guard token.count == 64,
+              token.allSatisfy({ $0.isHexDigit && !$0.isUppercase })
+        else { return nil }
+        var bytes = Data()
+        bytes.reserveCapacity(keyLength)
+        var index = token.startIndex
+        while index < token.endIndex {
+            let next = token.index(index, offsetBy: 2)
+            guard let byte = UInt8(token[index ..< next], radix: 16) else { return nil }
+            bytes.append(byte)
+            index = next
+        }
+        return bytes
+    }
+
+    /// A fresh per-connection random challenge.
+    static func newChallenge() -> Data {
+        var bytes = [UInt8](repeating: 0, count: challengeLength)
+        if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) != errSecSuccess {
+            for index in bytes.indices {
+                bytes[index] = UInt8.random(in: .min ... .max)
+            }
+        }
+        return Data(bytes)
+    }
+
+    /// Proof of knowledge of `tokenKey` for `challenge`, without revealing the
+    /// token. `proof = HMAC-SHA256(tokenKey, "…/proof" || challenge)`.
+    static func proof(tokenKey: Data, challenge: Data) -> Data {
+        var message = proofLabel
+        message.append(challenge)
+        let mac = HMAC<SHA256>.authenticationCode(
+            for: message,
+            using: SymmetricKey(data: tokenKey)
+        )
+        return Data(mac)
+    }
+
+    /// Per-direction AES-256 keys derived from (tokenKey, challenge).
+    /// `sessionKey = HKDF(tokenKey, salt: challenge, info: session)` then
+    /// `c2s`/`s2c = HKDF-Expand(sessionKey, info, 32)`.
+    static func sessionKeys(
+        tokenKey: Data,
+        challenge: Data
+    ) -> (c2s: SymmetricKey, s2c: SymmetricKey) {
+        let session = HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: SymmetricKey(data: tokenKey),
+            salt: challenge,
+            info: sessionInfo,
+            outputByteCount: keyLength
+        )
+        let c2s = HKDF<SHA256>.expand(
+            pseudoRandomKey: session,
+            info: c2sInfo,
+            outputByteCount: keyLength
+        )
+        let s2c = HKDF<SHA256>.expand(
+            pseudoRandomKey: session,
+            info: s2cInfo,
+            outputByteCount: keyLength
+        )
+        return (c2s, s2c)
+    }
+
+    /// 12-byte GCM nonce for a per-direction message counter: 4 zero bytes
+    /// followed by the 8-byte big-endian counter. Keys are direction-split, so
+    /// counters only need uniqueness within one direction — never collide.
+    static func nonce(for counter: UInt64) -> Data {
+        var nonce = Data(count: nonceLength)
+        nonce.withUnsafeMutableBytes { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            var bigEndian = counter.bigEndian
+            withUnsafeBytes(of: &bigEndian) { counterBytes in
+                for index in 0 ..< MemoryLayout<UInt64>.size {
+                    bytes[nonceLength - MemoryLayout<UInt64>.size + index] = counterBytes[index]
+                }
+            }
+        }
+        return nonce
+    }
+
+    /// Inverse of `nonce(for:)`: read the counter back out of a 12-byte nonce.
+    /// Used by the receiver's replay guard.
+    static func counter(fromNonce nonce: Data) -> UInt64? {
+        guard nonce.count == nonceLength else { return nil }
+        var value: UInt64 = 0
+        for index in 0 ..< MemoryLayout<UInt64>.size {
+            value <<= 8
+            value |= UInt64(nonce[nonceLength - MemoryLayout<UInt64>.size + index])
+        }
+        return value
+    }
+
+    /// Encrypt `plaintext` into a full frame: `nonce(12) || ciphertext || tag`.
+    /// The 16-byte tag is appended to the ciphertext, matching the client's
+    /// vendored noble gcm layout. nil only on a malformed nonce, which the
+    /// counter encoding can't produce — callers treat nil as fatal.
+    static func sealFrame(plaintext: Data, key: SymmetricKey, counter: UInt64) -> Data? {
+        let nonce = self.nonce(for: counter)
+        guard let gcmNonce = try? AES.GCM.Nonce(data: nonce),
+              let sealed = try? AES.GCM.seal(plaintext, using: key, nonce: gcmNonce)
+        else { return nil }
+        var frame = Data(capacity: nonceLength + sealed.ciphertext.count + tagLength)
+        frame.append(nonce)
+        frame.append(sealed.ciphertext)
+        frame.append(sealed.tag)
+        return frame
+    }
+
+    /// Decrypt a frame body (the bytes after the 12-byte nonce): `ciphertext ||
+    /// tag`, authenticated under the supplied nonce. nil on any failure
+    /// (truncated frame, nonce shape, auth-tag mismatch) — callers drop.
+    static func openFrame(nonce: Data, body: Data, key: SymmetricKey) -> Data? {
+        guard nonce.count == nonceLength,
+              body.count > tagLength,
+              let gcmNonce = try? AES.GCM.Nonce(data: nonce),
+              let box = try? AES.GCM.SealedBox(
+                nonce: gcmNonce,
+                ciphertext: body.prefix(body.count - tagLength),
+                tag: body.suffix(tagLength)
+              ),
+              let plaintext = try? AES.GCM.open(box, using: key)
+        else { return nil }
+        return plaintext
     }
 }
 
@@ -285,6 +445,13 @@ enum WebRemoteAssets {
         case "/addon-fit.mjs":
             WebRemoteAsset(
                 resource: "addon-fit",
+                fileExtension: "mjs",
+                contentType: "text/javascript; charset=utf-8",
+                cacheControl: "public, max-age=31536000, immutable"
+            )
+        case "/crypto.mjs":
+            WebRemoteAsset(
+                resource: "crypto",
                 fileExtension: "mjs",
                 contentType: "text/javascript; charset=utf-8",
                 cacheControl: "public, max-age=31536000, immutable"

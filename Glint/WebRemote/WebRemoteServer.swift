@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Network
 import os
@@ -161,6 +162,9 @@ final class WebRemoteServer: @unchecked Sendable {
     private var readyListeners = Set<ListenerKind>()
     private var runID: UUID?
     private var token = ""
+    /// Raw 32-byte key material decoded from `token`; empty until the server
+    /// starts with a valid token. Drives the challenge-response handshake.
+    private var tokenKey = Data()
     private var listenInterface = WebRemoteListenTarget.loopback
     private var lastBoundAddress: String?
     private var pathMonitor: NWPathMonitor?
@@ -286,6 +290,7 @@ final class WebRemoteServer: @unchecked Sendable {
         stopLocked(emitStatus: false)
         emit(.starting)
         token = WebRemoteAccessKeyStore.loadOrCreate()
+        tokenKey = WebRemoteCrypto.tokenKey(from: token) ?? Data()
         let currentRun = UUID()
         runID = currentRun
 
@@ -451,6 +456,7 @@ final class WebRemoteServer: @unchecked Sendable {
         clients.removeAll()
         readyListeners.removeAll()
         token = ""
+        tokenKey = Data()
         pathMonitor?.cancel()
         pathMonitor = nil
         pathRestartScheduled = false
@@ -474,6 +480,7 @@ final class WebRemoteServer: @unchecked Sendable {
         clients.removeAll()
         readyListeners.removeAll()
         token = ""
+        tokenKey = Data()
         pathMonitor?.cancel()
         pathMonitor = nil
         pathRestartScheduled = false
@@ -600,8 +607,7 @@ final class WebRemoteServer: @unchecked Sendable {
     }
 
     private func dropSlowClientLocked(_ id: UUID) {
-        webRemoteLogger.warning("Dropping slow WebSocket client; it will reconnect and resnapshot")
-        removeClientLocked(id, cancelConnection: true)
+        dropClientLocked(id, reason: "send queue overflow; will reconnect and resnapshot")
     }
 
     private func removeClientLocked(_ id: UUID, cancelConnection: Bool) {
@@ -610,6 +616,37 @@ final class WebRemoteServer: @unchecked Sendable {
         if cancelConnection { client.cancel() }
         updateSubscribedPanesLocked()
         affectedPanes.forEach { reconcileTerminalSizeLocked(for: $0) }
+    }
+
+    /// Entry point from the receive loop. Pre-encryption, the only plaintext a
+    /// client may send is the `authenticate` proof — pass it straight through.
+    /// Once encrypted, every inbound frame is `nonce(12) || ciphertext || tag`
+    /// and is decrypted here before JSON parsing. A truncated frame, a replayed
+    /// (regressed) nonce, or an auth-tag mismatch drops the connection.
+    fileprivate func handleWebSocketFrame(_ content: Data, from clientID: UUID) {
+        guard let client = clients[clientID] else { return }
+        guard content.count <= 1_048_576 else {
+            dropClientLocked(clientID, reason: "oversized frame")
+            return
+        }
+        guard client.encrypted,
+              let c2sKey = client.c2sKey,
+              content.count > WebRemoteCrypto.nonceLength + WebRemoteCrypto.tagLength
+        else {
+            handleWebSocketData(content, from: clientID)
+            return
+        }
+        let nonce = content.prefix(WebRemoteCrypto.nonceLength)
+        let body = content.subdata(in: WebRemoteCrypto.nonceLength ..< content.count)
+        guard let counter = WebRemoteCrypto.counter(fromNonce: nonce),
+              counter >= client.receiveCounter,
+              let plaintext = WebRemoteCrypto.openFrame(nonce: nonce, body: body, key: c2sKey)
+        else {
+            dropClientLocked(clientID, reason: "decrypt/replay failure")
+            return
+        }
+        client.receiveCounter = counter + 1
+        handleWebSocketData(plaintext, from: clientID)
     }
 
     fileprivate func handleWebSocketData(_ data: Data, from clientID: UUID) {
@@ -623,23 +660,34 @@ final class WebRemoteServer: @unchecked Sendable {
         }
 
         if type == "authenticate" {
-            // A previous failure is still inside its backoff window; ignore the
-            // new attempt — the scheduled `completeAuthFailure` will answer it.
-            // This caps a flooding attacker at one pending timer per client.
+            // Challenge-response: the client proves it knows the token with an
+            // HMAC over the per-connection challenge, without ever sending the
+            // token. A previous failure is still inside its backoff window;
+            // ignore the new attempt — `completeAuthFailure` answers it. This
+            // caps a flooding attacker at one pending timer per client.
             guard !client.authBackoffPending else { return }
-            if WebRemoteAccessToken.matches(object["token"] as? String, expected: token) {
-                client.authFailureCount = 0
-                client.authenticated = true
-                sendJSON(["type": "authenticated"], to: clientID)
-                sendState(to: clientID)
+            guard let proofString = object["proof"] as? String,
+                  let provided = Data(base64Encoded: proofString),
+                  let challenge = client.pendingChallenge,
+                  !tokenKey.isEmpty
+            else {
+                failAuthenticationLocked(for: clientID)
                 return
             }
-            client.authFailureCount = min(client.authFailureCount + 1, Self.authFailureCountCap)
-            client.authBackoffPending = true
-            let delay = Self.authBackoffSeconds(forFailures: client.authFailureCount)
-            queue.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.completeAuthFailure(for: clientID)
+            let expected = WebRemoteCrypto.proof(tokenKey: tokenKey, challenge: challenge)
+            guard WebRemoteCrypto.constantTimeEquals(provided, expected) else {
+                failAuthenticationLocked(for: clientID)
+                return
             }
+            client.authFailureCount = 0
+            let keys = WebRemoteCrypto.sessionKeys(tokenKey: tokenKey, challenge: challenge)
+            client.beginEncryption(c2s: keys.c2s, s2c: keys.s2c)
+            client.pendingChallenge = nil
+            client.authenticated = true
+            // The first frame sent after here is encrypted; the client learns
+            // auth succeeded by successfully decrypting it.
+            sendJSON(["type": "authenticated"], to: clientID)
+            sendState(to: clientID)
             return
         }
 
@@ -925,7 +973,26 @@ final class WebRemoteServer: @unchecked Sendable {
     private func completeAuthFailure(for clientID: UUID) {
         guard let client = clients[clientID] else { return }
         client.authBackoffPending = false
+        // Connection is still pre-encryption during the handshake, so the
+        // error travels as a plaintext frame.
         sendError("unauthorized", to: clientID)
+    }
+
+    /// A failed/missing proof schedules an exponentially-backed-off
+    /// `unauthorized`, throttling online guessing of the access key.
+    private func failAuthenticationLocked(for clientID: UUID) {
+        guard let client = clients[clientID] else { return }
+        client.authFailureCount = min(client.authFailureCount + 1, Self.authFailureCountCap)
+        client.authBackoffPending = true
+        let delay = Self.authBackoffSeconds(forFailures: client.authFailureCount)
+        queue.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.completeAuthFailure(for: clientID)
+        }
+    }
+
+    private func dropClientLocked(_ id: UUID, reason: String) {
+        webRemoteLogger.warning("Dropping WebSocket client: \(reason, privacy: .public)")
+        removeClientLocked(id, cancelConnection: true)
     }
 
     private func updateSubscribedPanesLocked() {
@@ -990,6 +1057,17 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
     var authFailureCount = 0
     var authBackoffPending = false
 
+    /// Challenge-response + encryption state. `pendingChallenge` is set when the
+    /// connection comes up; once the proof verifies, `encrypted` flips true and
+    /// `c2s`/`s2c` carry the per-direction AES-256-GCM keys. Counters are
+    /// per-direction and never reused under their key.
+    var pendingChallenge: Data?
+    var encrypted = false
+    var c2sKey: SymmetricKey?
+    var s2cKey: SymmetricKey?
+    var sendCounter: UInt64 = 0
+    var receiveCounter: UInt64 = 0
+
     private static let maxQueuedOutputBytes = 512 * 1024
     private let connection: NWConnection
     private weak var server: WebRemoteServer?
@@ -1010,6 +1088,16 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
             guard let self else { return }
             switch state {
             case .ready:
+                // Issue the per-connection challenge before reading anything.
+                // Sent as a plaintext text frame (we are still pre-encryption).
+                pendingChallenge = WebRemoteCrypto.newChallenge()
+                if let challenge = pendingChallenge,
+                   let payload = SafeJSON.data([
+                       "type": "auth-challenge",
+                       "challenge": challenge.base64EncodedString(),
+                   ]) {
+                    send(payload)
+                }
                 receiveNextMessage()
             case .failed,
                  .cancelled:
@@ -1027,6 +1115,16 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
         outbound.removeAll()
         _ = pendingSelectionOutput.take()
         connection.cancel()
+    }
+
+    /// Activate encryption after the proof verifies. Counters start at 0 for
+    /// both directions; the first encrypted frame is `authenticated`.
+    func beginEncryption(c2s: SymmetricKey, s2c: SymmetricKey) {
+        c2sKey = c2s
+        s2cKey = s2c
+        sendCounter = 0
+        receiveCounter = 0
+        encrypted = true
     }
 
     func send(_ data: Data) {
@@ -1061,14 +1159,34 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
             return
         }
 
-        let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
+        // Once encrypted, wrap the JSON plaintext as a binary GCM frame and
+        // send it as a binary WS message. The counter is consumed only here, at
+        // actual send time — items are never re-sent (a failed send cancels the
+        // connection), so nonces are never reused.
+        var wireData = data
+        var opcode = NWProtocolWebSocket.Opcode.text
+        if encrypted, let s2c = s2cKey {
+            guard let frame = WebRemoteCrypto.sealFrame(
+                plaintext: data,
+                key: s2c,
+                counter: sendCounter
+            ) else {
+                cancel()
+                return
+            }
+            sendCounter &+= 1
+            wireData = frame
+            opcode = .binary
+        }
+
+        let metadata = NWProtocolWebSocket.Metadata(opcode: opcode)
         let context = NWConnection.ContentContext(
             identifier: "glint-web-remote",
             metadata: [metadata]
         )
         sendInFlight = true
         connection.send(
-            content: data,
+            content: wireData,
             contentContext: context,
             isComplete: true,
             completion: .contentProcessed { [weak self] error in
@@ -1101,7 +1219,7 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
                 receiveNextMessage()
                 return
             }
-            server?.handleWebSocketData(content, from: id)
+            server?.handleWebSocketFrame(content, from: id)
             receiveNextMessage()
         }
     }

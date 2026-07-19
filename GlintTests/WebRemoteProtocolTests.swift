@@ -311,4 +311,151 @@ final class WebRemoteProtocolTests: XCTestCase {
         )
         XCTAssertNotNil(store.workspaces[0].panes[pane])
     }
+
+    // MARK: - Challenge-response crypto (must match the JS client byte-for-byte)
+
+    private func hexString(_ data: Data) -> String {
+        data.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func hexString(_ key: SymmetricKey) -> String {
+        key.withUnsafeBytes { Data(Array($0)) }.map { String(format: "%02x", $0) }.joined()
+    }
+
+    func testTokenKeyDecodesHexAndRejectsAnythingElse() {
+        XCTAssertEqual(
+            hexString(WebRemoteCrypto.tokenKey(from: "0011ff") ?? Data()),
+            "0011ff"
+        )
+        // Exactly 64 lowercase hex chars → 32 bytes.
+        let full = String(repeating: "ab", count: 32)
+        XCTAssertEqual(WebRemoteCrypto.tokenKey(from: full)?.count, 32)
+        // Uppercase, wrong length, non-hex, and empty all fail (fail closed).
+        XCTAssertNil(WebRemoteCrypto.tokenKey(from: String(repeating: "ABCD", count: 16)))
+        XCTAssertNil(WebRemoteCrypto.tokenKey(from: String(repeating: "00", count: 31)))
+        XCTAssertNil(WebRemoteCrypto.tokenKey(from: String(repeating: "zz", count: 32)))
+        XCTAssertNil(WebRemoteCrypto.tokenKey(from: ""))
+    }
+
+    /// Pins the Swift derivation to the exact bytes the JS client (vendored
+    /// noble) produces for the same inputs — the wire-compat contract. If this
+    /// changes, the browser and the Mac can no longer talk.
+    func testCryptoDerivationMatchesClientVector() {
+        let token = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+        let challenge = Data((0 ..< 32).map { UInt8($0) })
+        let key = try! XCTUnwrap(WebRemoteCrypto.tokenKey(from: token))
+
+        XCTAssertEqual(
+            hexString(WebRemoteCrypto.proof(tokenKey: key, challenge: challenge)),
+            "4bab2b0021f6ea13cfa4a9b0ca0741d025ccd291c5b98dbf43480e9ba086120b"
+        )
+        let keys = WebRemoteCrypto.sessionKeys(tokenKey: key, challenge: challenge)
+        XCTAssertEqual(hexString(keys.c2s), "e8c4e3f3f90401c6afdbc05ac630f5fb2ab4bea095e695e13551a45015f253c2")
+        XCTAssertEqual(hexString(keys.s2c), "0d95713984b1723faefc9da27063fb792860e30b29648123dd1ecafae17df0d3")
+    }
+
+    func testProofAndSessionKeysAreDeterministicAndChallengeBound() {
+        let key = WebRemoteCrypto.tokenKey(from: String(repeating: "9c", count: 32))!
+        let challengeA = Data(repeating: 0x01, count: 32)
+        let challengeB = Data(repeating: 0x02, count: 32)
+
+        // Same inputs → same outputs.
+        XCTAssertEqual(
+            WebRemoteCrypto.proof(tokenKey: key, challenge: challengeA),
+            WebRemoteCrypto.proof(tokenKey: key, challenge: challengeA)
+        )
+        // Different challenge → different proof and different keys (no leakage
+        // across connections).
+        XCTAssertNotEqual(
+            WebRemoteCrypto.proof(tokenKey: key, challenge: challengeA),
+            WebRemoteCrypto.proof(tokenKey: key, challenge: challengeB)
+        )
+        let a = WebRemoteCrypto.sessionKeys(tokenKey: key, challenge: challengeA)
+        let b = WebRemoteCrypto.sessionKeys(tokenKey: key, challenge: challengeB)
+        XCTAssertNotEqual(hexString(a.c2s), hexString(b.c2s))
+        XCTAssertNotEqual(hexString(a.s2c), hexString(b.s2c))
+        // Direction keys are themselves distinct.
+        XCTAssertNotEqual(hexString(a.c2s), hexString(a.s2c))
+    }
+
+    func testConstantTimeEqualsHandlesLengthAndContent() {
+        XCTAssertTrue(WebRemoteCrypto.constantTimeEquals(Data([1, 2, 3]), Data([1, 2, 3])))
+        XCTAssertFalse(WebRemoteCrypto.constantTimeEquals(Data([1, 2, 3]), Data([1, 2, 4])))
+        XCTAssertFalse(WebRemoteCrypto.constantTimeEquals(Data([1, 2, 3]), Data([1, 2])))
+        XCTAssertFalse(WebRemoteCrypto.constantTimeEquals(Data([1, 2, 3]), Data([])))
+        XCTAssertTrue(WebRemoteCrypto.constantTimeEquals(Data(), Data()))
+    }
+
+    func testNonceCounterRoundTripsAndStaysMonotonic() {
+        XCTAssertEqual(WebRemoteCrypto.nonce(for: 0), Data(count: 12))
+        XCTAssertEqual(WebRemoteCrypto.counter(fromNonce: WebRemoteCrypto.nonce(for: 0)), 0)
+        XCTAssertEqual(WebRemoteCrypto.counter(fromNonce: WebRemoteCrypto.nonce(for: 42)), 42)
+        // The low byte advances first (big-endian) and nonces never repeat.
+        XCTAssertEqual(WebRemoteCrypto.nonce(for: 1).last, 0x01)
+        var seen = Set<Data>()
+        for counter in 0 ..< 1_000 {
+            let nonce = WebRemoteCrypto.nonce(for: UInt64(counter))
+            XCTAssertEqual(nonce.count, 12)
+            XCTAssertTrue(seen.insert(nonce).inserted, "nonce reused at counter \(counter)")
+        }
+        XCTAssertNil(WebRemoteCrypto.counter(fromNonce: Data(count: 8)))
+    }
+
+    func testSealAndOpenRoundTripInEachDirection() {
+        let key = WebRemoteCrypto.tokenKey(from: String(repeating: "ab", count: 32))!
+        let challenge = Data(repeating: 0x07, count: 32)
+        let keys = WebRemoteCrypto.sessionKeys(tokenKey: key, challenge: challenge)
+        let plaintext = Data("the quick brown fox".utf8)
+
+        for (label, sendKey, recvKey) in [("c2s", keys.c2s, keys.c2s), ("s2c", keys.s2c, keys.s2c)] {
+            guard let frame = WebRemoteCrypto.sealFrame(plaintext: plaintext, key: sendKey, counter: 5) else {
+                return XCTFail("seal failed for \(label)")
+            }
+            // Frame = nonce(12) || ciphertext || tag(16).
+            XCTAssertEqual(frame.count, 12 + plaintext.count + 16)
+            XCTAssertEqual(
+                WebRemoteCrypto.counter(fromNonce: frame.prefix(12)),
+                5,
+                "nonce in frame must encode the counter"
+            )
+            let body = frame.subdata(in: 12 ..< frame.count)
+            XCTAssertEqual(
+                WebRemoteCrypto.openFrame(nonce: frame.prefix(12), body: body, key: recvKey),
+                plaintext,
+                "round-trip failed for \(label)"
+            )
+        }
+    }
+
+    func testOpenRejectsWrongKeyTamperingAndTruncation() {
+        let key = WebRemoteCrypto.tokenKey(from: String(repeating: "ab", count: 32))!
+        let otherKey = WebRemoteCrypto.tokenKey(from: String(repeating: "cd", count: 32))!
+        let challenge = Data(repeating: 0x07, count: 32)
+        let keys = WebRemoteCrypto.sessionKeys(tokenKey: key, challenge: challenge)
+        let other = WebRemoteCrypto.sessionKeys(tokenKey: otherKey, challenge: challenge)
+        let plaintext = Data("secret".utf8)
+
+        let frame = WebRemoteCrypto.sealFrame(plaintext: plaintext, key: keys.s2c, counter: 0)!
+        let nonce = frame.prefix(12)
+        let body = frame.subdata(in: 12 ..< frame.count)
+
+        // Wrong key (e.g. wrong token) → auth tag mismatch.
+        XCTAssertNil(WebRemoteCrypto.openFrame(nonce: nonce, body: body, key: other.s2c))
+        // Tamper one ciphertext byte → rejected.
+        var tampered = body
+        tampered[0] ^= 0xff
+        XCTAssertNil(WebRemoteCrypto.openFrame(nonce: nonce, body: tampered, key: keys.s2c))
+        // Truncated frame → rejected.
+        XCTAssertNil(WebRemoteCrypto.openFrame(nonce: nonce, body: body.prefix(10), key: keys.s2c))
+        // Wrong-length nonce → rejected.
+        XCTAssertNil(WebRemoteCrypto.openFrame(nonce: Data(count: 8), body: body, key: keys.s2c))
+    }
+
+    func testCryptoAssetIsRegisteredForTheClient() {
+        XCTAssertEqual(
+            WebRemoteAssets.asset(for: "/crypto.mjs")?.contentType,
+            "text/javascript; charset=utf-8"
+        )
+        XCTAssertNil(WebRemoteAssets.asset(for: "/crypto.js"))
+    }
 }

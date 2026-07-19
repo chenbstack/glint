@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 @testable import Glint
 
@@ -82,32 +83,43 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         XCTAssertNotNil(http.value(forHTTPHeaderField: "Content-Length"))
     }
 
-    // MARK: - WebSocket authentication
+    // MARK: - WebSocket authentication (challenge-response + AES-GCM)
 
-    func testWebSocketRejectsWrongTokenThenAcceptsCorrectToken() async throws {
-        guard let token = readyToken else { return XCTFail("No token captured in setUp") }
+    func testWebSocketRejectsWrongProofThenAcceptsCorrectProof() async throws {
+        let token = try XCTUnwrap(readyToken)
+        let tokenKey = try XCTUnwrap(WebRemoteCrypto.tokenKey(from: token))
         let task = makeWebSocket()
         defer { task.cancel(with: .goingAway, reason: nil) }
 
-        try await send(task, ["type": "authenticate", "token": "definitely-not-the-token"])
+        // The server issues a per-connection challenge on connect.
+        let challenge = try await receiveAuthChallenge(task)
+
+        // Wrong proof → plaintext `unauthorized` after the backoff window. The
+        // token itself never crosses the wire.
+        try await send(task, ["type": "authenticate", "proof": wrongProofBase64])
         let bad = try await receiveJSON(task)
         XCTAssertEqual(bad["type"] as? String, "error")
         XCTAssertEqual(bad["code"] as? String, "unauthorized")
 
-        try await send(task, ["type": "authenticate", "token": token])
-        let good = try await receiveJSON(task)
+        // Correct proof → the first reply is an *encrypted* frame. Decrypting it
+        // to `{"type":"authenticated"}` proves the session keys agree.
+        let proof = WebRemoteCrypto.proof(tokenKey: tokenKey, challenge: challenge)
+        try await send(task, ["type": "authenticate", "proof": proof.base64EncodedString()])
+        let keys = WebRemoteCrypto.sessionKeys(tokenKey: tokenKey, challenge: challenge)
+        let good = try await receiveEncryptedJSON(task, key: keys.s2c)
         // `sendState` no-ops without a WorkspaceStore, so only `authenticated`
-        // arrives — that is enough to prove the token was accepted.
+        // arrives — enough to prove the proof was accepted and the frame encrypted.
         XCTAssertEqual(good["type"] as? String, "authenticated")
     }
 
     func testAuthenticationBackoffGrowsAcrossConsecutiveFailures() async throws {
         let task = makeWebSocket()
         defer { task.cancel(with: .goingAway, reason: nil) }
+        _ = try await receiveAuthChallenge(task)
 
         func timedFailure() async throws -> TimeInterval {
             let start = Date()
-            try await send(task, ["type": "authenticate", "token": "wrong"])
+            try await send(task, ["type": "authenticate", "proof": wrongProofBase64])
             let reply = try await receiveJSON(task)
             XCTAssertEqual(reply["code"] as? String, "unauthorized")
             return Date().timeIntervalSince(start)
@@ -122,6 +134,10 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         XCTAssertGreaterThan(second, first)
         XCTAssertGreaterThanOrEqual(second, first * 1.4)
         XCTAssertLessThan(second, 3.0)
+    }
+
+    private var wrongProofBase64: String {
+        Data(repeating: 0, count: WebRemoteCrypto.challengeLength).base64EncodedString()
     }
 
     // MARK: - Pure-function behaviour
@@ -187,28 +203,64 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         try await task.send(.string(text))
     }
 
-    /// Receive one JSON object, bounded by a timeout so a misbehaving server
+    /// Receive one raw message, bounded by a timeout so a misbehaving server
     /// fails the test instead of hanging it.
-    private func receiveJSON(_ task: URLSessionWebSocketTask) async throws -> [String: Any] {
-        try await withThrowingTaskGroup(of: [String: Any].self) { group in
+    private func receiveMessage(
+        _ task: URLSessionWebSocketTask,
+        timeoutSeconds: UInt64 = 6
+    ) async throws -> URLSessionWebSocketTask.Message {
+        try await withThrowingTaskGroup(of: URLSessionWebSocketTask.Message.self) { group in
+            group.addTask { try await task.receive() }
             group.addTask {
-                let message = try await task.receive()
-                switch message {
-                case let .string(text):
-                    return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
-                case let .data(data):
-                    return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-                @unknown default:
-                    throw URLError(.badServerResponse)
-                }
-            }
-            group.addTask {
-                try await Task.sleep(nanoseconds: 6_000_000_000)
+                try await Task.sleep(nanoseconds: timeoutSeconds * 1_000_000_000)
                 throw URLError(.timedOut)
             }
             guard let result = try await group.next() else { throw URLError(.timedOut) }
             group.cancelAll()
             return result
         }
+    }
+
+    private func receiveJSON(_ task: URLSessionWebSocketTask) async throws -> [String: Any] {
+        switch try await receiveMessage(task) {
+        case let .string(text):
+            return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+        case let .data(data):
+            return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        @unknown default:
+            throw URLError(.badServerResponse)
+        }
+    }
+
+    /// The server sends the plaintext challenge as soon as the socket opens.
+    private func receiveAuthChallenge(_ task: URLSessionWebSocketTask) async throws -> Data {
+        switch try await receiveMessage(task) {
+        case let .string(text):
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+            XCTAssertEqual(object["type"] as? String, "auth-challenge")
+            return try XCTUnwrap(Data(base64Encoded: XCTUnwrap(object["challenge"] as? String)))
+        case .data:
+            throw URLError(.badServerResponse)
+        @unknown default:
+            throw URLError(.badServerResponse)
+        }
+    }
+
+    /// Receive one encrypted binary frame, decrypt it under `key`, and decode
+    /// the plaintext JSON. Closes the loop on the server's encrypt path.
+    private func receiveEncryptedJSON(
+        _ task: URLSessionWebSocketTask,
+        key: SymmetricKey
+    ) async throws -> [String: Any] {
+        let data: Data
+        switch try await receiveMessage(task) {
+        case let .data(value): data = value
+        case .string: throw URLError(.badServerResponse)
+        @unknown default: throw URLError(.badServerResponse)
+        }
+        let nonce = data.prefix(WebRemoteCrypto.nonceLength)
+        let body = data.subdata(in: WebRemoteCrypto.nonceLength ..< data.count)
+        let plaintext = try XCTUnwrap(WebRemoteCrypto.openFrame(nonce: nonce, body: body, key: key))
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: plaintext) as? [String: Any])
     }
 }
