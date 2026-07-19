@@ -369,6 +369,16 @@ enum WebRemoteAccessURL {
             .first(where: { $0.name == "token" })?
             .value
     }
+
+    /// The URL with the access-token fragment stripped, so copying or sharing
+    /// the link never leaks the secret in plaintext. The token must travel
+    /// out-of-band (the "Access key" field); a browser opening this redacted
+    /// URL prompts for the key via the auth dialog.
+    static func redacted(from value: String) -> String {
+        guard var comps = URLComponents(string: value) else { return value }
+        comps.fragment = nil
+        return comps.string ?? value
+    }
 }
 
 struct WebRemoteHTTPRequest: Equatable {

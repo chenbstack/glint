@@ -1220,7 +1220,7 @@ private struct TerminalPane: View {
     }
 
     private func displayURL(_ value: String) -> String {
-        value.split(separator: "#", maxSplits: 1).first.map(String.init) ?? value
+        WebRemoteAccessURL.redacted(from: value)
     }
 
     private func abbreviatedAccessKey(_ value: String) -> String {
@@ -1229,7 +1229,10 @@ private struct TerminalPane: View {
     }
 
     private func copyWebRemoteURL(_ value: String) {
-        copyWebRemoteValue(value)
+        // Strip the #token= fragment so the secret isn't written to the
+        // clipboard alongside the address. The key is copied separately via
+        // the "Access key" row.
+        copyWebRemoteValue(WebRemoteAccessURL.redacted(from: value))
     }
 
     private func copyWebRemoteValue(_ value: String) {
