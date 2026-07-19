@@ -11,10 +11,95 @@ enum WebRemoteStatus: Equatable {
     case failed(message: String)
 }
 
+struct WebRemoteOutputBuffer {
+    let byteLimit: Int
+    private(set) var data = Data()
+
+    var isEmpty: Bool { data.isEmpty }
+
+    init(byteLimit: Int) {
+        precondition(byteLimit >= 0)
+        self.byteLimit = byteLimit
+    }
+
+    mutating func append(_ chunk: Data) -> Bool {
+        guard chunk.count <= byteLimit - data.count else { return false }
+        data.append(chunk)
+        return true
+    }
+
+    mutating func append(_ bytes: UnsafePointer<UInt8>, count: Int) -> Bool {
+        guard count <= byteLimit - data.count else { return false }
+        data.append(bytes, count: count)
+        return true
+    }
+
+    mutating func take() -> Data {
+        let result = data
+        data = Data()
+        return result
+    }
+}
+
+struct WebRemoteOutboundBuffer {
+    enum Item {
+        case message(Data)
+        case terminalOutput(pane: String, data: Data)
+    }
+
+    let maxQueuedOutputBytes: Int
+    private var items: [Item] = []
+    private var queuedOutputBytes = 0
+
+    init(maxQueuedOutputBytes: Int) {
+        precondition(maxQueuedOutputBytes >= 0)
+        self.maxQueuedOutputBytes = maxQueuedOutputBytes
+    }
+
+    mutating func enqueueMessage(_ data: Data) {
+        items.append(.message(data))
+    }
+
+    mutating func enqueueTerminalOutput(_ data: Data, pane: String) -> Bool {
+        guard data.count <= maxQueuedOutputBytes - queuedOutputBytes else { return false }
+        if let last = items.last,
+           case let .terminalOutput(existingPane, existingData) = last,
+           existingPane == pane {
+            var combined = existingData
+            combined.append(data)
+            items[items.index(before: items.endIndex)] = .terminalOutput(
+                pane: pane,
+                data: combined
+            )
+        } else {
+            items.append(.terminalOutput(pane: pane, data: data))
+        }
+        queuedOutputBytes += data.count
+        return true
+    }
+
+    mutating func next() -> Item? {
+        guard !items.isEmpty else { return nil }
+        let item = items.removeFirst()
+        if case let .terminalOutput(_, data) = item {
+            queuedOutputBytes -= data.count
+        }
+        return item
+    }
+
+    mutating func removeAll() {
+        items.removeAll()
+        queuedOutputBytes = 0
+    }
+}
+
 final class WebRemoteServer: @unchecked Sendable {
     static let shared = WebRemoteServer()
     static let httpPort: UInt16 = 43871
     static let webSocketPort: UInt16 = 43872
+
+    private static let maxIngressOutputBytes = 256 * 1024
+    private static let maxSelectionOutputBytes = 512 * 1024
 
     private enum ListenerKind: Hashable {
         case http
@@ -24,6 +109,9 @@ final class WebRemoteServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "app.glint.web-remote", qos: .utility)
     private let subscriptionLock = NSLock()
     private var subscribedPanes = Set<String>()
+    private var pendingTerminalOutput: [String: WebRemoteOutputBuffer] = [:]
+    private var overflowedTerminalOutput = Set<String>()
+    private var terminalOutputDrainScheduled = false
     private var httpListener: NWListener?
     private var webSocketListener: NWListener?
     private var clients: [UUID: WebRemoteClientConnection] = [:]
@@ -74,27 +162,67 @@ final class WebRemoteServer: @unchecked Sendable {
         bytes: UnsafePointer<UInt8>?,
         count: UInt
     ) {
-        guard let bytes, count > 0 else { return }
+        guard let bytes, count > 0, let byteCount = Int(exactly: count) else { return }
+        var shouldScheduleDrain = false
         subscriptionLock.lock()
         let interested = subscribedPanes.contains(pane)
+        if interested {
+            if !overflowedTerminalOutput.contains(pane) {
+                var buffer = pendingTerminalOutput[pane]
+                    ?? WebRemoteOutputBuffer(byteLimit: Self.maxIngressOutputBytes)
+                if buffer.append(bytes, count: byteCount) {
+                    pendingTerminalOutput[pane] = buffer
+                } else {
+                    pendingTerminalOutput.removeValue(forKey: pane)
+                    overflowedTerminalOutput.insert(pane)
+                }
+            }
+            if !terminalOutputDrainScheduled {
+                terminalOutputDrainScheduled = true
+                shouldScheduleDrain = true
+            }
+        }
         subscriptionLock.unlock()
         guard interested else { return }
-
-        let data = Data(bytes: bytes, count: Int(count))
-        queue.async { [weak self] in
-            guard let self else { return }
-            let recipients = clients.values.filter {
-                $0.authenticated && $0.subscribedPane == pane
+        if shouldScheduleDrain {
+            queue.async { [weak self] in
+                self?.drainTerminalOutputLocked()
             }
-            guard !recipients.isEmpty,
-                  let payload = SafeJSON.data([
-                    "type": "output",
-                    "pane": pane,
-                    "data": data.base64EncodedString(),
-                  ])
-            else { return }
-            recipients.forEach { $0.send(payload) }
         }
+    }
+
+    private func drainTerminalOutputLocked() {
+        subscriptionLock.lock()
+        let batches = pendingTerminalOutput.mapValues { $0.data }
+        let overflowedPanes = overflowedTerminalOutput
+        pendingTerminalOutput.removeAll(keepingCapacity: true)
+        overflowedTerminalOutput.removeAll(keepingCapacity: true)
+        terminalOutputDrainScheduled = false
+        subscriptionLock.unlock()
+
+        let overflowedClientIDs = clients.values.compactMap { client -> UUID? in
+            guard client.authenticated,
+                  let pane = client.pendingPane ?? client.subscribedPane,
+                  overflowedPanes.contains(pane)
+            else { return nil }
+            return client.id
+        }
+        overflowedClientIDs.forEach { dropSlowClientLocked($0) }
+
+        var slowClientIDs = Set<UUID>()
+        for (pane, data) in batches {
+            for client in clients.values where client.authenticated {
+                if client.pendingPane == pane {
+                    if !client.pendingSelectionOutput.append(data) {
+                        slowClientIDs.insert(client.id)
+                    }
+                } else if client.subscribedPane == pane,
+                          !client.sendTerminalOutput(data, pane: pane) {
+                    slowClientIDs.insert(client.id)
+                }
+            }
+        }
+        slowClientIDs.forEach { dropSlowClientLocked($0) }
     }
 
     private func startLocked() {
@@ -324,12 +452,21 @@ final class WebRemoteServer: @unchecked Sendable {
 
     fileprivate func removeClient(_ id: UUID) {
         queue.async { [weak self] in
-            guard let self else { return }
-            guard let client = clients.removeValue(forKey: id) else { return }
-            let affectedPanes = Set([client.subscribedPane, client.pendingPane].compactMap { $0 })
-            updateSubscribedPanesLocked()
-            affectedPanes.forEach { self.reconcileTerminalSizeLocked(for: $0) }
+            self?.removeClientLocked(id, cancelConnection: false)
         }
+    }
+
+    private func dropSlowClientLocked(_ id: UUID) {
+        webRemoteLogger.warning("Dropping slow WebSocket client; it will reconnect and resnapshot")
+        removeClientLocked(id, cancelConnection: true)
+    }
+
+    private func removeClientLocked(_ id: UUID, cancelConnection: Bool) {
+        guard let client = clients.removeValue(forKey: id) else { return }
+        let affectedPanes = Set([client.subscribedPane, client.pendingPane].compactMap { $0 })
+        if cancelConnection { client.cancel() }
+        updateSubscribedPanesLocked()
+        affectedPanes.forEach { reconcileTerminalSizeLocked(for: $0) }
     }
 
     fileprivate func handleWebSocketData(_ data: Data, from clientID: UUID) {
@@ -441,6 +578,9 @@ final class WebRemoteServer: @unchecked Sendable {
         let previousPane = client.subscribedPane
         client.subscribedPane = nil
         client.pendingPane = pane
+        client.pendingSelectionOutput = WebRemoteOutputBuffer(
+            byteLimit: Self.maxSelectionOutputBytes
+        )
         client.terminalSize = nil
         updateSubscribedPanesLocked()
         if let previousPane {
@@ -465,6 +605,7 @@ final class WebRemoteServer: @unchecked Sendable {
                 else { return }
                 switch result {
                 case let .success(snapshot):
+                    let bufferedOutput = client.pendingSelectionOutput.take()
                     client.pendingPane = nil
                     client.subscribedPane = pane
                     recordTerminalSizeLocked(size, for: client)
@@ -474,6 +615,11 @@ final class WebRemoteServer: @unchecked Sendable {
                         "pane": pane,
                         "data": snapshot.base64EncodedString(),
                     ], to: clientID)
+                    if !bufferedOutput.isEmpty,
+                       !client.sendTerminalOutput(bufferedOutput, pane: pane) {
+                        dropSlowClientLocked(clientID)
+                        return
+                    }
                     DispatchQueue.main.async { [weak self, weak store] in
                         guard let self, let store else { return }
                         if let error = store.webRemoteSetTerminalSize(pane: pane, size: size) {
@@ -489,6 +635,7 @@ final class WebRemoteServer: @unchecked Sendable {
 
     private func finishSelectionFailure(_ error: String, pane: String, clientID: UUID) {
         guard let client = clients[clientID], client.pendingPane == pane else { return }
+        _ = client.pendingSelectionOutput.take()
         client.pendingPane = nil
         updateSubscribedPanesLocked()
         reconcileTerminalSizeLocked(for: pane)
@@ -568,11 +715,14 @@ final class WebRemoteServer: @unchecked Sendable {
     }
 
     private func updateSubscribedPanesLocked() {
-        let panes = Set(clients.values.compactMap { client in
-            client.authenticated ? client.subscribedPane : nil
+        let panes = Set(clients.values.flatMap { client -> [String] in
+            guard client.authenticated else { return [] }
+            return [client.subscribedPane, client.pendingPane].compactMap { $0 }
         })
         subscriptionLock.lock()
         subscribedPanes = panes
+        pendingTerminalOutput = pendingTerminalOutput.filter { panes.contains($0.key) }
+        overflowedTerminalOutput.formIntersection(panes)
         subscriptionLock.unlock()
     }
 
@@ -620,11 +770,18 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
     var authenticated = false
     var subscribedPane: String?
     var pendingPane: String?
+    var pendingSelectionOutput = WebRemoteOutputBuffer(byteLimit: 0)
     var terminalSize: WebRemoteTerminalSize?
     var terminalSizeRevision: UInt64 = 0
 
+    private static let maxQueuedOutputBytes = 512 * 1024
     private let connection: NWConnection
     private weak var server: WebRemoteServer?
+    private var outbound = WebRemoteOutboundBuffer(
+        maxQueuedOutputBytes: WebRemoteClientConnection.maxQueuedOutputBytes
+    )
+    private var sendInFlight = false
+    private var cancelled = false
 
     init(id: UUID, connection: NWConnection, server: WebRemoteServer) {
         self.id = id
@@ -649,22 +806,63 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
     }
 
     func cancel() {
+        guard !cancelled else { return }
+        cancelled = true
+        outbound.removeAll()
+        _ = pendingSelectionOutput.take()
         connection.cancel()
     }
 
     func send(_ data: Data) {
+        guard !cancelled else { return }
+        outbound.enqueueMessage(data)
+        sendNextIfNeeded()
+    }
+
+    func sendTerminalOutput(_ data: Data, pane: String) -> Bool {
+        guard !cancelled,
+              outbound.enqueueTerminalOutput(data, pane: pane)
+        else { return false }
+        sendNextIfNeeded()
+        return true
+    }
+
+    private func sendNextIfNeeded() {
+        guard !cancelled, !sendInFlight, let item = outbound.next() else { return }
+        let data: Data?
+        switch item {
+        case let .message(message):
+            data = message
+        case let .terminalOutput(pane, output):
+            data = SafeJSON.data([
+                "type": "output",
+                "pane": pane,
+                "data": output.base64EncodedString(),
+            ])
+        }
+        guard let data else {
+            sendNextIfNeeded()
+            return
+        }
+
         let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
         let context = NWConnection.ContentContext(
             identifier: "glint-web-remote",
             metadata: [metadata]
         )
+        sendInFlight = true
         connection.send(
             content: data,
             contentContext: context,
             isComplete: true,
-            completion: .contentProcessed { error in
+            completion: .contentProcessed { [weak self] error in
+                guard let self else { return }
+                self.sendInFlight = false
                 if let error {
                     webRemoteLogger.error("WebSocket send failed: \(error.localizedDescription, privacy: .public)")
+                    self.cancel()
+                } else {
+                    self.sendNextIfNeeded()
                 }
             }
         )

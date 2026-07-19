@@ -1044,6 +1044,13 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         return true
     }
 
+    @discardableResult
+    func ensureLiveForWebRemoteControl() -> Bool {
+        guard ensureLiveSurface() else { return false }
+        inactiveSince = nil
+        return true
+    }
+
     /// Best-effort current cwd: prefers the cached value pushed via ghostty's
     /// PWD action; falls back to proc_pidinfo polling.
     func currentCwd() -> String? {

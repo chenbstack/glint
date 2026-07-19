@@ -1802,6 +1802,7 @@ final class WorkspaceStore: ObservableObject {
         guard freeIdleTerminalsEnabled else { return }
         let timeout = TimeInterval(idleTerminalTimeoutSeconds)
         for (key, view) in surfaceViews {
+            guard !webRemoteControlledPanes.contains(key) else { continue }
             view.takeOfflineIfEligible(
                 enabled: true,
                 timeout: timeout,
@@ -2816,7 +2817,10 @@ final class WorkspaceStore: ObservableObject {
     func webRemoteTerminalSnapshot(pane: String) -> WebRemoteTerminalSnapshotResult {
         guard let key = Self.parsePaneKey(pane) else { return .failure("bad-request") }
         guard paneExists(key) else { return .failure("unknown-pane") }
-        guard let view = surfaceViews[key], view.hasLiveSurface else { return .failure("pane-not-ready") }
+        guard let view = surfaceViews[key], view.ensureLiveForWebRemoteControl() else {
+            return .failure("pane-not-ready")
+        }
+        webRemoteControlledPanes.insert(key)
         guard let snapshot = view.webRemoteSnapshot() else { return .failure("pane-not-ready") }
         return .success(snapshot)
     }

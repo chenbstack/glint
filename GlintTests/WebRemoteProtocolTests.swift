@@ -25,6 +25,37 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertTrue(payload.hasSuffix("first\r\nsecond"))
     }
 
+    func testTerminalOutputBufferCoalescesBytesAndRejectsOverflow() {
+        var buffer = WebRemoteOutputBuffer(byteLimit: 4)
+
+        XCTAssertTrue(buffer.append(Data("ab".utf8)))
+        XCTAssertTrue(buffer.append(Data("cd".utf8)))
+        XCTAssertFalse(buffer.append(Data("e".utf8)))
+        XCTAssertEqual(buffer.take(), Data("abcd".utf8))
+        XCTAssertTrue(buffer.isEmpty)
+    }
+
+    func testOutboundBufferKeepsSnapshotBeforeBufferedTerminalOutput() {
+        let snapshot = Data("snapshot".utf8)
+        var buffer = WebRemoteOutboundBuffer(maxQueuedOutputBytes: 4)
+
+        buffer.enqueueMessage(snapshot)
+        XCTAssertTrue(buffer.enqueueTerminalOutput(Data("ab".utf8), pane: "pane-1"))
+        XCTAssertTrue(buffer.enqueueTerminalOutput(Data("cd".utf8), pane: "pane-1"))
+        XCTAssertFalse(buffer.enqueueTerminalOutput(Data("e".utf8), pane: "pane-1"))
+
+        guard case let .message(message)? = buffer.next() else {
+            return XCTFail("Snapshot message must be sent first")
+        }
+        XCTAssertEqual(message, snapshot)
+        guard case let .terminalOutput(pane, output)? = buffer.next() else {
+            return XCTFail("Buffered terminal output must follow the snapshot")
+        }
+        XCTAssertEqual(pane, "pane-1")
+        XCTAssertEqual(output, Data("abcd".utf8))
+        XCTAssertNil(buffer.next())
+    }
+
     func testAccessTokenIsRandomHexAndConstantTimeMatcherChecksWholeValue() {
         let token = WebRemoteAccessToken.generate()
 
