@@ -17,6 +17,12 @@ enum WebRemoteCreateTerminalResult {
     case failure(String)
 }
 
+enum WebRemoteCloseTerminalResult: Equatable {
+    case success
+    case confirmationRequired
+    case failure(String)
+}
+
 struct WebRemoteTerminalSize: Equatable {
     static let columnRange = 20 ... 500
     static let rowRange = 5 ... 200

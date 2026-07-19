@@ -141,4 +141,77 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertNil(WebRemoteProjectPath.resolveExistingDirectory(root.appendingPathComponent("missing").path))
         XCTAssertNil(WebRemoteProjectPath.resolveExistingDirectory("relative/path"))
     }
+
+    @MainActor
+    func testRemoteCloseTargetsRequestedPaneAndRequiresConfirmationForBusyProcess() {
+        let workspaceID = UUID()
+        let closingPane = PaneID(value: 0)
+        let survivingPane = PaneID(value: 1)
+        let tab = WorkspaceTab(
+            id: TabID(value: 0),
+            name: nil,
+            root: .split(
+                direction: .horizontal,
+                ratio: 0.5,
+                a: .leaf(closingPane),
+                b: .leaf(survivingPane)
+            ),
+            focusedPane: survivingPane
+        )
+        let workspace = Workspace(
+            id: workspaceID,
+            name: "Remote Close",
+            userNamed: true,
+            accentHex: "5E5CE6",
+            symbol: "R",
+            tabs: [tab],
+            selectedTabID: tab.id,
+            nextTabSeq: 1,
+            panes: [
+                closingPane: Pane(id: closingPane, title: "vim"),
+                survivingPane: Pane(id: survivingPane, title: "zsh"),
+            ],
+            nextPaneSeq: 2
+        )
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [workspace]
+        store.selectedWorkspaceID = workspaceID
+        store.paneProcesses[
+            WorkspaceStore.WorkspacePaneKey(workspace: workspaceID, pane: closingPane)
+        ] = "vim"
+        let handle = "\(workspaceID.uuidString):\(closingPane.value)"
+
+        XCTAssertEqual(
+            store.webRemoteCloseTerminal(pane: handle, confirmed: false),
+            .confirmationRequired
+        )
+        XCTAssertNotNil(store.workspaces[0].panes[closingPane])
+
+        XCTAssertEqual(
+            store.webRemoteCloseTerminal(pane: handle, confirmed: true),
+            .success
+        )
+        XCTAssertNil(store.workspaces[0].panes[closingPane])
+        XCTAssertNotNil(store.workspaces[0].panes[survivingPane])
+        XCTAssertEqual(store.workspaces[0].tabs[0].root.leaves, [survivingPane])
+        XCTAssertEqual(store.workspaces[0].tabs[0].focusedPane, survivingPane)
+    }
+
+    @MainActor
+    func testRemoteCloseRejectsWorkspaceLastTerminal() {
+        let workspace = Workspace.fresh(name: "Only", accentHex: "5E5CE6", symbol: "O")
+        let pane = try! XCTUnwrap(workspace.selectedTab?.focusedPane)
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [workspace]
+        store.selectedWorkspaceID = workspace.id
+
+        XCTAssertEqual(
+            store.webRemoteCloseTerminal(
+                pane: "\(workspace.id.uuidString):\(pane.value)",
+                confirmed: true
+            ),
+            .failure("last-terminal")
+        )
+        XCTAssertNotNil(store.workspaces[0].panes[pane])
+    }
 }

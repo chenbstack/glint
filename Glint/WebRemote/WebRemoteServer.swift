@@ -663,6 +663,16 @@ final class WebRemoteServer: @unchecked Sendable {
                 return
             }
             createTerminal(workspace: workspaceID, clientID: clientID)
+        case "closeTerminal":
+            guard let pane = object["pane"] as? String, pane.count <= 128 else {
+                sendError("bad-request", to: clientID)
+                return
+            }
+            closeTerminal(
+                pane: pane,
+                confirmed: object["confirmed"] as? Bool ?? false,
+                clientID: clientID
+            )
         default:
             sendError("unknown-command", to: clientID)
         }
@@ -819,6 +829,49 @@ final class WebRemoteServer: @unchecked Sendable {
             case let .failure(error):
                 self.queue.async { [weak self] in self?.sendError(error, to: clientID) }
             }
+        }
+    }
+
+    private func closeTerminal(pane: String, confirmed: Bool, clientID: UUID) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let store = WorkspaceStore.current else { return }
+            switch store.webRemoteCloseTerminal(pane: pane, confirmed: confirmed) {
+            case .success:
+                self.queue.async { [weak self] in
+                    self?.finishTerminalCloseLocked(pane: pane)
+                }
+            case .confirmationRequired:
+                self.queue.async { [weak self] in
+                    self?.sendJSON([
+                        "type": "terminalCloseConfirmation",
+                        "pane": pane,
+                    ], to: clientID)
+                }
+            case let .failure(error):
+                self.queue.async { [weak self] in self?.sendError(error, to: clientID) }
+            }
+        }
+    }
+
+    private func finishTerminalCloseLocked(pane: String) {
+        let authenticatedClients = clients.values.filter(\.authenticated)
+        for client in authenticatedClients {
+            if client.subscribedPane == pane {
+                client.subscribedPane = nil
+                client.terminalSize = nil
+            }
+            if client.pendingPane == pane {
+                client.pendingPane = nil
+                _ = client.pendingSelectionOutput.take()
+            }
+        }
+        updateSubscribedPanesLocked()
+        for client in authenticatedClients {
+            sendJSON([
+                "type": "terminalClosed",
+                "pane": pane,
+            ], to: client.id)
+            sendState(to: client.id)
         }
     }
 

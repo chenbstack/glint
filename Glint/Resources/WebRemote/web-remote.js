@@ -12,6 +12,9 @@ const translations = {
     choose_terminal_heading: "从左侧选择一个终端",
     close_new_project: "关闭新建项目",
     close_sidebar: "关闭项目与终端",
+    close_terminal: "关闭终端",
+    close_terminal_aria: "关闭 {name}",
+    close_terminal_confirm: "“{name}”中仍有程序运行。确定要关闭并终止它吗？",
     connect_glint: "连接 Glint",
     connected: "已连接",
     connecting: "正在连接",
@@ -21,6 +24,7 @@ const translations = {
     existing_directory_hint: "目录必须已经存在；不会自动 git init 或 clone。",
     invalid_project_path: "目录不存在，或不是这台 Mac 上可访问的文件夹。",
     loading_terminal: "正在载入终端",
+    last_terminal: "每个 Workspace 至少需要保留一个终端",
     mac_directory: "这台 Mac 上的目录",
     new_project: "新建项目",
     open: "打开",
@@ -38,6 +42,7 @@ const translations = {
     sync_description: "画面和输入会在浏览器与这台 Mac 上的 Glint 会话之间实时同步。",
     syncing_terminal: "正在同步终端画面…",
     terminal_count: "{count} 个终端",
+    terminal_closed: "终端已关闭",
     terminal_created: "已新建终端",
     terminal_not_ready: "终端尚未准备好",
     terminal_ready: "终端已就绪",
@@ -58,6 +63,9 @@ const translations = {
     choose_terminal_heading: "Choose a terminal from the sidebar",
     close_new_project: "Close new project",
     close_sidebar: "Close projects and terminals",
+    close_terminal: "Close terminal",
+    close_terminal_aria: "Close {name}",
+    close_terminal_confirm: "A process is still running in “{name}”. Close the terminal and terminate it?",
     connect_glint: "Connect to Glint",
     connected: "Connected",
     connecting: "Connecting",
@@ -67,6 +75,7 @@ const translations = {
     existing_directory_hint: "The directory must already exist; Glint will not run git init or clone.",
     invalid_project_path: "The directory does not exist or is not accessible on this Mac.",
     loading_terminal: "Loading terminal",
+    last_terminal: "Each workspace must keep at least one terminal",
     mac_directory: "Directory on this Mac",
     new_project: "New project",
     open: "Open",
@@ -84,6 +93,7 @@ const translations = {
     sync_description: "The browser stays in sync with this Mac's live Glint session.",
     syncing_terminal: "Syncing terminal…",
     terminal_count: "{count} terminal(s)",
+    terminal_closed: "Terminal closed",
     terminal_created: "Terminal created",
     terminal_not_ready: "Terminal is not ready",
     terminal_ready: "Terminal ready",
@@ -306,6 +316,30 @@ function handleMessage(raw) {
       setStatus("connected", t("terminal_created"));
       selectPane(message.pane);
       break;
+    case "terminalCloseConfirmation": {
+      const pane = lastState?.workspaces
+        .flatMap(workspace => workspace.panes || [])
+        .find(item => item.id === message.pane);
+      const name = pane?.title || "Terminal";
+      if (window.confirm(t("close_terminal_confirm", { name }))) {
+        send({ type: "closeTerminal", pane: message.pane, confirmed: true });
+      }
+      break;
+    }
+    case "terminalClosed":
+      if (message.pane === selectedPane) {
+        selectedPane = "";
+        controllingPane = "";
+        clearTimeout(paneRetryTimer);
+        paneRetryCount = 0;
+        sessionStorage.removeItem("glint-selected-pane");
+        terminal.reset();
+        elements.terminal.classList.remove("visible");
+        elements.emptyState.classList.remove("hidden");
+        elements.activeLabel.textContent = t("select_terminal");
+      }
+      setStatus("connected", t("terminal_closed"));
+      break;
     case "error":
       handleError(message.code);
       break;
@@ -411,6 +445,7 @@ function errorLabel(code) {
     "unknown-pane": t("unknown_pane"),
     "unknown-workspace": t("unknown_workspace"),
     "workspace-archived": t("workspace_archived"),
+    "last-terminal": t("last_terminal"),
     "terminal-not-ready": t("terminal_not_ready"),
     "selection-in-progress": t("selection_in_progress"),
     "unknown-command": t("unknown_command"),
@@ -471,6 +506,8 @@ function renderState(state) {
     const paneList = document.createElement("div");
     paneList.className = "workspace-pane-list";
     for (const pane of panes) {
+      const row = document.createElement("div");
+      row.className = "pane-row";
       const button = document.createElement("button");
       button.type = "button";
       button.className = `pane-button${pane.id === selectedPane ? " active" : ""}`;
@@ -493,7 +530,20 @@ function renderState(state) {
         badge.textContent = pane.agent;
         button.append(badge);
       }
-      paneList.append(button);
+      const closeButton = document.createElement("button");
+      closeButton.type = "button";
+      closeButton.className = "pane-close-terminal";
+      closeButton.textContent = "×";
+      closeButton.title = t("close_terminal");
+      closeButton.setAttribute(
+        "aria-label",
+        t("close_terminal_aria", { name: pane.title || "Terminal" })
+      );
+      closeButton.addEventListener("click", () => {
+        send({ type: "closeTerminal", pane: pane.id, confirmed: false });
+      });
+      row.append(button, closeButton);
+      paneList.append(row);
     }
     group.append(paneList);
     elements.workspaceList.append(group);

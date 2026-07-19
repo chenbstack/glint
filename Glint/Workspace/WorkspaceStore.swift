@@ -2902,6 +2902,48 @@ final class WorkspaceStore: ObservableObject {
         return .success("\(workspaceID.uuidString):\(pane.value)")
     }
 
+    func webRemoteCloseTerminal(
+        pane: String,
+        confirmed: Bool
+    ) -> WebRemoteCloseTerminalResult {
+        guard let key = Self.parsePaneKey(pane) else { return .failure("bad-request") }
+        guard let workspaceIndex = workspaces.firstIndex(where: { $0.id == key.workspace }),
+              workspaces[workspaceIndex].panes[key.pane] != nil,
+              let tabIndex = workspaces[workspaceIndex].tabs.firstIndex(where: {
+                  $0.root.leaves.contains(key.pane)
+              })
+        else { return .failure("unknown-pane") }
+
+        if paneNeedsCloseConfirmation(key), !confirmed {
+            return .confirmationRequired
+        }
+
+        let tab = workspaces[workspaceIndex].tabs[tabIndex]
+        if tab.root.leaves.count == 1 {
+            guard workspaces[workspaceIndex].tabs.count > 1 else {
+                return .failure("last-terminal")
+            }
+            let wasSelected = workspaces[workspaceIndex].selectedTabID == tab.id
+            teardownTab(at: tabIndex, in: workspaceIndex, wsID: key.workspace)
+            if wasSelected {
+                let nextIndex = min(tabIndex, workspaces[workspaceIndex].tabs.count - 1)
+                workspaces[workspaceIndex].selectedTabID = workspaces[workspaceIndex].tabs[nextIndex].id
+            }
+            return .success
+        }
+
+        let (newRoot, survivor) = Self.removeLeaf(tab.root, target: key.pane)
+        guard let newRoot else { return .failure("unknown-pane") }
+        workspaces[workspaceIndex].tabs[tabIndex].root = newRoot
+        teardownPane(key, in: workspaceIndex)
+        if tab.focusedPane == key.pane {
+            workspaces[workspaceIndex].tabs[tabIndex].focusedPane = survivor
+                ?? newRoot.leaves.first
+                ?? PaneID(value: 0)
+        }
+        return .success
+    }
+
     func selectWorkspace(_ id: UUID) {
         selectedWorkspaceID = id
         acknowledgeCompletionIfNeeded(for: id)
@@ -3030,15 +3072,20 @@ final class WorkspaceStore: ObservableObject {
         let panes = workspaces[i].tabs[index].root.leaves
         for pane in panes {
             let key = WorkspacePaneKey(workspace: wsID, pane: pane)
-            workspaces[i].panes.removeValue(forKey: pane)
-            surfaceViews.removeValue(forKey: key)
-            ScrollbackArchive.delete(
-                id: ScrollbackArchive.fileID(forPaneKey: "\(wsID.uuidString):\(pane.value)"))
-            paneAgentState.removeValue(forKey: key)
-            paneProcesses.removeValue(forKey: key)
-            clearDockBadge(for: key)
+            teardownPane(key, in: i)
         }
         workspaces[i].tabs.remove(at: index)
+    }
+
+    private func teardownPane(_ key: WorkspacePaneKey, in workspaceIndex: Int) {
+        workspaces[workspaceIndex].panes.removeValue(forKey: key.pane)
+        surfaceViews.removeValue(forKey: key)
+        ScrollbackArchive.delete(
+            id: ScrollbackArchive.fileID(forPaneKey: "\(key.workspace.uuidString):\(key.pane.value)"))
+        paneAgentState.removeValue(forKey: key)
+        paneProcesses.removeValue(forKey: key)
+        webRemoteControlledPanes.remove(key)
+        clearDockBadge(for: key)
     }
 
     func selectTab(_ tabID: TabID) {

@@ -212,6 +212,12 @@ input:focus {
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
+.pane-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 2px;
+}
 .pane-button {
   width: 100%;
   display: grid;
@@ -224,6 +230,24 @@ input:focus {
   color: var(--text);
   text-align: left;
   background: transparent;
+}
+.pane-close-terminal {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0;
+  color: var(--faint);
+  background: transparent;
+  font-size: 17px;
+  line-height: 1;
+}
+.pane-close-terminal:hover,
+.pane-close-terminal:focus-visible {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 .pane-button:hover { background: var(--overlay); }
 .pane-button.active {
