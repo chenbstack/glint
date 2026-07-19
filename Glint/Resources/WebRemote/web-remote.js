@@ -294,7 +294,6 @@ function websocketURL() {
 function connect() {
   clearTimeout(reconnectTimer);
   if (socket) {
-    socket.onclose = null;
     socket.close();
   }
   authenticated = false;
@@ -302,6 +301,7 @@ function connect() {
   resetSession();
   setStatus("connecting", t("connecting"));
   socket = new WebSocket(websocketURL());
+  const currentSocket = socket;
   socket.binaryType = "arraybuffer";
   socket.addEventListener("open", () => {
     reconnectDelay = 500;
@@ -318,6 +318,7 @@ function connect() {
     }
   });
   socket.addEventListener("close", () => {
+    if (socket !== currentSocket) return;
     authenticated = false;
     controllingPane = "";
     setStatus("error", t("disconnected"));
