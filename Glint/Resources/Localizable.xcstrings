@@ -421,6 +421,182 @@
         }
       }
     },
+    "Access key": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "访问密钥"
+          }
+        }
+      }
+    },
+    "Access URL": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "访问地址"
+          }
+        }
+      }
+    },
+    "Allow browser control": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许浏览器控制"
+          }
+        }
+      }
+    },
+    "Copy key": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制密钥"
+          }
+        }
+      }
+    },
+    "Copy link": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制链接"
+          }
+        }
+      }
+    },
+    "Could not start: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法启动：%@"
+          }
+        }
+      }
+    },
+    "Controlled from web": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在通过网页控制"
+          }
+        }
+      }
+    },
+    "Layout may be inaccurate while controlled. It will restore automatically after disconnecting.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "控制期间布局可能不准确，断开后会自动恢复。"
+          }
+        }
+      }
+    },
+    "Off — no network ports are bound.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已关闭 — 未监听任何网络端口。"
+          }
+        }
+      }
+    },
+    "Ready — copy a session link to another browser.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已就绪 — 可复制会话链接到其他浏览器。"
+          }
+        }
+      }
+    },
+    "Reset access key?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置访问密钥？"
+          }
+        }
+      }
+    },
+    "Reset key": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置密钥"
+          }
+        }
+      }
+    },
+    "Connected browsers will be disconnected and must use the new key.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接的浏览器将断开，并需要使用新密钥重新连接。"
+          }
+        }
+      }
+    },
+    "Serves Glint's bundled browser terminal on this Mac for trusted LAN or VPN use. The copied link or access key grants terminal input; traffic is not TLS-encrypted. Off by default, with no cloud relay or mobile app required.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在这台 Mac 上提供 Glint 内置的浏览器终端，供可信的局域网或 VPN 使用。复制的链接或访问密钥可直接输入终端；流量未使用 TLS 加密。默认关闭，无需云中继或移动 App。"
+          }
+        }
+      }
+    },
+    "Starting the local web server…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在启动本地网页服务器…"
+          }
+        }
+      }
+    },
+    "Web remote control": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页远程控制"
+          }
+        }
+      }
+    },
     "App icon": {
       "extractionState": "manual",
       "localizations": {

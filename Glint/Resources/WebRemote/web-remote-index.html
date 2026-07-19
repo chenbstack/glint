@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Glint Remote</title>
+  <link rel="stylesheet" href="/xterm.css">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <button id="sidebar-toggle" class="mobile-sidebar-button" type="button"
+                aria-controls="sidebar" aria-expanded="false" aria-label="打开项目与终端"
+                data-i18n-aria="open_sidebar">☰</button>
+        <span class="brand-mark">G</span>
+        <div>
+          <strong>Glint Remote</strong>
+          <span id="active-label" data-i18n="select_terminal">选择一个终端</span>
+        </div>
+      </div>
+      <div class="connection">
+        <span id="status-dot" class="status-dot"></span>
+        <span id="status-text" data-i18n="connecting">正在连接</span>
+        <button id="reconnect" class="ghost-button" type="button" data-i18n="reconnect">重连</button>
+      </div>
+    </header>
+
+    <div class="workspace-layout">
+      <aside id="sidebar" class="sidebar">
+        <section class="project-list-section">
+          <div class="section-heading list-heading">
+            <div>
+              <span class="eyebrow">WORKSPACES</span>
+              <h2 data-i18n="projects_and_terminals">项目与终端</h2>
+            </div>
+            <div class="list-actions">
+              <button id="create-project" class="icon-button create-project-button" type="button"
+                      aria-label="新建项目" data-i18n-aria="new_project">+</button>
+              <button id="refresh" class="icon-button" type="button" aria-label="刷新"
+                      data-i18n-aria="refresh">↻</button>
+              <button id="sidebar-close" class="icon-button mobile-sidebar-button" type="button"
+                      aria-label="关闭项目与终端" data-i18n-aria="close_sidebar">×</button>
+            </div>
+          </div>
+          <div id="workspace-list" class="workspace-list"></div>
+        </section>
+      </aside>
+      <button id="sidebar-backdrop" class="sidebar-backdrop" type="button"
+              aria-label="关闭项目与终端" data-i18n-aria="close_sidebar"></button>
+
+      <main class="terminal-panel">
+        <div id="empty-state" class="empty-state">
+          <div class="empty-icon">›_</div>
+          <h1 data-i18n="choose_terminal_heading">从左侧选择一个终端</h1>
+          <p data-i18n="sync_description">画面和输入会在浏览器与这台 Mac 上的 Glint 会话之间实时同步。</p>
+        </div>
+        <div id="terminal" aria-label="远程终端" data-i18n-aria="remote_terminal"></div>
+        <div class="quick-keys" aria-label="快捷键" data-i18n-aria="quick_keys">
+          <button type="button" data-input="1b">Esc</button>
+          <button type="button" data-input="09">Tab</button>
+          <button type="button" data-input="03">Ctrl C</button>
+          <button type="button" data-input="1b5b41">↑</button>
+          <button type="button" data-input="1b5b42">↓</button>
+          <button type="button" data-input="1b5b44">←</button>
+          <button type="button" data-input="1b5b43">→</button>
+          <button type="button" data-input="0d">Enter</button>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="create-dialog">
+    <form id="create-form">
+      <div class="dialog-heading">
+        <div>
+          <span class="eyebrow">PROJECT</span>
+          <h1 data-i18n="new_project">新建项目</h1>
+        </div>
+        <button id="create-close" class="icon-button" type="button"
+                aria-label="关闭新建项目" data-i18n-aria="close_new_project">×</button>
+      </div>
+      <label for="project-path" data-i18n="mac_directory">这台 Mac 上的目录</label>
+      <div class="path-row">
+        <input id="project-path" name="path" type="text" autocomplete="off"
+               placeholder="/Users/me/dev/project" spellcheck="false" required>
+        <button type="submit" data-i18n="open">打开</button>
+      </div>
+      <p id="create-message" class="form-message" data-i18n="existing_directory_hint">目录必须已经存在；不会自动 git init 或 clone。</p>
+    </form>
+  </dialog>
+
+  <dialog id="auth-dialog">
+    <form id="auth-form" method="dialog">
+      <span class="eyebrow">AUTHENTICATION</span>
+      <h1 data-i18n="enter_access_key">输入访问密钥</h1>
+      <p data-i18n="access_key_help">请在 Glint 设置 → Terminal → Web remote control 中单独复制访问密钥。</p>
+      <label for="token-input" data-i18n="access_key">访问密钥</label>
+      <input id="token-input" type="password" autocomplete="off" spellcheck="false" required>
+      <p id="auth-error" class="form-message error"></p>
+      <button type="submit" data-i18n="connect_glint">连接 Glint</button>
+    </form>
+  </dialog>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

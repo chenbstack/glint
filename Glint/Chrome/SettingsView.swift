@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Settings window. Split into a left category sidebar and a right
@@ -970,6 +971,7 @@ private struct ThemeBrowserRow: View {
 private struct TerminalPane: View {
     @EnvironmentObject var store: WorkspaceStore
     @State private var shellKeybindsInstallFailed = false
+    @State private var confirmingWebRemoteKeyReset = false
 
     private let scrollbackSizeChoices: [Int] = [5, 10, 25, 50, 100, 250]
         .map { $0 * 1_000_000 }
@@ -1110,6 +1112,94 @@ private struct TerminalPane: View {
                     .toggleStyle(.switch).labelsHidden()
             }
         }
+
+        SettingsCard("Web remote control",
+                     footer: "Serves Glint's bundled browser terminal on this Mac for trusted LAN or VPN use. The copied link or access key grants terminal input; traffic is not TLS-encrypted. Off by default, with no cloud relay or mobile app required.") {
+            SettingsRow("Allow browser control", subtitle: webRemoteStatusText) {
+                Toggle("", isOn: $store.webRemoteEnabled)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            if !store.webRemoteAccessURLs.isEmpty {
+                SettingsDivider()
+                SettingsRow("Access URL", subtitle: displayURL(store.webRemoteAccessURLs[0])) {
+                    if store.webRemoteAccessURLs.count == 1 {
+                        Button("Copy link") {
+                            copyWebRemoteURL(store.webRemoteAccessURLs[0])
+                        }
+                        .controlSize(.small)
+                    } else {
+                        Menu("Copy link") {
+                            ForEach(store.webRemoteAccessURLs, id: \.self) { url in
+                                Button(displayURL(url)) {
+                                    copyWebRemoteURL(url)
+                                }
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                if let key = store.webRemoteAccessKey {
+                    SettingsDivider()
+                    SettingsRow("Access key", subtitle: abbreviatedAccessKey(key)) {
+                        HStack(spacing: 8) {
+                            Button("Copy key") {
+                                copyWebRemoteValue(key)
+                            }
+                            Button("Reset key", role: .destructive) {
+                                confirmingWebRemoteKeyReset = true
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            "Reset access key?",
+            isPresented: $confirmingWebRemoteKeyReset,
+            titleVisibility: .visible
+        ) {
+            Button("Reset key", role: .destructive) {
+                store.resetWebRemoteAccessKey()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Connected browsers will be disconnected and must use the new key.")
+        }
+    }
+
+    private var webRemoteStatusText: String {
+        switch store.webRemoteStatus {
+        case .stopped:
+            return String(localized: "Off — no network ports are bound.")
+        case .starting:
+            return String(localized: "Starting the local web server…")
+        case .ready:
+            return String(localized: "Ready — copy a session link to another browser.")
+        case let .failed(message):
+            return String(
+                format: String(localized: "Could not start: %@"),
+                message
+            )
+        }
+    }
+
+    private func displayURL(_ value: String) -> String {
+        value.split(separator: "#", maxSplits: 1).first.map(String.init) ?? value
+    }
+
+    private func abbreviatedAccessKey(_ value: String) -> String {
+        guard value.count > 16 else { return value }
+        return "\(value.prefix(8))…\(value.suffix(8))"
+    }
+
+    private func copyWebRemoteURL(_ value: String) {
+        copyWebRemoteValue(value)
+    }
+
+    private func copyWebRemoteValue(_ value: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
     }
 
     private func scrollbackSizeLabel(for bytes: Int) -> String {
