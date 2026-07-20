@@ -1,6 +1,14 @@
 import SwiftUI
 import AppKit
 
+enum SurfaceReassertionPolicy {
+    static func shouldReassert(containerIsAttached: Bool,
+                               expectedSurfaceMatches: Bool,
+                               paneIsVisible: Bool) -> Bool {
+        containerIsAttached && expectedSurfaceMatches && paneIsVisible
+    }
+}
+
 /// Hosts a stable, store-owned `GhosttySurfaceView` inside a fresh container
 /// NSView. SwiftUI may rebuild the container any time the split tree reshapes;
 /// the surface itself outlives that and just re-parents.
@@ -15,6 +23,9 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     /// updateNSView re-runs ~1/s, and re-grabbing the terminal surface here
     /// races the palette's search field and yanks focus back off it.
     let deferFocus: Bool
+    /// Evaluated inside the deferred re-pin, not when SwiftUI builds the view:
+    /// workspace/tab selection may change before that callback runs.
+    let isPaneVisible: () -> Bool
 
     func makeNSView(context: Context) -> NoDragContainerView {
         let container = NoDragContainerView()
@@ -131,10 +142,15 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
         // re-parenting the surface into a container that's torn down moments
         // later, leaving the live pane blank. Containers that survive the
         // commit re-assert their claim right after it; dismantled ones are out
-        // of the window by then and bail.
+        // of the window by then and bail. A recycled container can still be in
+        // the window after a workspace/tab switch, so also verify that this
+        // surface's pane is the one currently visible.
         DispatchQueue.main.async {
-            guard container.window != nil,
-                  container.expectedSurface === surface else { return }
+            guard SurfaceReassertionPolicy.shouldReassert(
+                containerIsAttached: container.window != nil,
+                expectedSurfaceMatches: container.expectedSurface === surface,
+                paneIsVisible: isPaneVisible()
+            ) else { return }
             Self.pin(surface, in: container)
         }
     }

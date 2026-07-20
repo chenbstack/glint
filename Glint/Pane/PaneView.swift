@@ -57,7 +57,12 @@ struct PaneView: View {
             PaneSurfaceRepresentable(
                 surfaceView: store.surfaceView(workspaceID: workspaceID, paneID: paneID, cwd: cwd),
                 focused: isFocused,
-                deferFocus: store.commandPaletteOpen || store.agentChooserIntent != nil
+                deferFocus: store.commandPaletteOpen || store.agentChooserIntent != nil,
+                isPaneVisible: {
+                    guard store.selectedWorkspaceID == workspaceID,
+                          let tab = store.selectedWorkspace?.selectedTab else { return false }
+                    return tab.root.leaves.contains(paneID)
+                }
             )
             if !isFocused {
                 // Use a black wash so translucent panes stay translucent; tune
