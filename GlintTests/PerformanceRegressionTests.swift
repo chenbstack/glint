@@ -145,6 +145,19 @@ final class PerformanceRegressionTests: XCTestCase {
         ))
     }
 
+    func testDelayedSurfaceReassertRejectsPaneAfterWorkspaceSwitch() {
+        XCTAssertTrue(SurfaceReassertionPolicy.shouldReassert(
+            containerIsAttached: true,
+            expectedSurfaceMatches: true,
+            paneIsVisible: true
+        ))
+        XCTAssertFalse(SurfaceReassertionPolicy.shouldReassert(
+            containerIsAttached: true,
+            expectedSurfaceMatches: true,
+            paneIsVisible: false
+        ))
+    }
+
     func testBackgroundWorkspaceFirstResponderDoesNotPauseIdleClock() {
         XCTAssertTrue(TerminalFocusPolicy.protectsFromIdleOfflining(
             appIsActive: true,
