@@ -52,6 +52,15 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.26-beta.5",
+            en: [
+                "Fixed panes showing another workspace's terminal after a workspace or tab switch: SwiftUI-recycled pane containers could be reclaimed by the outgoing workspace's terminal surface; that stale re-attach is now blocked."
+            ],
+            zh: [
+                "修复切换 workspace 或标签页后，窗格可能显示另一个 workspace 终端内容的问题：被 SwiftUI 复用的窗格容器可能被切走的 workspace 的终端 surface 重新占用，现已拦截这类过期的重新挂载。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.26-beta.4",
             en: [
                 "Grok Build joins the built-in agent lineup: live status in the sidebar and tabs, one-click hook install in Settings → Agents, and per-pane session restore on relaunch.",
