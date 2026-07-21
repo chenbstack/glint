@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Settings window. Split into a left category sidebar and a right
@@ -968,8 +969,22 @@ private struct ThemeBrowserRow: View {
 }
 
 private struct TerminalPane: View {
+    private struct WebRemoteAlert: Identifiable {
+        enum Kind {
+            case failure(String)
+            case portConflict(UInt16)
+            case resetComplete(UInt16)
+        }
+
+        let id = UUID()
+        let kind: Kind
+    }
+
     @EnvironmentObject var store: WorkspaceStore
     @State private var shellKeybindsInstallFailed = false
+    @State private var confirmingWebRemoteKeyReset = false
+    @State private var resettingWebRemoteCredentials = false
+    @State private var webRemoteAlert: WebRemoteAlert?
 
     private let scrollbackSizeChoices: [Int] = [5, 10, 25, 50, 100, 250]
         .map { $0 * 1_000_000 }
@@ -1110,6 +1125,218 @@ private struct TerminalPane: View {
                     .toggleStyle(.switch).labelsHidden()
             }
         }
+
+        SettingsCard("Web remote control",
+                     footer: "Serves Glint's bundled browser terminal on this Mac for trusted LAN or VPN use. The copied link or access key grants terminal input; traffic is not TLS-encrypted. Off by default.") {
+            SettingsRow("Allow browser control", subtitle: webRemoteStatusText) {
+                Toggle("", isOn: $store.webRemoteEnabled)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            if store.webRemoteEnabled {
+                SettingsDivider()
+                SettingsRow("Listen on", subtitle: webRemoteListenSubtitle) {
+                    HStack(spacing: 6) {
+                        Picker("Listen on", selection: $store.webRemoteListenInterface) {
+                            Text("Localhost only").tag(WebRemoteListenTarget.loopback)
+                            ForEach(store.webRemoteInterfaceOptions) { iface in
+                                Text(verbatim: "\(iface.name) (\(iface.address))").tag(iface.name)
+                            }
+                            Text("All interfaces (less secure)").tag(WebRemoteListenTarget.any)
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        Button(action: { store.refreshWebRemoteInterfaces() }) {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Refresh interfaces")
+                    }
+                }
+                if case let .portConflict(port) = store.webRemoteStatus {
+                    SettingsDivider()
+                    SettingsRow(
+                        "Port conflict",
+                        subtitle: String(
+                            format: String(localized: "Port %d is already in use."),
+                            Int(port)
+                        )
+                    ) {
+                        Button("Reset key and ports", role: .destructive) {
+                            resetWebRemoteCredentials()
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            }
+            if !store.webRemoteAccessURLs.isEmpty {
+                SettingsDivider()
+                SettingsRow("Access URL", subtitle: displayURL(store.webRemoteAccessURLs[0])) {
+                    if store.webRemoteAccessURLs.count == 1 {
+                        Button("Copy link") {
+                            copyWebRemoteURL(store.webRemoteAccessURLs[0])
+                        }
+                        .controlSize(.small)
+                    } else {
+                        Menu("Copy link") {
+                            ForEach(store.webRemoteAccessURLs, id: \.self) { url in
+                                Button(displayURL(url)) {
+                                    copyWebRemoteURL(url)
+                                }
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                if let key = store.webRemoteAccessKey {
+                    SettingsDivider()
+                    SettingsRow("Access key", subtitle: abbreviatedAccessKey(key)) {
+                        HStack(spacing: 8) {
+                            Button("Copy key") {
+                                copyWebRemoteValue(key)
+                            }
+                            Button("Reset key and ports", role: .destructive) {
+                                confirmingWebRemoteKeyReset = true
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            "Reset access key and ports?",
+            isPresented: $confirmingWebRemoteKeyReset,
+            titleVisibility: .visible
+        ) {
+            Button("Reset key and ports", role: .destructive) {
+                resetWebRemoteCredentials()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Connected browsers will be disconnected. A new key and ports will be generated, so old links will stop working.")
+        }
+        .onAppear {
+            presentWebRemoteAlert(for: store.webRemoteStatus)
+        }
+        .onChange(of: store.webRemoteStatus) { _, status in
+            presentWebRemoteAlert(for: status)
+        }
+        .alert(item: $webRemoteAlert) { alert in
+            switch alert.kind {
+            case let .failure(message):
+                return Alert(
+                    title: Text("Web remote control unavailable"),
+                    message: Text(message),
+                    dismissButton: .default(Text("OK"))
+                )
+            case let .portConflict(port):
+                return Alert(
+                    title: Text("Web remote port conflict"),
+                    message: Text(
+                        String(
+                            format: String(localized: "Port %d is already in use. Resetting will generate a new key and ports, disconnect browsers, and invalidate old links."),
+                            Int(port)
+                        )
+                    ),
+                    primaryButton: .destructive(Text("Reset key and ports")) {
+                        resetWebRemoteCredentials()
+                    },
+                    secondaryButton: .cancel()
+                )
+            case let .resetComplete(port):
+                return Alert(
+                    title: Text("Access key and ports reset"),
+                    message: Text(
+                        String(
+                            format: String(localized: "New ports: %d (web) and %d (terminal). Copy the new link and key to reconnect."),
+                            Int(port), Int(port) + 1
+                        )
+                    ),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+        }
+    }
+
+    private var webRemoteStatusText: String {
+        switch store.webRemoteStatus {
+        case .stopped:
+            return String(localized: "Off — no network ports are bound.")
+        case .starting:
+            return String(localized: "Starting the local web server…")
+        case .ready:
+            return String(localized: "Ready — copy a session link to another browser.")
+        case let .portConflict(port):
+            return String(
+                format: String(localized: "Port %d is already in use."),
+                Int(port)
+            )
+        case let .failed(message):
+            return String(
+                format: String(localized: "Could not start: %@"),
+                message
+            )
+        }
+    }
+
+    private func resetWebRemoteCredentials() {
+        resettingWebRemoteCredentials = true
+        store.resetWebRemoteCredentials()
+    }
+
+    private func presentWebRemoteAlert(for status: WebRemoteStatus) {
+        switch status {
+        case let .portConflict(port):
+            resettingWebRemoteCredentials = false
+            webRemoteAlert = WebRemoteAlert(kind: .portConflict(port))
+        case let .failed(message):
+            resettingWebRemoteCredentials = false
+            webRemoteAlert = WebRemoteAlert(kind: .failure(message))
+        case let .ready(urls) where resettingWebRemoteCredentials:
+            resettingWebRemoteCredentials = false
+            guard let url = urls.first,
+                  let port = URLComponents(string: url)?.port,
+                  let httpPort = UInt16(exactly: port)
+            else { return }
+            webRemoteAlert = WebRemoteAlert(kind: .resetComplete(httpPort))
+        default:
+            break
+        }
+    }
+
+    private var webRemoteListenSubtitle: String {
+        switch store.webRemoteListenInterface {
+        case WebRemoteListenTarget.loopback:
+            return String(localized: "Only this Mac (127.0.0.1) can connect.")
+        case WebRemoteListenTarget.any:
+            return String(localized: "Reachable from any network this Mac joins (least secure).")
+        default:
+            if let iface = store.webRemoteInterfaceOptions.first(where: { $0.name == store.webRemoteListenInterface }) {
+                return iface.address
+            }
+            return String(localized: "Selected interface is no longer available. Pick another or use All interfaces.")
+        }
+    }
+
+    private func displayURL(_ value: String) -> String {
+        WebRemoteAccessURL.redacted(from: value)
+    }
+
+    private func abbreviatedAccessKey(_ value: String) -> String {
+        guard value.count > 16 else { return value }
+        return "\(value.prefix(8))…\(value.suffix(8))"
+    }
+
+    private func copyWebRemoteURL(_ value: String) {
+        // Strip the #token= fragment so the secret isn't written to the
+        // clipboard alongside the address. The key is copied separately via
+        // the "Access key" row.
+        copyWebRemoteValue(WebRemoteAccessURL.redacted(from: value))
+    }
+
+    private func copyWebRemoteValue(_ value: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
     }
 
     private func scrollbackSizeLabel(for bytes: Int) -> String {

@@ -421,6 +421,259 @@
         }
       }
     },
+    "Access key": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "访问密钥"
+          }
+        }
+      }
+    },
+    "Access URL": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "访问地址"
+          }
+        }
+      }
+    },
+    "Allow browser control": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许浏览器控制"
+          }
+        }
+      }
+    },
+    "Copy key": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制密钥"
+          }
+        }
+      }
+    },
+    "Copy link": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制链接"
+          }
+        }
+      }
+    },
+    "Could not start: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法启动：%@"
+          }
+        }
+      }
+    },
+    "Access key and ports reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "访问密钥和端口已重置"
+          }
+        }
+      }
+    },
+    "New ports: %d (web) and %d (terminal). Copy the new link and key to reconnect.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新端口：%d（网页）和 %d（终端）。请复制新链接和密钥重新连接。"
+          }
+        }
+      }
+    },
+    "Port %d is already in use.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端口 %d 已被占用。"
+          }
+        }
+      }
+    },
+    "Port %d is already in use. Resetting will generate a new key and ports, disconnect browsers, and invalidate old links.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端口 %d 已被占用。重置会生成新密钥和端口、断开浏览器，并使旧链接失效。"
+          }
+        }
+      }
+    },
+    "Port conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端口冲突"
+          }
+        }
+      }
+    },
+    "Web remote control unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页远程控制不可用"
+          }
+        }
+      }
+    },
+    "Web remote port conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页远程控制端口冲突"
+          }
+        }
+      }
+    },
+    "Controlled from web": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在通过网页控制"
+          }
+        }
+      }
+    },
+    "Layout may be inaccurate while controlled. It will restore automatically after disconnecting.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "控制期间布局可能不准确，断开后会自动恢复。"
+          }
+        }
+      }
+    },
+    "Off — no network ports are bound.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已关闭 — 未监听任何网络端口。"
+          }
+        }
+      }
+    },
+    "Ready — copy a session link to another browser.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已就绪 — 可复制会话链接到其他浏览器。"
+          }
+        }
+      }
+    },
+    "Reset access key and ports?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置访问密钥和端口？"
+          }
+        }
+      }
+    },
+    "Reset key and ports": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置密钥和端口"
+          }
+        }
+      }
+    },
+    "Connected browsers will be disconnected. A new key and ports will be generated, so old links will stop working.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接的浏览器将断开。系统会生成新密钥和端口，旧链接将失效。"
+          }
+        }
+      }
+    },
+    "Serves Glint's bundled browser terminal on this Mac for trusted LAN or VPN use. The copied link or access key grants terminal input; traffic is not TLS-encrypted. Off by default.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在这台 Mac 上提供 Glint 内置的浏览器终端，供可信的局域网或 VPN 使用。复制的链接或访问密钥可直接输入终端；流量未使用 TLS 加密。默认关闭。"
+          }
+        }
+      }
+    },
+    "Starting the local web server…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在启动本地网页服务器…"
+          }
+        }
+      }
+    },
+    "Web remote control": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页远程控制"
+          }
+        }
+      }
+    },
     "App icon": {
       "extractionState": "manual",
       "localizations": {
@@ -5456,6 +5709,83 @@
           "stringUnit": {
             "state": "translated",
             "value": "Glint 会写入 ~/.grok/hooks/glint.json，使 Grok Build 会话上报思考、工具调用，以及 ask_user_question（待回复）。使用独立文件（而非 Claude 的 settings），因此 Grok 会话会正确归到 Grok。在 Grok 下 reporter 会忽略 Claude 兼容 hooks 的双触发（存在 GROK_SESSION_ID 时）。"
+          }
+        }
+      }
+    },
+    "Listen on": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "监听网卡"
+          }
+        }
+      }
+    },
+    "Localhost only": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅本机"
+          }
+        }
+      }
+    },
+    "Only this Mac (127.0.0.1) can connect.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅本机（127.0.0.1）可连接。"
+          }
+        }
+      }
+    },
+    "Reachable from any network this Mac joins (least secure).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本机加入的任何网络均可访问（最不安全）。"
+          }
+        }
+      }
+    },
+    "All interfaces (less secure)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部网卡（较不安全）"
+          }
+        }
+      }
+    },
+    "Refresh interfaces": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新网卡列表"
+          }
+        }
+      }
+    },
+    "Selected interface is no longer available. Pick another or use All interfaces.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所选网卡已不可用。请另选一个或使用“全部网卡”。"
           }
         }
       }

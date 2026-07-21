@@ -938,6 +938,7 @@ final class WorkspaceStore: ObservableObject {
         didSet {
             UserDefaults.standard.set(accentName, forKey: "glint.accentName")
             GhosttyManager.shared.reloadConfig()
+            WebRemoteServer.shared.refreshAppearance()
         }
     }
 
@@ -952,6 +953,7 @@ final class WorkspaceStore: ObservableObject {
             GhosttyManager.shared.reloadConfig()
             GhosttyManager.shared.syncWindowAppearance()   // 浅/暗主题 → 玻璃材质跟随
             themeRevision &+= 1
+            WebRemoteServer.shared.refreshAppearance()
         }
     }
 
@@ -968,6 +970,7 @@ final class WorkspaceStore: ObservableObject {
         GhosttyManager.shared.reloadConfig()
         GhosttyManager.shared.syncWindowAppearance()
         themeRevision &+= 1
+        WebRemoteServer.shared.refreshAppearance()
     }
 
     // MARK: 透明度与模糊
@@ -1022,6 +1025,7 @@ final class WorkspaceStore: ObservableObject {
         didSet {
             UserDefaults.standard.set(appIconPreset.rawValue, forKey: "glint.appIconPreset")
             applyAppIcon()
+            WebRemoteServer.shared.refreshAppearance()
         }
     }
 
@@ -1118,6 +1122,55 @@ final class WorkspaceStore: ObservableObject {
             if externalControlEnabled { ControlBridge.shared.start() }
             else { ControlBridge.shared.stop() }
         }
+    }
+
+    @Published var webRemoteEnabled: Bool = (UserDefaults.standard.object(forKey: "glint.webRemoteEnabled") as? Bool) ?? false {
+        didSet {
+            UserDefaults.standard.set(webRemoteEnabled, forKey: "glint.webRemoteEnabled")
+            if webRemoteEnabled { WebRemoteServer.shared.start() }
+            else { WebRemoteServer.shared.stop() }
+        }
+    }
+
+    /// Which local address the web remote binds: `loopback`, `any`, or an
+    /// interface name (e.g. `en0`). Defaults to loopback — the safest choice;
+    /// users who want LAN access pick a NIC or "All interfaces" explicitly.
+    @Published var webRemoteListenInterface: String = {
+        let key = "glint.webRemoteListenInterface"
+        let stored = UserDefaults.standard.string(forKey: key)
+        return stored?.isEmpty == false ? stored! : WebRemoteListenTarget.loopback
+    }() {
+        didSet {
+            guard oldValue != webRemoteListenInterface else { return }
+            UserDefaults.standard.set(webRemoteListenInterface, forKey: "glint.webRemoteListenInterface")
+            WebRemoteServer.shared.setListenInterface(webRemoteListenInterface)
+            if webRemoteEnabled { WebRemoteServer.shared.start() }
+        }
+    }
+
+    /// Bind targets currently available on this Mac, for the "Listen on" menu.
+    /// Snapshotted at init; call `refreshWebRemoteInterfaces()` to rescan after
+    /// networks change (e.g. joining a different Wi-Fi).
+    @Published private(set) var webRemoteInterfaceOptions: [WebRemoteInterface] = WebRemoteAddressResolver.interfaces()
+
+    func refreshWebRemoteInterfaces() {
+        webRemoteInterfaceOptions = WebRemoteAddressResolver.interfaces()
+    }
+
+    @Published private(set) var webRemoteStatus: WebRemoteStatus = .stopped
+    @Published private var webRemoteControlledPanes = Set<WorkspacePaneKey>()
+
+    var webRemoteAccessURLs: [String] {
+        guard case let .ready(urls) = webRemoteStatus else { return [] }
+        return urls
+    }
+
+    var webRemoteAccessKey: String? {
+        webRemoteAccessURLs.first.flatMap(WebRemoteAccessURL.token(from:))
+    }
+
+    func resetWebRemoteCredentials() {
+        WebRemoteServer.shared.resetCredentials()
     }
 
     /// Whether the sidebar's "Archived" section is currently expanded.
@@ -1707,6 +1760,12 @@ final class WorkspaceStore: ObservableObject {
         // docs/external-pane-control.md. Toggling it later is live.
         if externalControlEnabled { ControlBridge.shared.start() }
         else { ControlBridge.shared.reapStale() }
+        WebRemoteServer.shared.setStatusHandler { [weak self] status in
+            self?.webRemoteStatus = status
+        }
+        WebRemoteServer.shared.setListenInterface(webRemoteListenInterface)
+        if webRemoteEnabled { WebRemoteServer.shared.start() }
+        else { WebRemoteServer.shared.stop() }
         Self.autoInstallAgentHooksOnFirstLaunch(socketPath: AgentBridge.shared.socketPath)
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
@@ -1770,6 +1829,7 @@ final class WorkspaceStore: ObservableObject {
         guard freeIdleTerminalsEnabled else { return }
         let timeout = TimeInterval(idleTerminalTimeoutSeconds)
         for (key, view) in surfaceViews {
+            guard !webRemoteControlledPanes.contains(key) else { continue }
             view.takeOfflineIfEligible(
                 enabled: true,
                 timeout: timeout,
@@ -2721,7 +2781,7 @@ final class WorkspaceStore: ObservableObject {
         return nil
     }
 
-    func controlFocus(pane: String) -> String? {
+    func controlFocus(pane: String, activateApp: Bool = true) -> String? {
         guard let key = Self.parsePaneKey(pane) else { return "bad-request" }
         guard let wsIdx = workspaces.firstIndex(where: { $0.id == key.workspace }),
               workspaces[wsIdx].panes[key.pane] != nil,
@@ -2736,8 +2796,175 @@ final class WorkspaceStore: ObservableObject {
                 workspaces[i].tabs[t].focusedPane = key.pane
             }
         }
-        NSApp.activate(ignoringOtherApps: true)
+        if activateApp {
+            NSApp.activate(ignoringOtherApps: true)
+        }
         return nil
+    }
+
+    func webRemoteWorkspacePayload() -> [[String: Any]] {
+        workspaces.map { workspace in
+            let focusedPane = workspace.selectedTab?.focusedPane
+            let panes: [[String: Any]] = workspace.panes.values
+                .sorted { $0.id.value < $1.id.value }
+                .map { pane in
+                    let key = WorkspacePaneKey(workspace: workspace.id, pane: pane.id)
+                    var value: [String: Any] = [
+                        "id": "\(workspace.id.uuidString):\(pane.id.value)",
+                        "title": pane.title,
+                        "ready": surfaceViews[key]?.hasLiveSurface ?? false,
+                        "selected": workspace.id == selectedWorkspaceID && pane.id == focusedPane,
+                    ]
+                    if let cwd = pane.workingDirectory { value["cwd"] = cwd }
+                    if let state = paneAgentState[key] { value["agent"] = state.status.rawValue }
+                    return value
+                }
+            return [
+                "id": workspace.id.uuidString,
+                "name": workspace.displayName,
+                "accent": workspace.accentHex,
+                "archived": workspace.archived,
+                "selected": workspace.id == selectedWorkspaceID,
+                "panes": panes,
+            ]
+        }
+    }
+
+    func webRemoteThemePayload() -> [String: Any] {
+        let theme = Theme.current
+        let accentColor = accent
+        return [
+            "id": theme.id,
+            "dark": theme.isDark,
+            "background": "#\(theme.background.rgbHex)",
+            "foreground": "#\(theme.foreground.rgbHex)",
+            "cursor": "#\(accentColor.rgbHex)",
+            "selectionBackground": "#\(accentColor.rgbHex)",
+            "selectionForeground": "#\(theme.foreground.rgbHex)",
+            "palette": theme.palette.map { "#\($0.rgbHex)" },
+            "chrome": [
+                "window": "#\(theme.bgWindow.rgbHex)",
+                "pane": "#\(theme.bgPane.rgbHex)",
+                "sidebar": "#\(theme.bgSidebar.rgbHex)",
+                "text1": "#\(theme.text1.rgbHex)",
+                "text3": "#\(theme.text3.rgbHex)",
+                "text4": "#\(theme.text4.rgbHex)",
+                "accent": "#\(accentColor.rgbHex)",
+            ],
+        ]
+    }
+
+    func webRemoteBrandPayload() -> [String: Any]? {
+        guard let dataURL = WebRemoteBrandIcon.dataURL(for: appIconPreset) else { return nil }
+        return [
+            "preset": appIconPreset.rawValue,
+            "dataURL": dataURL,
+        ]
+    }
+
+    func webRemoteTerminalSnapshot(pane: String) -> WebRemoteTerminalSnapshotResult {
+        guard let key = Self.parsePaneKey(pane) else { return .failure("bad-request") }
+        guard paneExists(key) else { return .failure("unknown-pane") }
+        guard let view = surfaceViews[key], view.ensureLiveForWebRemoteControl() else {
+            return .failure("pane-not-ready")
+        }
+        webRemoteControlledPanes.insert(key)
+        guard let snapshot = view.webRemoteSnapshot() else { return .failure("pane-not-ready") }
+        return .success(snapshot)
+    }
+
+    func webRemoteSetTerminalSize(pane: String, size: WebRemoteTerminalSize) -> String? {
+        guard let key = Self.parsePaneKey(pane) else { return "bad-request" }
+        guard paneExists(key) else { return "unknown-pane" }
+        guard let view = surfaceViews[key], view.hasLiveSurface else { return "pane-not-ready" }
+        view.setWebRemoteGridSize(size)
+        webRemoteControlledPanes.insert(key)
+        return nil
+    }
+
+    func webRemoteReleaseTerminalSize(pane: String) {
+        guard let key = Self.parsePaneKey(pane) else { return }
+        webRemoteControlledPanes.remove(key)
+        surfaceViews[key]?.releaseWebRemoteGridSize()
+    }
+
+    func isWebRemoteControlled(workspaceID: UUID, paneID: PaneID) -> Bool {
+        webRemoteControlledPanes.contains(
+            WorkspacePaneKey(workspace: workspaceID, pane: paneID)
+        )
+    }
+
+    func webRemoteSendInput(pane: String, data: Data) -> String? {
+        guard let key = Self.parsePaneKey(pane) else { return "bad-request" }
+        guard paneExists(key) else { return "unknown-pane" }
+        guard let view = surfaceViews[key], view.hasLiveSurface else { return "pane-not-ready" }
+        view.injectRemoteInput(data)
+        return nil
+    }
+
+    func webRemoteOpenProject(path: String) -> WebRemoteOpenProjectResult {
+        guard let standardized = WebRemoteProjectPath.resolveExistingDirectory(path) else {
+            return .failure("invalid-project-path")
+        }
+        return .success(openFolderWorkspace(standardized, addTabIfExisting: false))
+    }
+
+    func webRemoteCreateTerminal(workspace workspaceID: UUID) -> WebRemoteCreateTerminalResult {
+        guard let index = workspaces.firstIndex(where: { $0.id == workspaceID }) else {
+            return .failure("unknown-workspace")
+        }
+        guard !workspaces[index].archived else {
+            return .failure("workspace-archived")
+        }
+
+        selectWorkspace(workspaceID)
+        newTab()
+        guard let pane = workspaces[index].selectedTab?.focusedPane else {
+            return .failure("terminal-not-ready")
+        }
+        return .success("\(workspaceID.uuidString):\(pane.value)")
+    }
+
+    func webRemoteCloseTerminal(
+        pane: String,
+        confirmed: Bool
+    ) -> WebRemoteCloseTerminalResult {
+        guard let key = Self.parsePaneKey(pane) else { return .failure("bad-request") }
+        guard let workspaceIndex = workspaces.firstIndex(where: { $0.id == key.workspace }),
+              workspaces[workspaceIndex].panes[key.pane] != nil,
+              let tabIndex = workspaces[workspaceIndex].tabs.firstIndex(where: {
+                  $0.root.leaves.contains(key.pane)
+              })
+        else { return .failure("unknown-pane") }
+
+        if paneNeedsCloseConfirmation(key), !confirmed {
+            return .confirmationRequired
+        }
+
+        let tab = workspaces[workspaceIndex].tabs[tabIndex]
+        if tab.root.leaves.count == 1 {
+            guard workspaces[workspaceIndex].tabs.count > 1 else {
+                return .failure("last-terminal")
+            }
+            let wasSelected = workspaces[workspaceIndex].selectedTabID == tab.id
+            teardownTab(at: tabIndex, in: workspaceIndex, wsID: key.workspace)
+            if wasSelected {
+                let nextIndex = min(tabIndex, workspaces[workspaceIndex].tabs.count - 1)
+                workspaces[workspaceIndex].selectedTabID = workspaces[workspaceIndex].tabs[nextIndex].id
+            }
+            return .success
+        }
+
+        let (newRoot, survivor) = Self.removeLeaf(tab.root, target: key.pane)
+        guard let newRoot else { return .failure("unknown-pane") }
+        workspaces[workspaceIndex].tabs[tabIndex].root = newRoot
+        teardownPane(key, in: workspaceIndex)
+        if tab.focusedPane == key.pane {
+            workspaces[workspaceIndex].tabs[tabIndex].focusedPane = survivor
+                ?? newRoot.leaves.first
+                ?? PaneID(value: 0)
+        }
+        return .success
     }
 
     func selectWorkspace(_ id: UUID) {
@@ -2868,15 +3095,20 @@ final class WorkspaceStore: ObservableObject {
         let panes = workspaces[i].tabs[index].root.leaves
         for pane in panes {
             let key = WorkspacePaneKey(workspace: wsID, pane: pane)
-            workspaces[i].panes.removeValue(forKey: pane)
-            surfaceViews.removeValue(forKey: key)
-            ScrollbackArchive.delete(
-                id: ScrollbackArchive.fileID(forPaneKey: "\(wsID.uuidString):\(pane.value)"))
-            paneAgentState.removeValue(forKey: key)
-            paneProcesses.removeValue(forKey: key)
-            clearDockBadge(for: key)
+            teardownPane(key, in: i)
         }
         workspaces[i].tabs.remove(at: index)
+    }
+
+    private func teardownPane(_ key: WorkspacePaneKey, in workspaceIndex: Int) {
+        workspaces[workspaceIndex].panes.removeValue(forKey: key.pane)
+        surfaceViews.removeValue(forKey: key)
+        ScrollbackArchive.delete(
+            id: ScrollbackArchive.fileID(forPaneKey: "\(key.workspace.uuidString):\(key.pane.value)"))
+        paneAgentState.removeValue(forKey: key)
+        paneProcesses.removeValue(forKey: key)
+        webRemoteControlledPanes.remove(key)
+        clearDockBadge(for: key)
     }
 
     func selectTab(_ tabID: TabID) {
@@ -3121,11 +3353,17 @@ final class WorkspaceStore: ObservableObject {
     /// dedupes instead of racing into a duplicate; the source is upgraded to
     /// `.localRepo` in place once git reports the repo root.
     private func openFolder(_ directory: String) {
+        openFolderWorkspace(directory, addTabIfExisting: true)
+    }
+
+    @discardableResult
+    private func openFolderWorkspace(_ directory: String, addTabIfExisting: Bool) -> UUID {
         if let existingIndex = workspaces.firstIndex(where: { isAnchoredAt($0, directory) }) {
             if workspaces[existingIndex].archived { workspaces[existingIndex].archived = false }
-            selectWorkspace(workspaces[existingIndex].id)
-            newTab(cwd: directory)
-            return
+            let workspaceID = workspaces[existingIndex].id
+            selectWorkspace(workspaceID)
+            if addTabIfExisting { newTab(cwd: directory) }
+            return workspaceID
         }
         let dirName = (directory as NSString).lastPathComponent
         let wsID = appendWorkspace(cwd: directory, source: .plain,
@@ -3137,6 +3375,7 @@ final class WorkspaceStore: ObservableObject {
             }
             await refreshGitStatus(for: wsID)
         }
+        return wsID
     }
 
     /// True if `ws` opens into `directory` — for deduping folder opens. Matches
@@ -3930,6 +4169,17 @@ enum AppIconPreset: String, CaseIterable, Identifiable {
         case .ember: return "余烬"
         case .graphite: return "石墨"
         }
+    }
+}
+
+enum WebRemoteBrandIcon {
+    static func dataURL(for preset: AppIconPreset) -> String? {
+        guard let image = NSImage(named: preset.headerLogoAsset),
+              let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:])
+        else { return nil }
+        return "data:image/png;base64,\(png.base64EncodedString())"
     }
 }
 

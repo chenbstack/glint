@@ -176,7 +176,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     deinit {
-        if let s = surface { ghostty_surface_free(s) }
+        if let s = surface {
+            ghostty_surface_set_pty_tee_v2_cb(s, nil, nil)
+            ghostty_surface_free(s)
+        }
     }
 
     /// One-shot: a kept-alive surface was re-attached to a window, so the next
@@ -185,6 +188,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// occlusion transition, neither of which a same-size workspace switch-back
     /// produces. Cleared the moment that forced frame is drawn.
     private var pendingVisibleRedraw = false
+    /// While a browser controls this pane, size the PTY grid for the browser
+    /// instead of the narrower AppKit pane. Releasing control restores bounds.
+    private var webRemoteGridSize: WebRemoteTerminalSize?
 
     /// Opt-in tracing for the blank-pane-on-switch investigation. Launch the dev
     /// build with `GLINT_LOG_VISIBLE=1` to see attach / forced-redraw events.
@@ -405,6 +411,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             return
         }
         self.surface = s
+        ghostty_surface_set_pty_tee_v2_cb(
+            s,
+            webRemotePTYTeeCallback,
+            Unmanaged.passUnretained(self).toOpaque()
+        )
         focusUpdateGate.reset()
         pendingInitialInput = nil
         isTakenOffline = false
@@ -552,11 +563,36 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             let cell_width: Int
             let text: String
         }
+        struct Cursor: Decodable {
+            let row: Int
+            let column: Int
+            let visible: Bool
+            let style: String
+            let blinking: Bool
+        }
+        struct Mode: Decodable {
+            let code: Int
+            let ansi: Bool
+            let on: Bool
+        }
+        struct ScrollingRegion: Decodable {
+            let top: Int
+            let bottom: Int
+            let left: Int
+            let right: Int
+        }
+        let columns: Int?
         let styles: [Style]
         let row_spans: [Span]
         let scrollback_spans: [Span]
         let scrollback_rows: Int
         let rows: Int
+        let cursor: Cursor?
+        let active_screen: String?
+        let modes: [Mode]?
+        let scrolling_region: ScrollingRegion?
+        let pty_output_seq: UInt64?
+        let pty_stream_safe: Bool?
         // Per-row soft-wrap flags (true = row continues into the next). Optional
         // so snapshots written before this field still decode.
         let row_wraps: [Bool]?
@@ -736,6 +772,51 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         return text.isEmpty ? nil : text
     }
 
+    static func webRemoteSnapshotPayload(fromRenderGrid data: Data, maxLines: Int) -> Data? {
+        guard let grid = try? JSONDecoder().decode(RenderGrid.self, from: data) else { return nil }
+        let ansi = reconstructANSI(fromRenderGrid: data, maxLines: maxLines)
+        guard let columns = grid.columns,
+              let cursor = grid.cursor,
+              let activeScreen = grid.active_screen.flatMap(WebRemoteTerminalState.Screen.init(rawValue:)),
+              let modes = grid.modes
+        else { return WebRemoteSnapshotPayload.make(ansi: ansi) }
+
+        let scrollingRegion = grid.scrolling_region.map {
+            WebRemoteTerminalState.ScrollingRegion(
+                top: $0.top,
+                bottom: $0.bottom,
+                left: $0.left,
+                right: $0.right
+            )
+        }
+        let state = WebRemoteTerminalState(
+            columns: columns,
+            rows: grid.rows,
+            activeScreen: activeScreen,
+            modes: modes.map {
+                WebRemoteTerminalState.Mode(code: $0.code, ansi: $0.ansi, on: $0.on)
+            },
+            scrollingRegion: scrollingRegion,
+            cursor: WebRemoteTerminalState.Cursor(
+                row: cursor.row,
+                column: cursor.column,
+                visible: cursor.visible,
+                style: WebRemoteTerminalState.Cursor.Style(rawValue: cursor.style) ?? .block,
+                blinking: cursor.blinking
+            )
+        )
+        return WebRemoteSnapshotPayload.make(ansi: ansi, state: state)
+    }
+
+    static func webRemoteSnapshot(fromRenderGrid data: Data, maxLines: Int) -> WebRemoteTerminalSnapshot? {
+        guard let grid = try? JSONDecoder().decode(RenderGrid.self, from: data),
+              grid.pty_stream_safe == true,
+              let outputSequence = grid.pty_output_seq,
+              let payload = webRemoteSnapshotPayload(fromRenderGrid: data, maxLines: maxLines)
+        else { return nil }
+        return WebRemoteTerminalSnapshot(payload: payload, outputSequence: outputSequence)
+    }
+
     // MARK: - surface creation failure UI
 
     /// Centered "Terminal failed to start" + Retry, shown when ghostty
@@ -908,6 +989,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             ScrollbackArchive.drain()
         }
 
+        ghostty_surface_set_pty_tee_v2_cb(s, nil, nil)
         surface = nil
         ghostty_surface_free(s)
         pendingVisibleRedraw = false
@@ -1029,6 +1111,13 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         pushOcclusionToGhostty()
         pendingVisibleRedraw = true
         syncSurfaceSize(pointsSize: bounds.size)
+        return true
+    }
+
+    @discardableResult
+    func ensureLiveForWebRemoteControl() -> Bool {
+        guard ensureLiveSurface() else { return false }
+        inactiveSince = nil
         return true
     }
 
@@ -1353,6 +1442,26 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         let pixelHeight = floor(pointsSize.height * scale)
         guard pixelWidth > 0, pixelHeight > 0 else { return }
 
+        var targetWidth = UInt32(pixelWidth)
+        var targetHeight = UInt32(pixelHeight)
+        if let remoteSize = webRemoteGridSize {
+            let current = ghostty_surface_size(s)
+            let cellWidth = Int(current.cell_width_px)
+            let cellHeight = Int(current.cell_height_px)
+            if cellWidth > 0, cellHeight > 0 {
+                let horizontalRemainder = max(
+                    0,
+                    Int(current.width_px) - Int(current.columns) * cellWidth
+                )
+                let verticalRemainder = max(
+                    0,
+                    Int(current.height_px) - Int(current.rows) * cellHeight
+                )
+                targetWidth = UInt32(remoteSize.columns * cellWidth + horizontalRemainder)
+                targetHeight = UInt32(remoteSize.rows * cellHeight + verticalRemainder)
+            }
+        }
+
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         // ghostty's IOSurfaceLayer only learns the scale at surface creation;
@@ -1360,7 +1469,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // at the right DPI. It reads layer.contentsScale when sizing frames.
         layer?.contentsScale = scale
         ghostty_surface_set_content_scale(s, scale, scale)
-        ghostty_surface_set_size(s, UInt32(pixelWidth), UInt32(pixelHeight))
+        ghostty_surface_set_size(s, targetWidth, targetHeight)
         CATransaction.commit()
 
         // Echo restored history only once the surface width has SETTLED. The
@@ -2162,6 +2271,51 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         }
     }
 
+    func setWebRemoteGridSize(_ size: WebRemoteTerminalSize) {
+        guard surface != nil, webRemoteGridSize != size else { return }
+        webRemoteGridSize = size
+        syncSurfaceSize(pointsSize: bounds.size)
+    }
+
+    func releaseWebRemoteGridSize() {
+        guard webRemoteGridSize != nil else { return }
+        webRemoteGridSize = nil
+        syncSurfaceSize(pointsSize: bounds.size)
+    }
+
+    func injectRemoteInput(_ data: Data) {
+        guard let s = surface, !data.isEmpty else { return }
+        noteUserInputForIdleTracking()
+        data.withUnsafeBytes { raw in
+            guard let bytes = raw.bindMemory(to: CChar.self).baseAddress else { return }
+            ghostty_surface_text_input(s, bytes, UInt(data.count))
+        }
+        markScrollbackDirty()
+    }
+
+    func webRemoteSnapshot(maxLines: Int = 1000) -> WebRemoteTerminalSnapshot? {
+        guard let s = surface else { return nil }
+        let json = ghostty_surface_render_grid_json(s, "", 0, 0, UInt(maxLines))
+        defer { ghostty_string_free(json) }
+        guard let pointer = json.ptr, json.len > 0 else { return nil }
+        let grid = Data(bytes: pointer, count: Int(json.len))
+        return Self.webRemoteSnapshot(fromRenderGrid: grid, maxLines: maxLines)
+    }
+
+    fileprivate func forwardWebRemoteOutput(
+        _ bytes: UnsafePointer<UInt8>?,
+        count: UInt,
+        sequence: UInt64
+    ) {
+        guard let paneKey else { return }
+        WebRemoteServer.shared.forwardTerminalOutput(
+            pane: paneKey,
+            bytes: bytes,
+            count: count,
+            sequence: sequence
+        )
+    }
+
     /// Inject a single whitelisted key. Special keys go through
     /// `ghostty_surface_key` (press+release) so ghostty maps them to the right
     /// escape sequence; printable chars go straight through the text-input pipe
@@ -2498,6 +2652,18 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     func characterIndex(for point: NSPoint) -> Int {
         0
     }
+}
+
+private let webRemotePTYTeeCallback: @convention(c) (
+    UnsafeMutableRawPointer?,
+    UnsafePointer<CChar>?,
+    UInt,
+    UInt64
+) -> Void = { userData, bytes, count, sequence in
+    guard let userData, let bytes else { return }
+    let view = Unmanaged<GhosttySurfaceView>.fromOpaque(userData).takeUnretainedValue()
+    let unsigned = UnsafeRawPointer(bytes).assumingMemoryBound(to: UInt8.self)
+    view.forwardWebRemoteOutput(unsigned, count: count, sequence: sequence)
 }
 
 // MARK: - Terminal scrollback restore (colored snapshot via render_grid_json)
