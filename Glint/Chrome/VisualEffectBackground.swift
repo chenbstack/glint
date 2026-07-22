@@ -102,6 +102,50 @@ struct NoDragSurface: NSViewRepresentable {
     }
 }
 
+/// Invisible overlay that fires `onMiddleClick` only on a middle-mouse
+/// button press. Left/right clicks, drags, hover, and scroll pass through
+/// untouched (the view returns nil from `hitTest` unless the middle button
+/// is down), so any SwiftUI gesture / popover / menu underneath keeps
+/// working. Mirror of the `WindowDragSurface` / `NoDragSurface` pattern.
+struct MiddleClickCatcher: NSViewRepresentable {
+    let onMiddleClick: () -> Void
+
+    func makeNSView(context: Context) -> NSView { CatcherView(onMiddleClick: onMiddleClick) }
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? CatcherView)?.onMiddleClick = onMiddleClick
+    }
+
+    private final class CatcherView: NSView {
+        var onMiddleClick: () -> Void
+
+        init(onMiddleClick: @escaping () -> Void) {
+            self.onMiddleClick = onMiddleClick
+            super.init(frame: .zero)
+        }
+        @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+        // Only claim hits when the middle button is pressed — every other
+        // interaction (left/right click, drag, hover, scroll) falls through
+        // to the SwiftUI view underneath. `hitTest` is the gate AppKit
+        // consults before routing any mouse event, so returning nil here
+        // makes this view genuinely transparent to non-middle input.
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            NSEvent.pressedMouseButtons & (1 << 2) != 0 ? self : nil
+        }
+
+        override func otherMouseDown(with event: NSEvent) {
+            // buttonNumber 2 == middle. Other "other" buttons (back/forward)
+            // pass through to the responder chain.
+            guard event.buttonNumber == 2 else { super.otherMouseDown(with: event); return }
+            onMiddleClick()
+        }
+
+        // Never let the overlay drag the window or steal cursor focus.
+        override var mouseDownCanMoveWindow: Bool { false }
+        override var acceptsFirstResponder: Bool { false }
+    }
+}
+
 // MARK: - Liquid Glass (macOS 26)
 
 /// Whether the OS can render Liquid Glass at all. Call sites that keep a

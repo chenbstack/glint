@@ -811,6 +811,16 @@ private struct WorkspaceCard: View {
             // than removing it so the call-site stays a single chain.
             including: archived ? .subviews : .all
         )
+        // Middle-click closes the workspace — same path as the context menu's
+        // "Close Workspace" (confirm dialog included when panes are busy).
+        // Disabled while renaming and on archived cards (which expose
+        // Unarchive/Delete instead). Catcher is transparent to left/right/hover
+        // so existing gestures, popover, and menu are untouched.
+        .overlay {
+            if !archived && !isEditing && store.middleClickClosesWorkspace {
+                MiddleClickCatcher { store.deleteWorkspace(ws.id) }
+            }
+        }
     }
 
     private func startEditing() {
