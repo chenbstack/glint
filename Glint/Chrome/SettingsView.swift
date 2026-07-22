@@ -421,6 +421,12 @@ private struct GeneralPane: View {
                 Toggle("", isOn: $store.revealAtRepoRoot)
                     .toggleStyle(.switch).labelsHidden()
             }
+            SettingsDivider()
+            SettingsRow("Middle-click closes workspace",
+                        subtitle: "Click a workspace card with the middle mouse button to close it. Same as the context menu's “Close Workspace”.") {
+                Toggle("", isOn: $store.middleClickClosesWorkspace)
+                    .toggleStyle(.switch).labelsHidden()
+            }
         }
 
         SettingsCard("New terminals") {

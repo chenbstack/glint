@@ -2715,6 +2715,28 @@
         }
       }
     },
+    "Middle-click closes workspace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中键关闭工作区"
+          }
+        }
+      }
+    },
+    "Click a workspace card with the middle mouse button to close it. Same as the context menu's \u201cClose Workspace\u201d.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用鼠标中键点击工作区卡片即可关闭,等同于右键菜单的「关闭工作区」。"
+          }
+        }
+      }
+    },
     "Missing": {
       "extractionState": "manual",
       "localizations": {
