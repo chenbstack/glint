@@ -81,17 +81,6 @@
         }
       }
     },
-    "1 pane still has something running; quitting will terminate it.": {
-      "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "还有 1 个面板有任务在运行,退出会将其终止。"
-          }
-        }
-      }
-    },
     "1 hour": {
       "extractionState": "manual",
       "localizations": {
@@ -114,13 +103,13 @@
         }
       }
     },
-    "5 minutes": {
-      "extractionState": "manual",
+    "1 pane still has something running; quitting will terminate it.": {
+      "extractionState": "stale",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "5 分钟"
+            "value": "还有 1 个面板有任务在运行,退出会将其终止。"
           }
         }
       }
@@ -158,112 +147,13 @@
         }
       }
     },
-    "Free idle terminals": {
+    "5 minutes": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "释放空闲终端"
-          }
-        }
-      }
-    },
-    "Idle terminal released": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "空闲终端已释放"
-          }
-        }
-      }
-    },
-    "Memory": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "内存"
-          }
-        }
-      }
-    },
-    "Off — terminal sessions stay live.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已关闭——终端会话会保持运行。"
-          }
-        }
-      }
-    },
-    "Only inactive shell prompts are eligible.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "仅未聚焦的 shell 提示符会被释放。"
-          }
-        }
-      }
-    },
-    "Release after": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "多久后释放"
-          }
-        }
-      }
-    },
-    "Releases inactive shell sessions and recreates them in the same folder when you return. Running commands, SSH sessions, agents, tmux, and the focused terminal are never touched.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "释放闲置的 shell 会话，并在你返回时于同一目录重新创建。正在运行的命令、SSH 会话、Agent、tmux 和当前聚焦的终端都不会受到影响。"
-          }
-        }
-      }
-    },
-    "Reopen Terminal": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "重新打开终端"
-          }
-        }
-      }
-    },
-    "Reopens in the same folder.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "将在同一目录重新打开。"
-          }
-        }
-      }
-    },
-    "Time without focus.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未聚焦的持续时间。"
+            "value": "5 分钟"
           }
         }
       }
@@ -274,6 +164,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "为 AI 代理打造的原生 Mac 终端。"
+          }
+        }
+      }
+    },
+    "ACTION": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "动作"
+          }
+        }
+      }
+    },
+    "AHEAD / BEHIND": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "领先 / 落后"
           }
         }
       }
@@ -296,17 +208,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "强调色"
-          }
-        }
-      }
-    },
-    "ACTION": {
-      "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "动作"
           }
         }
       }
@@ -355,6 +256,17 @@
         }
       }
     },
+    "Agent is waiting for your reply": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent 等待你的回复"
+          }
+        }
+      }
+    },
     "Agent's turn ended in an error": {
       "extractionState": "manual",
       "localizations": {
@@ -377,17 +289,6 @@
         }
       }
     },
-    "AHEAD / BEHIND": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "领先 / 落后"
-          }
-        }
-      }
-    },
     "All installed fonts": {
       "extractionState": "manual",
       "localizations": {
@@ -406,6 +307,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "所有等宽字体"
+          }
+        }
+      }
+    },
+    "Allow": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许"
+          }
+        }
+      }
+    },
+    "Allow Glint to execute \"%@\"?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许 Glint 执行 \"%@\"?"
           }
         }
       }
@@ -531,6 +454,17 @@
         }
       }
     },
+    "Auto-discovered TypeScript extension under pi's global extensions directory; only reports when Glint's pane environment variables are present.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "pi 全局扩展目录下自动发现的 TypeScript 扩展;仅当 Glint 的窗格环境变量存在时才上报。"
+          }
+        }
+      }
+    },
     "Auto-name new workspaces": {
       "extractionState": "stale",
       "localizations": {
@@ -560,6 +494,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "自动更新尚未接入,现阶段请拉取 main 重新编译。"
+          }
+        }
+      }
+    },
+    "BRANCH": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分支"
           }
         }
       }
@@ -652,17 +597,6 @@
         }
       }
     },
-    "BRANCH": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "分支"
-          }
-        }
-      }
-    },
     "Branch vs %@": {
       "extractionState": "manual",
       "localizations": {
@@ -751,28 +685,6 @@
         }
       }
     },
-    "Allow": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "允许"
-          }
-        }
-      }
-    },
-    "Allow Glint to execute \"%@\"?": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "允许 Glint 执行 \"%@\"?"
-          }
-        }
-      }
-    },
     "Bundle ID": {
       "extractionState": "stale",
       "localizations": {
@@ -780,6 +692,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bundle ID"
+          }
+        }
+      }
+    },
+    "CHANGES": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "变更"
+          }
+        }
+      }
+    },
+    "CJK fallback": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中文字体兜底"
           }
         }
       }
@@ -813,17 +747,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "切换文件列表布局"
-          }
-        }
-      }
-    },
-    "CHANGES": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "变更"
           }
         }
       }
@@ -905,17 +828,6 @@
         }
       }
     },
-    "CJK fallback": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "中文字体兜底"
-          }
-        }
-      }
-    },
     "Claude Code": {
       "extractionState": "stale",
       "localizations": {
@@ -947,6 +859,39 @@
         }
       }
     },
+    "Claude Code, Codex, OMP, Grok, Pi, hook routing": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code、Codex、OMP、Grok、Pi、hook 路由"
+          }
+        }
+      }
+    },
+    "Claude Code, Codex, OMP, Grok, hook routing": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code、Codex、OMP、Grok、hook 路由"
+          }
+        }
+      }
+    },
+    "Claude Code, Codex, OMP, hook routing": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code、Codex、OMP、hook 路由"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
     "Claude Code, Codex, hook routing": {
       "extractionState": "stale",
       "localizations": {
@@ -954,17 +899,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Claude Code、Codex、Hook 路由"
-          }
-        }
-      }
-    },
-    "clean": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "干净"
           }
         }
       }
@@ -1002,13 +936,13 @@
         }
       }
     },
-    "Close and Remove Worktree…": {
+    "Close Other Tabs": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "关闭并移除工作树…"
+            "value": "关闭其他标签页"
           }
         }
       }
@@ -1035,28 +969,6 @@
         }
       }
     },
-    "Close Other Tabs": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "关闭其他标签页"
-          }
-        }
-      }
-    },
-    "Close other tabs?": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "关闭其他标签页?"
-          }
-        }
-      }
-    },
     "Close Tab": {
       "extractionState": "manual",
       "localizations": {
@@ -1075,6 +987,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "关闭标签页"
+          }
+        }
+      }
+    },
+    "Close Workspace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭工作区"
+          }
+        }
+      }
+    },
+    "Close and Remove Worktree…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭并移除工作树…"
+          }
+        }
+      }
+    },
+    "Close other tabs?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭其他标签页?"
           }
         }
       }
@@ -1112,17 +1057,6 @@
         }
       }
     },
-    "Close Workspace": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "关闭工作区"
-          }
-        }
-      }
-    },
     "Codex": {
       "extractionState": "stale",
       "localizations": {
@@ -1130,16 +1064,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Codex"
-          }
-        }
-      }
-    },
-    "Codex detected — install the reporter to show its status.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已检测到 Codex —— 安装上报脚本即可显示其状态。"
           }
         }
       }
@@ -1162,6 +1086,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Codex Home 存放本地认证、配置、会话和钩子。Glint 只安装自己的钩子并读取状态;认证与配置仍由 Codex 管理。复选框只控制监控和侧栏显示——取消勾选会保留已安装的钩子,如需卸载请用 Remove Hook。"
+          }
+        }
+      }
+    },
+    "Codex detected — install the reporter to show its status.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已检测到 Codex —— 安装上报脚本即可显示其状态。"
           }
         }
       }
@@ -1260,17 +1194,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "紧凑"
-          }
-        }
-      }
-    },
-    "compacting…": {
-      "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "压缩中…"
           }
         }
       }
@@ -1385,17 +1308,6 @@
         }
       }
     },
-    "Create a fresh workspace": {
-      "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "创建一个新工作区"
-          }
-        }
-      }
-    },
     "Create Workspace": {
       "extractionState": "manual",
       "localizations": {
@@ -1414,6 +1326,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "创建工作树"
+          }
+        }
+      }
+    },
+    "Create a fresh workspace": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建一个新工作区"
           }
         }
       }
@@ -1506,6 +1429,17 @@
         }
       }
     },
+    "Dedicated Glint hook file under Grok's global hooks directory; only reports when Glint's pane environment variables are present.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grok 全局 hooks 目录下的独立 Glint hook 文件；仅在存在 Glint 窗格环境变量时上报。"
+          }
+        }
+      }
+    },
     "Default": {
       "extractionState": "manual",
       "localizations": {
@@ -1524,17 +1458,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "默认:~/glint/worktrees/<repo>/<branch-slug>——可在访达中找到。"
-          }
-        }
-      }
-    },
-    "Delete the worktree directory (confirm required)": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "删除工作树目录(需确认)"
           }
         }
       }
@@ -1561,17 +1484,6 @@
         }
       }
     },
-    "Delete worktree for %@?": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "删除 %@ 的工作树?"
-          }
-        }
-      }
-    },
     "Delete Worktree, Keep Branch": {
       "extractionState": "manual",
       "localizations": {
@@ -1590,6 +1502,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "删除工作树…"
+          }
+        }
+      }
+    },
+    "Delete the worktree directory (confirm required)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除工作树目录(需确认)"
+          }
+        }
+      }
+    },
+    "Delete worktree for %@?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除 %@ 的工作树?"
           }
         }
       }
@@ -1691,17 +1625,6 @@
         }
       }
     },
-    "Display available enabled Codex Home usage in the sidebar.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在侧栏显示已启用 Codex Home 的可用额度。"
-          }
-        }
-      }
-    },
     "Display Claude's 5-hour and weekly limits in the sidebar. Requires reading the login keychain (macOS asks once).": {
       "extractionState": "manual",
       "localizations": {
@@ -1720,6 +1643,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "在侧边栏显示 Codex 的 5 小时和每周额度。"
+          }
+        }
+      }
+    },
+    "Display available enabled Codex Home usage in the sidebar.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在侧栏显示已启用 Codex Home 的可用额度。"
           }
         }
       }
@@ -1757,13 +1691,12 @@
         }
       }
     },
-    "done": {
-      "extractionState": "stale",
+    "ESC": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "完成"
+            "value": "ESC"
           }
         }
       }
@@ -1801,27 +1734,6 @@
         }
       }
     },
-    "error": {
-      "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "出错"
-          }
-        }
-      }
-    },
-    "ESC": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ESC"
-          }
-        }
-      }
-    },
     "Events": {
       "extractionState": "stale",
       "localizations": {
@@ -1840,6 +1752,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "在 ~/.glint/run/ 下开放一个本地 socket,让本机其它程序可以聚焦 pane、注入文本/按键。任何能读取 0600 token 文件的进程都能操控你的终端 —— 默认关闭。开关即时生效。"
+          }
+        }
+      }
+    },
+    "Extension file": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扩展文件"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Extension installed and registered with OMP.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扩展已安装并注册到 OMP。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Extension installed into your pi extensions directory.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扩展已安装到你的 pi 扩展目录。"
           }
         }
       }
@@ -2009,6 +1954,17 @@
         }
       }
     },
+    "Free idle terminals": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "释放空闲终端"
+          }
+        }
+      }
+    },
     "General": {
       "extractionState": "stale",
       "localizations": {
@@ -2117,6 +2073,17 @@
         }
       }
     },
+    "Glint installs a TypeScript extension into ~/.pi/agent/extensions/ so pi sessions report thinking, tools, and ask_user_question (awaiting reply). Auto-discovered by pi on every session — no settings merge needed. Only fires when Glint's pane environment variables are present, so a pi session outside Glint is a no-op.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 将一个 TypeScript 扩展安装到 ~/.pi/agent/extensions/,使 pi 会话上报思考、工具调用及 ask_user_question(等待回复)状态。pi 会在每次会话时自动发现该扩展 —— 无需合并设置。仅在 Glint 窗格环境变量存在时触发,因此 Glint 之外的 pi 会话不受影响。"
+          }
+        }
+      }
+    },
     "Glint installs a global OpenCode plugin at ~/.config/opencode/plugins/glint-agent-bridge.js so OpenCode sessions can report status without being shown as Claude.": {
       "localizations": {
         "zh-Hans": {
@@ -2126,6 +2093,17 @@
           }
         }
       }
+    },
+    "Glint installs a portable TypeScript extension at ~/.glint/hooks/omp-agent-bridge.ts and registers that path in ~/.omp/agent/settings.json so Oh My Pi sessions report status like Claude. Uses a tilde path (not an absolute home path) so the same install works on any Mac.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 会在 ~/.glint/hooks/omp-agent-bridge.ts 安装可移植的 TypeScript 扩展，并在 ~/.omp/agent/settings.json 中注册该路径，使 Oh My Pi 会话像 Claude 一样上报状态。使用波浪线路径（而非绝对 home 路径），同一套安装在任意 Mac 上都能生效。"
+          }
+        }
+      },
+      "extractionState": "manual"
     },
     "Glint is dark-mode only for now.": {
       "extractionState": "stale",
@@ -2192,6 +2170,17 @@
         }
       }
     },
+    "Glint writes ~/.grok/hooks/glint.json so Grok Build sessions report thinking, tools, and ask_user_question (awaiting reply). Dedicated file — not Claude's settings — so Grok is attributed as Grok. The reporter ignores Claude-compat dual-fires under Grok (GROK_SESSION_ID present).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 会写入 ~/.grok/hooks/glint.json，使 Grok Build 会话上报思考、工具调用，以及 ask_user_question（待回复）。使用独立文件（而非 Claude 的 settings），因此 Grok 会话会正确归到 Grok。在 Grok 下 reporter 会忽略 Claude 兼容 hooks 的双触发（存在 GROK_SESSION_ID 时）。"
+          }
+        }
+      }
+    },
     "Got it": {
       "extractionState": "manual",
       "localizations": {
@@ -2199,6 +2188,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "知道了"
+          }
+        }
+      }
+    },
+    "Grok": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grok"
+          }
+        }
+      }
+    },
+    "Grok detected — install the reporter to show its status.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已检测到 Grok — 安装 reporter 即可显示其状态。"
+          }
+        }
+      }
+    },
+    "Grok not detected on this Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本机未检测到 Grok。"
           }
         }
       }
@@ -2291,6 +2313,17 @@
         }
       }
     },
+    "Hooks Glint reacts to from Claude Code.": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 监听的 Claude Code Hook。"
+          }
+        }
+      }
+    },
     "Hooks are stored in Devin's native user config alongside your existing settings.": {
       "localizations": {
         "zh-Hans": {
@@ -2301,13 +2334,13 @@
         }
       }
     },
-    "Hooks Glint reacts to from Claude Code.": {
-      "extractionState": "stale",
+    "Hooks installed into your Grok hooks directory.": {
+      "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Glint 监听的 Claude Code Hook。"
+            "value": "Hook 已安装到你的 Grok hooks 目录。"
           }
         }
       }
@@ -2366,6 +2399,17 @@
         }
       }
     },
+    "Idle terminal released": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空闲终端已释放"
+          }
+        }
+      }
+    },
     "Ignore Whitespace": {
       "extractionState": "manual",
       "localizations": {
@@ -2399,16 +2443,6 @@
         }
       }
     },
-    "Install failed — check Console for [glint] logs.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "安装失败 —— 请在「控制台」中查看 [glint] 日志。"
-          }
-        }
-      }
-    },
     "Install Hook": {
       "extractionState": "manual",
       "localizations": {
@@ -2427,6 +2461,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "安装 Hook"
+          }
+        }
+      }
+    },
+    "Install failed — check Console for [glint] logs.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装失败 —— 请在「控制台」中查看 [glint] 日志。"
           }
         }
       }
@@ -2540,6 +2584,17 @@
         }
       }
     },
+    "LAST COMMIT": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最近提交"
+          }
+        }
+      }
+    },
     "Label (optional)": {
       "extractionState": "manual",
       "localizations": {
@@ -2558,17 +2613,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "语言"
-          }
-        }
-      }
-    },
-    "LAST COMMIT": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近提交"
           }
         }
       }
@@ -2693,6 +2737,17 @@
         }
       }
     },
+    "Memory": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内存"
+          }
+        }
+      }
+    },
     "Memory budget per pane.": {
       "extractionState": "manual",
       "localizations": {
@@ -2781,28 +2836,6 @@
         }
       }
     },
-    "needs approval": {
-      "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "等待批准"
-          }
-        }
-      }
-    },
-    "New branch": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新分支"
-          }
-        }
-      }
-    },
     "New Local Worktree": {
       "extractionState": "manual",
       "localizations": {
@@ -2847,17 +2880,6 @@
         }
       }
     },
-    "New terminals": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新建终端"
-          }
-        }
-      }
-    },
     "New Workspace": {
       "localizations": {
         "zh-Hans": {
@@ -2879,13 +2901,13 @@
         }
       }
     },
-    "New workspace": {
+    "New Worktree Workspace": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "新建工作区"
+            "value": "新建工作树工作区"
           }
         }
       }
@@ -2901,13 +2923,46 @@
         }
       }
     },
-    "New Worktree Workspace": {
+    "New branch": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "新建工作树工作区"
+            "value": "新分支"
+          }
+        }
+      }
+    },
+    "New terminals": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建终端"
+          }
+        }
+      }
+    },
+    "New workspace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建工作区"
+          }
+        }
+      }
+    },
+    "Next Workspace": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下一工作区"
           }
         }
       }
@@ -2923,13 +2978,13 @@
         }
       }
     },
-    "Next Workspace": {
-      "extractionState": "stale",
+    "No Matches": {
+      "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "下一工作区"
+            "value": "无匹配"
           }
         }
       }
@@ -2967,17 +3022,6 @@
         }
       }
     },
-    "no cwd": {
-      "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无目录"
-          }
-        }
-      }
-    },
     "No diff for this file": {
       "extractionState": "manual",
       "localizations": {
@@ -2996,17 +3040,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "没有匹配的字体"
-          }
-        }
-      }
-    },
-    "No Matches": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无匹配"
           }
         }
       }
@@ -3033,13 +3066,13 @@
         }
       }
     },
-    "not a git repo": {
+    "Not Now": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "不是 git 仓库"
+            "value": "暂不"
           }
         }
       }
@@ -3075,17 +3108,6 @@
         }
       }
     },
-    "Not Now": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "暂不"
-          }
-        }
-      }
-    },
     "Not wired": {
       "extractionState": "stale",
       "localizations": {
@@ -3108,17 +3130,6 @@
         }
       }
     },
-    "Off — no socket bound, no external access.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已关闭 —— 未绑定 socket,外部无法访问。"
-          }
-        }
-      }
-    },
     "OK": {
       "extractionState": "manual",
       "localizations": {
@@ -3130,6 +3141,61 @@
         }
       }
     },
+    "OMP": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OMP"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "OMP detected — install the extension to show its status.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已检测到 OMP — 安装扩展以显示其状态。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "OMP not detected on this Mac.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 Mac 上未检测到 OMP。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Off — no socket bound, no external access.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已关闭 —— 未绑定 socket,外部无法访问。"
+          }
+        }
+      }
+    },
+    "Off — terminal sessions stay live.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已关闭——终端会话会保持运行。"
+          }
+        }
+      }
+    },
     "Only fires while Glint is in the background. Pops a banner in Notification Center when an agent needs approval, finishes, or fails. Silent — the chime stays the audio cue.": {
       "extractionState": "manual",
       "localizations": {
@@ -3137,6 +3203,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "仅在 Glint 处于后台时触发。agent 需要批准、完成或出错时在通知中心弹出横幅。静默——声音仍由提示音负责。"
+          }
+        }
+      }
+    },
+    "Only inactive shell prompts are eligible.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅未聚焦的 shell 提示符会被释放。"
           }
         }
       }
@@ -3159,6 +3236,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "打开"
+          }
+        }
+      }
+    },
+    "Open Glint settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开 Glint 设置"
+          }
+        }
+      }
+    },
+    "Open Workspace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开工作区"
           }
         }
       }
@@ -3229,17 +3328,6 @@
         }
       }
     },
-    "Open Glint settings": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "打开 Glint 设置"
-          }
-        }
-      }
-    },
     "Open the focused pane's directory in Finder": {
       "extractionState": "manual",
       "localizations": {
@@ -3258,17 +3346,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "打开方式"
-          }
-        }
-      }
-    },
-    "Open Workspace": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "打开工作区"
           }
         }
       }
@@ -3300,28 +3377,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "直接在当前检出上打开。若要在并行 agent 间隔离,请选择本地工作树。"
-          }
-        }
-      }
-    },
-    "pane": {
-      "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "面板"
-          }
-        }
-      }
-    },
-    "panes": {
-      "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "面板"
           }
         }
       }
@@ -3388,6 +3443,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "第二阶段"
+          }
+        }
+      }
+    },
+    "Pi": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pi"
+          }
+        }
+      }
+    },
+    "Pi detected — install the extension to show its status.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已检测到 Pi — 安装扩展即可显示其状态。"
+          }
+        }
+      }
+    },
+    "Pi not detected on this Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本机未检测到 Pi。"
           }
         }
       }
@@ -3500,17 +3588,6 @@
         }
       }
     },
-    "Previous change": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上一个改动"
-          }
-        }
-      }
-    },
     "Previous Workspace": {
       "extractionState": "stale",
       "localizations": {
@@ -3518,6 +3595,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "上一工作区"
+          }
+        }
+      }
+    },
+    "Previous change": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上一个改动"
           }
         }
       }
@@ -3632,6 +3720,39 @@
         }
       }
     },
+    "Registered via ~/.omp/agent/settings.json; only reports when Glint's pane environment variables are present.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过 ~/.omp/agent/settings.json 注册；仅在存在 Glint 的 pane 环境变量时上报。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Release after": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "多久后释放"
+          }
+        }
+      }
+    },
+    "Releases inactive shell sessions and recreates them in the same folder when you return. Running commands, SSH sessions, agents, tmux, and the focused terminal are never touched.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "释放闲置的 shell 会话，并在你返回时于同一目录重新创建。正在运行的命令、SSH 会话、Agent、tmux 和当前聚焦的终端都不会受到影响。"
+          }
+        }
+      }
+    },
     "Remove Hook": {
       "extractionState": "manual",
       "localizations": {
@@ -3698,13 +3819,24 @@
         }
       }
     },
-    "repo detected": {
+    "Reopen Terminal": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "检测到仓库"
+            "value": "重新打开终端"
+          }
+        }
+      }
+    },
+    "Reopens in the same folder.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将在同一目录重新打开。"
           }
         }
       }
@@ -3786,6 +3918,17 @@
         }
       }
     },
+    "Reveal Worktree in Finder": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中显示工作树"
+          }
+        }
+      }
+    },
     "Reveal in Finder": {
       "extractionState": "manual",
       "localizations": {
@@ -3804,17 +3947,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "在访达中显示仓库根目录"
-          }
-        }
-      }
-    },
-    "Reveal Worktree in Finder": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在访达中显示工作树"
           }
         }
       }
@@ -3874,13 +4006,13 @@
         }
       }
     },
-    "running…": {
+    "SSH Project": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "运行中…"
+            "value": "SSH 项目"
           }
         }
       }
@@ -4048,17 +4180,6 @@
         }
       }
     },
-    "Show agent status in the sidebar?": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在侧栏显示 agent 状态?"
-          }
-        }
-      }
-    },
     "Show All": {
       "extractionState": "manual",
       "localizations": {
@@ -4081,6 +4202,39 @@
         }
       }
     },
+    "Show Sidebar": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示侧栏"
+          }
+        }
+      }
+    },
+    "Show Whitespace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示空白"
+          }
+        }
+      }
+    },
+    "Show agent status in the sidebar?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在侧栏显示 agent 状态?"
+          }
+        }
+      }
+    },
     "Show macOS notification for agent attention": {
       "extractionState": "manual",
       "localizations": {
@@ -4099,17 +4253,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "显示或隐藏工作区侧栏"
-          }
-        }
-      }
-    },
-    "Show Sidebar": {
-      "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "显示侧栏"
           }
         }
       }
@@ -4143,17 +4286,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "在侧栏显示额度"
-          }
-        }
-      }
-    },
-    "Show Whitespace": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "显示空白"
           }
         }
       }
@@ -4345,17 +4477,6 @@
         }
       }
     },
-    "Split pane": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "分屏"
-          }
-        }
-      }
-    },
     "Split Right · %@": {
       "extractionState": "manual",
       "localizations": {
@@ -4378,13 +4499,13 @@
         }
       }
     },
-    "SSH Project": {
+    "Split pane": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "SSH 项目"
+            "value": "分屏"
           }
         }
       }
@@ -4517,17 +4638,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "跟随系统"
-          }
-        }
-      }
-    },
-    "tabs": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "标签页"
           }
         }
       }
@@ -4665,13 +4775,13 @@
         }
       }
     },
-    "this branch": {
+    "Time without focus.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "该分支"
+            "value": "未聚焦的持续时间。"
           }
         }
       }
@@ -4727,6 +4837,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "输入命令或工作区…"
+          }
+        }
+      }
+    },
+    "UPSTREAM": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上游"
           }
         }
       }
@@ -4826,17 +4947,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "更新"
-          }
-        }
-      }
-    },
-    "UPSTREAM": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上游"
           }
         }
       }
@@ -4962,6 +5072,27 @@
         }
       }
     },
+    "WORKSPACE": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区"
+          }
+        }
+      }
+    },
+    "WORKSPACES": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区"
+          }
+        }
+      }
+    },
     "Waiting for your approval": {
       "extractionState": "manual",
       "localizations": {
@@ -5028,6 +5159,28 @@
         }
       }
     },
+    "When Glint reopens, each pane that was running Grok at last quit is resumed via `grok --resume <session-id>` — so multiple Grok panes in one workspace land back in their own sessions. Falls back to `grok --continue` for panes whose session id wasn't captured.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 重新打开时，上次退出时正在运行 Grok 的每个窗格会通过 `grok --resume <session-id>` 恢复，因此同一工作区里的多个 Grok 窗格会回到各自会话。未捕获到 session id 的窗格会回退到 `grok --continue`。"
+          }
+        }
+      }
+    },
+    "When Glint reopens, each pane that was running OMP at last quit is resumed via `omp -r <session-id>` — so multiple OMP panes in one workspace land back in their own sessions. Falls back to `omp -c` for panes whose session id wasn't captured.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 重新打开时，上次退出时在跑 OMP 的每个 pane 会通过 `omp -r <session-id>` 恢复会话，多个 OMP pane 各自回到自己的会话。未捕获 session id 时回退为 `omp -c`。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
     "When Glint reopens, each pane that was running OpenCode at last quit is resumed via `opencode --session <session-id>` — so multiple OpenCode panes in one workspace land back in their own sessions. Falls back to `opencode --continue` for panes whose session id wasn't captured.": {
       "extractionState": "manual",
       "localizations": {
@@ -5035,6 +5188,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Glint 重新打开时，上次退出前在跑 OpenCode 的窗格会用 `opencode --session <session-id>` 各自恢复——同一工作区里多个 OpenCode 窗格不会再被合并到同一个会话。没抓到 session id 的窗格回退到 `opencode --continue`。"
+          }
+        }
+      }
+    },
+    "When Glint reopens, each pane that was running pi at last quit is resumed via `pi --session-id <session-id>` — so multiple pi panes in one workspace land back in their own sessions. Falls back to `pi --continue` for panes whose session id wasn't captured.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 重新打开时,上次退出前正在运行 pi 的每个窗格会通过 `pi --session-id <session-id>` 恢复 —— 这样同一工作区里的多个 pi 窗格会回到各自的会话。未捕获到 session id 的窗格回退到 `pi --continue`。"
           }
         }
       }
@@ -5072,29 +5236,8 @@
         }
       }
     },
-    "WORKSPACE": {
-      "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "工作区"
-          }
-        }
-      }
-    },
     "Workspaces": {
       "extractionState": "stale",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "工作区"
-          }
-        }
-      }
-    },
-    "WORKSPACES": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
@@ -5147,7 +5290,216 @@
         }
       }
     },
+    "awaiting reply": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待回复"
+          }
+        }
+      }
+    },
+    "clean": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "干净"
+          }
+        }
+      }
+    },
+    "compacting…": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "压缩中…"
+          }
+        }
+      }
+    },
+    "done": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
+          }
+        }
+      }
+    },
+    "error": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出错"
+          }
+        }
+      }
+    },
+    "needs approval": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待批准"
+          }
+        }
+      }
+    },
+    "no cwd": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无目录"
+          }
+        }
+      }
+    },
+    "not a git repo": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不是 git 仓库"
+          }
+        }
+      }
+    },
+    "pane": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "面板"
+          }
+        }
+      }
+    },
+    "panes": {
+      "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "面板"
+          }
+        }
+      }
+    },
+    "reply": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待回复"
+          }
+        }
+      }
+    },
+    "repo detected": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "检测到仓库"
+          }
+        }
+      }
+    },
+    "running…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "运行中…"
+          }
+        }
+      }
+    },
+    "tabs": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标签页"
+          }
+        }
+      }
+    },
+    "thinking…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "思考中…"
+          }
+        }
+      }
+    },
+    "this branch": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该分支"
+          }
+        }
+      }
+    },
     "~/.glint/hooks/glint-report.sh": {},
+    "~/.glint/hooks/omp-agent-bridge.ts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/.glint/hooks/omp-agent-bridge.ts"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "~/.grok/hooks/glint.json": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/.grok/hooks/glint.json"
+          }
+        }
+      }
+    },
+    "~/.pi/agent/extensions/glint-agent-bridge.ts": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/.pi/agent/extensions/glint-agent-bridge.ts"
+          }
+        }
+      }
+    },
     "· %@": {},
     "—": {},
     "⌘N": {},
@@ -5203,259 +5555,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "✗ 名称非法"
-          }
-        }
-      }
-    },
-    "Claude Code, Codex, OMP, hook routing": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude Code、Codex、OMP、hook 路由"
-          }
-        }
-      },
-      "extractionState": "manual"
-    },
-    "OMP": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OMP"
-          }
-        }
-      },
-      "extractionState": "manual"
-    },
-    "OMP detected — install the extension to show its status.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已检测到 OMP — 安装扩展以显示其状态。"
-          }
-        }
-      },
-      "extractionState": "manual"
-    },
-    "OMP not detected on this Mac.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "此 Mac 上未检测到 OMP。"
-          }
-        }
-      },
-      "extractionState": "manual"
-    },
-    "When Glint reopens, each pane that was running OMP at last quit is resumed via `omp -r <session-id>` — so multiple OMP panes in one workspace land back in their own sessions. Falls back to `omp -c` for panes whose session id wasn't captured.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Glint 重新打开时，上次退出时在跑 OMP 的每个 pane 会通过 `omp -r <session-id>` 恢复会话，多个 OMP pane 各自回到自己的会话。未捕获 session id 时回退为 `omp -c`。"
-          }
-        }
-      },
-      "extractionState": "manual"
-    },
-    "Extension file": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "扩展文件"
-          }
-        }
-      },
-      "extractionState": "manual"
-    },
-    "Extension installed and registered with OMP.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "扩展已安装并注册到 OMP。"
-          }
-        }
-      },
-      "extractionState": "manual"
-    },
-    "Registered via ~/.omp/agent/settings.json; only reports when Glint's pane environment variables are present.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "通过 ~/.omp/agent/settings.json 注册；仅在存在 Glint 的 pane 环境变量时上报。"
-          }
-        }
-      },
-      "extractionState": "manual"
-    },
-    "~/.glint/hooks/omp-agent-bridge.ts": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "~/.glint/hooks/omp-agent-bridge.ts"
-          }
-        }
-      },
-      "extractionState": "manual"
-    },
-    "Glint installs a portable TypeScript extension at ~/.glint/hooks/omp-agent-bridge.ts and registers that path in ~/.omp/agent/settings.json so Oh My Pi sessions report status like Claude. Uses a tilde path (not an absolute home path) so the same install works on any Mac.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Glint 会在 ~/.glint/hooks/omp-agent-bridge.ts 安装可移植的 TypeScript 扩展，并在 ~/.omp/agent/settings.json 中注册该路径，使 Oh My Pi 会话像 Claude 一样上报状态。使用波浪线路径（而非绝对 home 路径），同一套安装在任意 Mac 上都能生效。"
-          }
-        }
-      },
-      "extractionState": "manual"
-    },
-    "awaiting reply": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "待回复"
-          }
-        }
-      }
-    },
-    "thinking…": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "思考中…"
-          }
-        }
-      }
-    },
-    "reply": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "待回复"
-          }
-        }
-      }
-    },
-    "Agent is waiting for your reply": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Agent 等待你的回复"
-          }
-        }
-      }
-    },
-    "Claude Code, Codex, OMP, Grok, hook routing": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude Code、Codex、OMP、Grok、hook 路由"
-          }
-        }
-      }
-    },
-    "Grok": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Grok"
-          }
-        }
-      }
-    },
-    "Hooks installed into your Grok hooks directory.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hook 已安装到你的 Grok hooks 目录。"
-          }
-        }
-      }
-    },
-    "Grok detected — install the reporter to show its status.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已检测到 Grok — 安装 reporter 即可显示其状态。"
-          }
-        }
-      }
-    },
-    "Grok not detected on this Mac.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "本机未检测到 Grok。"
-          }
-        }
-      }
-    },
-    "When Glint reopens, each pane that was running Grok at last quit is resumed via `grok --resume <session-id>` — so multiple Grok panes in one workspace land back in their own sessions. Falls back to `grok --continue` for panes whose session id wasn't captured.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Glint 重新打开时，上次退出时正在运行 Grok 的每个窗格会通过 `grok --resume <session-id>` 恢复，因此同一工作区里的多个 Grok 窗格会回到各自会话。未捕获到 session id 的窗格会回退到 `grok --continue`。"
-          }
-        }
-      }
-    },
-    "Dedicated Glint hook file under Grok's global hooks directory; only reports when Glint's pane environment variables are present.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Grok 全局 hooks 目录下的独立 Glint hook 文件；仅在存在 Glint 窗格环境变量时上报。"
-          }
-        }
-      }
-    },
-    "~/.grok/hooks/glint.json": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "~/.grok/hooks/glint.json"
-          }
-        }
-      }
-    },
-    "Glint writes ~/.grok/hooks/glint.json so Grok Build sessions report thinking, tools, and ask_user_question (awaiting reply). Dedicated file — not Claude's settings — so Grok is attributed as Grok. The reporter ignores Claude-compat dual-fires under Grok (GROK_SESSION_ID present).": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Glint 会写入 ~/.grok/hooks/glint.json，使 Grok Build 会话上报思考、工具调用，以及 ask_user_question（待回复）。使用独立文件（而非 Claude 的 settings），因此 Grok 会话会正确归到 Grok。在 Grok 下 reporter 会忽略 Claude 兼容 hooks 的双触发（存在 GROK_SESSION_ID 时）。"
           }
         }
       }

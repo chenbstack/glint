@@ -167,7 +167,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .general:    return "Startup, layout, updates"
         case .appearance: return "Theme, accent, glass"
         case .terminal:   return "Font, cursor, scrollback"
-        case .agents:     return "Claude Code, Codex, OMP, Grok, hook routing"
+        case .agents:     return "Claude Code, Codex, OMP, Grok, Pi, hook routing"
         case .shortcuts:  return "Keyboard reference"
         case .about:      return nil
         }
@@ -1169,6 +1169,7 @@ private struct AgentsPane: View {
     @State private var devinInstallFailed = false
     @State private var ompInstallFailed = false
     @State private var grokInstallFailed = false
+    @State private var piInstallFailed = false
     @State private var newCodexHomePath = ""
     @State private var newCodexHomeLabel = ""
     @State private var codexHomeErrors: [UUID: String] = [:]
@@ -1479,6 +1480,53 @@ private struct AgentsPane: View {
             SettingsRow("Hook config",
                         subtitle: "Dedicated Glint hook file under Grok's global hooks directory; only reports when Glint's pane environment variables are present.") {
                 Text("~/.grok/hooks/glint.json")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.text3)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+        }
+
+        SettingsCard("Pi",
+                     footer: "Glint installs a TypeScript extension into ~/.pi/agent/extensions/ so pi sessions report thinking, tools, and ask_user_question (awaiting reply). Auto-discovered by pi on every session — no settings merge needed. Only fires when Glint's pane environment variables are present, so a pi session outside Glint is a no-op.") {
+            SettingsRow("Status", subtitle: piInstallFailed
+                        ? "Install failed — check Console for [glint] logs."
+                        : (store.piHooksInstalled
+                           ? "Extension installed into your pi extensions directory."
+                           : (store.piDetected
+                              ? "Pi detected — install the extension to show its status."
+                              : "Pi not detected on this Mac."))) {
+                HStack(spacing: 8) {
+                    StatusPill(
+                        label: store.piHooksInstalled ? "Installed" : (store.piDetected ? "Not installed" : "Not detected"),
+                        tone: store.piHooksInstalled ? .ok : .neutral
+                    )
+                    if store.piHooksInstalled {
+                        Button("Uninstall") {
+                            store.uninstallPiHooks()
+                            piInstallFailed = false
+                        }
+                            .controlSize(.small)
+                    } else {
+                        Button("Install") {
+                            store.installPiHooks()
+                            piInstallFailed = !store.piHooksInstalled
+                        }
+                            .controlSize(.small)
+                            .tint(store.accent)
+                    }
+                }
+            }
+            SettingsDivider()
+            SettingsRow("Resume session on launch",
+                        subtitle: "When Glint reopens, each pane that was running pi at last quit is resumed via `pi --session-id <session-id>` — so multiple pi panes in one workspace land back in their own sessions. Falls back to `pi --continue` for panes whose session id wasn't captured.") {
+                Toggle("", isOn: $store.restorePiSession)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Hook config",
+                        subtitle: "Auto-discovered TypeScript extension under pi's global extensions directory; only reports when Glint's pane environment variables are present.") {
+                Text("~/.pi/agent/extensions/glint-agent-bridge.ts")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.text3)
                     .lineLimit(1)
