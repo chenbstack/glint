@@ -8,6 +8,7 @@ enum PaneAgentKind: String, Codable {
     case devin
     case omp
     case grok
+    case pi
 
     /// Human-facing label for the per-pane summary popover.
     var displayName: String {
@@ -18,6 +19,7 @@ enum PaneAgentKind: String, Codable {
         case .devin:    return "Devin"
         case .omp:      return "OMP"
         case .grok:     return "Grok"
+        case .pi:       return "Pi"
         }
     }
 
@@ -82,6 +84,13 @@ enum PaneAgentKind: String, Codable {
             return validated.map { "omp -r \($0)\n" } ?? "omp -c\n"
         case .grok:
             return validated.map { "grok --resume \($0)\n" } ?? "grok --continue\n"
+        case .pi:
+            // `pi --session-id <id>` uses an exact project session id,
+            // creating it if missing — so a restored pane lands back in its
+            // own session instead of being prompted to pick one (as the
+            // interactive `--resume` would). Falls back to `pi --continue`
+            // (resume the most-recent) when no id was captured.
+            return validated.map { "pi --session-id \($0)\n" } ?? "pi --continue\n"
         }
     }
 }

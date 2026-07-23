@@ -910,6 +910,9 @@ final class WorkspaceStore: ObservableObject {
     /// Whether Glint's Grok Build hooks are registered in `~/.grok/hooks/glint.json`.
     @Published var grokHooksInstalled: Bool = false
 
+    /// Whether Glint's pi extension is installed in `~/.pi/agent/extensions`.
+    @Published var piHooksInstalled: Bool = false
+
     /// Whether Glint's modified-Enter shell keybindings are present in the
     /// user's shell rc (~/.zshrc / ~/.bashrc). Opt-in, default off.
     @Published var shellKeybindsInstalled: Bool = false
@@ -1087,6 +1090,11 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreGrokSession, forKey: "glint.restoreGrokSession") }
     }
 
+    /// Same as `restoreClaudeSession` but for pi — feeds `pi --continue` / `pi --session-id <id>`.
+    @Published var restorePiSession: Bool = (UserDefaults.standard.object(forKey: "glint.restorePiSession") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(restorePiSession, forKey: "glint.restorePiSession") }
+    }
+
     /// Maps each agent kind to the @Published toggle that gates its
     /// session-restore-on-launch. Single source of truth: adding a new
     /// agent means adding ONE entry here, not editing two parallel switches
@@ -1098,6 +1106,7 @@ final class WorkspaceStore: ObservableObject {
         .devin:    \.restoreDevinSession,
         .omp:      \.restoreOmpSession,
         .grok:     \.restoreGrokSession,
+        .pi:       \.restorePiSession,
     ]
 
     /// Whether session-restore-on-launch is enabled for `kind`. Used by
@@ -1322,6 +1331,13 @@ final class WorkspaceStore: ObservableObject {
                 isInstalled: { GrokHookInstaller.isInstalled() },
                 install: { GrokHookInstaller.installIfNeeded(socketPath: socketPath) }
             ),
+            AgentHookSpec(
+                handledKey: "glint.piHooksAutoInstalled",
+                displayName: "Pi",
+                isPresent: PiHookInstaller.isAgentPresent,
+                isInstalled: { PiHookInstaller.isInstalled() },
+                install: { PiHookInstaller.installIfNeeded(socketPath: socketPath) }
+            ),
         ]
     }
 
@@ -1371,6 +1387,7 @@ final class WorkspaceStore: ObservableObject {
             WorkspaceStore.current?.devinHooksInstalled = DevinHookInstaller.isInstalled()
             WorkspaceStore.current?.ompHooksInstalled = OmpHookInstaller.isInstalled()
             WorkspaceStore.current?.grokHooksInstalled = GrokHookInstaller.isInstalled()
+            WorkspaceStore.current?.piHooksInstalled = PiHookInstaller.isInstalled()
         }
     }
 
@@ -1437,6 +1454,16 @@ final class WorkspaceStore: ObservableObject {
         self.grokHooksInstalled = GrokHookInstaller.isInstalled()
     }
 
+    func installPiHooks() {
+        PiHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
+        self.piHooksInstalled = PiHookInstaller.isInstalled()
+    }
+
+    func uninstallPiHooks() {
+        PiHookInstaller.uninstall()
+        self.piHooksInstalled = PiHookInstaller.isInstalled()
+    }
+
     func installShellKeybinds() {
         ShellKeybindInstaller.install()
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
@@ -1456,6 +1483,7 @@ final class WorkspaceStore: ObservableObject {
     var devinDetected: Bool { DevinHookInstaller.isAgentPresent() }
     var ompDetected: Bool { OmpHookInstaller.isAgentPresent() }
     var grokDetected: Bool { GrokHookInstaller.isAgentPresent() }
+    var piDetected: Bool { PiHookInstaller.isAgentPresent() }
 
     /// Locale to inject into the SwiftUI environment. Driven by
     /// `preferredLanguage`. On macOS 14+, SwiftUI re-resolves
@@ -2483,6 +2511,13 @@ final class WorkspaceStore: ObservableObject {
         // check would false-positive on process names like "compiz".
         if lower == "omp" || lower.hasSuffix("/omp") { return .omp }
         if lower.contains("grok") { return .grok }
+        // Exact match for "pi" — it's only two letters, so a substring check
+        // would false-positive on process names like "pipe", "pip", "copy",
+        // "spiped". pi is an npm bin shim (node dist/cli.js), but
+        // GhosttySurfaceView.scriptBasenameFromArgv already resolves the
+        // shim's argv to its basename "pi", so the comm/argv we see here is
+        // the clean short name.
+        if lower == "pi" || lower.hasSuffix("/pi") { return .pi }
         return nil
     }
 
@@ -3845,6 +3880,7 @@ enum WorkspaceIconKind {
     case devin
     case omp
     case grok
+    case pi
     case ssh
     case vim
     case python
@@ -3861,7 +3897,7 @@ enum WorkspaceIconKind {
         case .python: return "chevron.left.forwardslash.chevron.right"
         case .node:   return "hexagon.fill"
         case .git:    return "arrow.triangle.branch"
-        case .claude, .codex, .opencode, .devin, .omp, .grok, .other:
+        case .claude, .codex, .opencode, .devin, .omp, .grok, .pi, .other:
             return nil
         }
     }
@@ -3875,6 +3911,7 @@ enum WorkspaceIconKind {
         case .devin:  return "D"
         case .omp:    return "π"
         case .grok:   return "G"
+        case .pi:     return "π"
         case .other(let s):
             return s.first.map { String($0).uppercased() } ?? "?"
         default:
@@ -4132,6 +4169,7 @@ extension WorkspaceStore {
             case .devin: return .devin
             case .omp: return .omp
             case .grok: return .grok
+            case .pi: return .pi
             }
         }
 
@@ -4147,6 +4185,7 @@ extension WorkspaceStore {
         if names.contains(where: { $0 == "devin" || $0.contains("devin") }) { return .devin }
         if names.contains(where: { $0 == "omp" || $0.hasSuffix("/omp") }) { return .omp }
         if names.contains(where: { $0 == "grok" || $0.contains("grok") }) { return .grok }
+        if names.contains(where: { $0 == "pi" || $0.hasSuffix("/pi") }) { return .pi }
         if names.contains(where: { $0 == "vim" || $0 == "nvim" || $0 == "vi" }) { return .vim }
         if names.contains(where: { $0 == "python" || $0 == "python3" || $0 == "ipython" }) { return .python }
         if names.contains(where: { $0 == "node" || $0 == "deno" || $0 == "bun" }) { return .node }
