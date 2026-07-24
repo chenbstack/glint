@@ -34,6 +34,11 @@ struct SurfaceFocusUpdateGate {
 final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     private var surface: ghostty_surface_t?
+    /// The newest SwiftUI/AppKit container allowed to host this stable surface.
+    /// Split-tree reshapes can briefly leave both the outgoing and incoming
+    /// representables alive; the older one must not re-parent the surface back.
+    weak var paneHostView: NSView?
+    var paneHostGeneration: UInt64 = 0
     private var focusUpdateGate = SurfaceFocusUpdateGate()
     private var trackingArea: NSTrackingArea?
     private var markedTextValue: NSAttributedString = NSAttributedString(string: "")

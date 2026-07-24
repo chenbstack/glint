@@ -1,6 +1,97 @@
 import SwiftUI
 import AppKit
 
+enum SplitLayoutPolicy {
+    static let dividerLength: CGFloat = 1
+
+    static func lengths(total: CGFloat,
+                        ratio: CGFloat,
+                        minPaneLength: CGFloat) -> (first: CGFloat, second: CGFloat) {
+        guard total > dividerLength else { return (0, 0) }
+        let minFraction = min(minPaneLength / total, 0.5)
+        let clamped = min(max(ratio, minFraction), 1 - minFraction)
+        let first = (total * clamped).rounded(.down)
+        return (first, max(total - dividerLength - first, 0))
+    }
+}
+
+final class SplitDragHandleView: NSView {
+    var isHorizontal = true {
+        didSet { discardCursorRects() }
+    }
+    var onTranslation: ((CGFloat) -> Void)?
+    var onEnded: (() -> Void)?
+    var onHover: ((Bool) -> Void)?
+
+    private var dragStart: NSPoint?
+
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func resetCursorRects() {
+        addCursorRect(
+            bounds,
+            cursor: isHorizontal ? .resizeLeftRight : .resizeUpDown
+        )
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        ))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHover?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHover?(false)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        dragStart = event.locationInWindow
+        onTranslation?(0)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let dragStart else { return }
+        let current = event.locationInWindow
+        onTranslation?(
+            isHorizontal ? current.x - dragStart.x : dragStart.y - current.y
+        )
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard dragStart != nil else { return }
+        dragStart = nil
+        onEnded?()
+    }
+}
+
+private struct SplitDragHandle: NSViewRepresentable {
+    let isHorizontal: Bool
+    let onTranslation: (CGFloat) -> Void
+    let onEnded: () -> Void
+    let onHover: (Bool) -> Void
+
+    func makeNSView(context: Context) -> SplitDragHandleView {
+        SplitDragHandleView()
+    }
+
+    func updateNSView(_ nsView: SplitDragHandleView, context: Context) {
+        nsView.isHorizontal = isHorizontal
+        nsView.onTranslation = onTranslation
+        nsView.onEnded = onEnded
+        nsView.onHover = onHover
+    }
+}
+
 struct PaneTreeView: View {
     let node: SplitNode
     /// The workspace this tree belongs to, captured by value at render time.
@@ -53,7 +144,12 @@ private struct SplitContainer: View {
     var body: some View {
         GeometryReader { geo in
             let total = isHorizontal ? geo.size.width : geo.size.height
-            let firstLength = firstLength(total: total)
+            let lengths = SplitLayoutPolicy.lengths(
+                total: total,
+                ratio: ratio,
+                minPaneLength: Self.minPaneLength
+            )
+            let firstLength = lengths.first
 
             ZStack(alignment: .topLeading) {
                 if isHorizontal {
@@ -62,62 +158,47 @@ private struct SplitContainer: View {
                             .frame(width: firstLength)
                         divider
                         PaneTreeView(node: b, workspaceID: workspaceID, path: path + [true])
+                            .frame(width: lengths.second)
                     }
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
                 } else {
                     VStack(spacing: 0) {
                         PaneTreeView(node: a, workspaceID: workspaceID, path: path + [false])
                             .frame(height: firstLength)
                         divider
                         PaneTreeView(node: b, workspaceID: workspaceID, path: path + [true])
+                            .frame(height: lengths.second)
                     }
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
                 }
 
                 // The visible divider stays 1px so panes butt up against
                 // each other like before; the grabbable area is this wider
                 // transparent strip floating on top of the seam.
-                Color.clear
+                SplitDragHandle(
+                    isHorizontal: isHorizontal,
+                    onTranslation: { translation in
+                        let base = dragBaseRatio ?? ratio
+                        if dragBaseRatio == nil { dragBaseRatio = base }
+                        guard total > 0 else { return }
+                        let minFraction = min(Self.minPaneLength / total, 0.5)
+                        let next = min(max(base + translation / total, minFraction),
+                                       1 - minFraction)
+                        store.setSplitRatio(path: path, ratio: next)
+                    },
+                    onEnded: { dragBaseRatio = nil },
+                    onHover: { hovering = $0 }
+                )
                     .frame(
                         width: isHorizontal ? 9 : geo.size.width,
                         height: isHorizontal ? geo.size.height : 9
                     )
-                    .contentShape(Rectangle())
                     .offset(
                         x: isHorizontal ? firstLength - 4 : 0,
                         y: isHorizontal ? 0 : firstLength - 4
                     )
-                    .onHover { inside in
-                        hovering = inside
-                        if inside {
-                            (isHorizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push()
-                        } else {
-                            NSCursor.pop()
-                        }
-                    }
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in
-                                let base = dragBaseRatio ?? ratio
-                                if dragBaseRatio == nil { dragBaseRatio = base }
-                                guard total > 0 else { return }
-                                let delta = (isHorizontal ? value.translation.width : value.translation.height) / total
-                                let minFraction = min(Self.minPaneLength / total, 0.5)
-                                let next = min(max(base + delta, minFraction), 1 - minFraction)
-                                store.setSplitRatio(path: path, ratio: next)
-                            }
-                            .onEnded { _ in dragBaseRatio = nil }
-                    )
             }
         }
-    }
-
-    private func firstLength(total: CGFloat) -> CGFloat {
-        guard total > 1 else { return 0 }
-        let minFraction = min(Self.minPaneLength / total, 0.5)
-        let clamped = min(max(ratio, minFraction), 1 - minFraction)
-        // Floor to whole points so the ghostty surfaces sit on integral
-        // boundaries (fractional frames cause the scroll "fault line" —
-        // see NoDragContainerView in PaneSurfaceRepresentable).
-        return (total * clamped).rounded(.down)
     }
 
     private var divider: some View {
