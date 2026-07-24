@@ -47,10 +47,12 @@ final class SplitDragHandleView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
+        (isHorizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).set()
         onHover?(true)
     }
 
     override func mouseExited(with event: NSEvent) {
+        NSCursor.arrow.set()
         onHover?(false)
     }
 
