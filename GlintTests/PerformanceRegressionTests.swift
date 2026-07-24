@@ -149,13 +149,87 @@ final class PerformanceRegressionTests: XCTestCase {
         XCTAssertTrue(SurfaceReassertionPolicy.shouldReassert(
             containerIsAttached: true,
             expectedSurfaceMatches: true,
-            paneIsVisible: true
+            paneIsVisible: true,
+            hostClaimMatches: true
         ))
         XCTAssertFalse(SurfaceReassertionPolicy.shouldReassert(
             containerIsAttached: true,
             expectedSurfaceMatches: true,
-            paneIsVisible: false
+            paneIsVisible: false,
+            hostClaimMatches: true
         ))
+    }
+
+    func testDelayedSurfaceReassertRejectsSupersededHost() {
+        XCTAssertFalse(SurfaceReassertionPolicy.shouldReassert(
+            containerIsAttached: true,
+            expectedSurfaceMatches: true,
+            paneIsVisible: true,
+            hostClaimMatches: false
+        ))
+    }
+
+    func testOlderSurfaceHostCannotStealFromAttachedNewerHost() {
+        XCTAssertFalse(SurfaceHostClaimPolicy.shouldClaim(
+            candidateGeneration: 10,
+            currentGeneration: 11,
+            currentHostIsAttached: true,
+            isSameHost: false
+        ))
+    }
+
+    func testOlderSurfaceHostCanRecoverAfterNewerHostDetaches() {
+        XCTAssertTrue(SurfaceHostClaimPolicy.shouldClaim(
+            candidateGeneration: 10,
+            currentGeneration: 11,
+            currentHostIsAttached: false,
+            isSameHost: false
+        ))
+    }
+
+    func testNewestHostWinsDeterministicOutgoingIncomingOutgoingRace() {
+        let outgoingHost = NSView()
+        let incomingHost = NSView()
+        let surface = NSView()
+        outgoingHost.addSubview(surface)
+
+        var currentHost: NSView = outgoingHost
+        var currentGeneration: UInt64 = 10
+        func claim(_ candidate: NSView, generation: UInt64) {
+            guard SurfaceHostClaimPolicy.shouldClaim(
+                candidateGeneration: generation,
+                currentGeneration: currentGeneration,
+                currentHostIsAttached: true,
+                isSameHost: currentHost === candidate
+            ) else { return }
+            surface.removeFromSuperview()
+            candidate.addSubview(surface)
+            currentHost = candidate
+            currentGeneration = generation
+        }
+
+        claim(incomingHost, generation: 11)
+        claim(outgoingHost, generation: 10) // delayed stale-tree callback
+
+        XCTAssertTrue(surface.superview === incomingHost)
+        XCTAssertTrue(currentHost === incomingHost)
+        XCTAssertEqual(currentGeneration, 11)
+    }
+
+    func testSplitLayoutExplicitlyAccountsForBothBranchesAndDivider() {
+        let lengths = SplitLayoutPolicy.lengths(
+            total: 1_556,
+            ratio: 0.5481854514781491,
+            minPaneLength: 100
+        )
+
+        XCTAssertEqual(lengths.first, 852)
+        XCTAssertEqual(lengths.second, 703)
+        XCTAssertEqual(lengths.first + SplitLayoutPolicy.dividerLength + lengths.second, 1_556)
+    }
+
+    func testSplitHandleCannotMoveBorderlessWindow() {
+        XCTAssertFalse(SplitDragHandleView().mouseDownCanMoveWindow)
     }
 
     func testPaneVisibilityRequiresSelectedWorkspaceAndSelectedTab() {
