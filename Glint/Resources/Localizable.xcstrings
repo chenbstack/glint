@@ -5757,6 +5757,17 @@
         }
       }
     },
+    "Without TLS, encryption only blocks passive sniffing. An active attacker on this network can replace the web client and capture the access key or terminal input.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未使用 TLS 时，加密仅能防止被动嗅探。同一网络中的主动攻击者可以替换网页客户端，窃取访问密钥或终端输入。"
+          }
+        }
+      }
+    },
     "All interfaces (less secure)": {
       "extractionState": "manual",
       "localizations": {

@@ -127,21 +127,72 @@ struct WebRemoteOutboundBuffer {
     }
 }
 
+struct WebRemoteAuthThrottle {
+    private struct Failure {
+        var count: Int
+        var lastFailure: TimeInterval
+    }
+
+    private let countCap: Int
+    private let expirySeconds: TimeInterval
+    private var failuresBySource: [String: Failure] = [:]
+
+    init(countCap: Int = 7, expirySeconds: TimeInterval) {
+        precondition(countCap > 0)
+        precondition(expirySeconds > 0)
+        self.countCap = countCap
+        self.expirySeconds = expirySeconds
+    }
+
+    mutating func recordFailure(
+        for source: String,
+        now: TimeInterval = ProcessInfo.processInfo.systemUptime
+    ) -> Int {
+        failuresBySource = failuresBySource.filter {
+            now >= $0.value.lastFailure
+                && now - $0.value.lastFailure < expirySeconds
+        }
+        let count = min((failuresBySource[source]?.count ?? 0) + 1, countCap)
+        failuresBySource[source] = Failure(count: count, lastFailure: now)
+        return count
+    }
+
+    mutating func removeAll() {
+        failuresBySource.removeAll()
+    }
+}
+
 final class WebRemoteServer: @unchecked Sendable {
     static let shared = WebRemoteServer()
 
+    static let maxClientConnections = 32
+    static let maxUnauthenticatedConnections = 8
     private static let maxIngressOutputBytes = 256 * 1024
     private static let maxSelectionOutputBytes = 512 * 1024
     private static let authFailureCountCap = 7
+    private static let authFailureExpirySeconds: TimeInterval = 60
+    private static let authenticationTimeoutSeconds: TimeInterval = 30
 
     /// Delay before answering a failed `authenticate`, growing exponentially
-    /// with the per-connection failure count to throttle online token guessing.
+    /// with the source-address failure count to throttle reconnect-based guessing.
     /// 0.25s → 0.5s → 1s → … → 16s (capped at the 7th failure). Honest clients
     /// almost never fail auth, so this only bites brute-forcers.
     static func authBackoffSeconds(forFailures count: Int) -> TimeInterval {
         let safe = min(max(count, 1), authFailureCountCap)
         let multiplier = pow(2.0, Double(safe - 1))
         return min(0.25 * multiplier, 16)
+    }
+
+    static func allowsNewClient(total: Int, unauthenticated: Int) -> Bool {
+        total < maxClientConnections
+            && unauthenticated < maxUnauthenticatedConnections
+    }
+
+    static func authSourceKey(for endpoint: NWEndpoint) -> String {
+        if case let .hostPort(host, _) = endpoint {
+            return String(describing: host)
+        }
+        return String(describing: endpoint)
     }
 
     private enum ListenerKind: Hashable {
@@ -158,6 +209,10 @@ final class WebRemoteServer: @unchecked Sendable {
     private var httpListener: NWListener?
     private var webSocketListener: NWListener?
     private var clients: [UUID: WebRemoteClientConnection] = [:]
+    private var authThrottle = WebRemoteAuthThrottle(
+        countCap: WebRemoteServer.authFailureCountCap,
+        expirySeconds: WebRemoteServer.authFailureExpirySeconds
+    )
     private var readyListeners = Set<ListenerKind>()
     private var runID: UUID?
     private var token = ""
@@ -327,11 +382,6 @@ final class WebRemoteServer: @unchecked Sendable {
             httpParameters.requiredLocalEndpoint = localEndpoint
 
             let http = try NWListener(using: httpParameters, on: httpPort)
-            // Advertising via mDNS only makes sense when the listener is
-            // reachable from the LAN; skip it for loopback.
-            if listenInterface != WebRemoteListenTarget.loopback {
-                http.service = NWListener.Service(name: "Glint Remote", type: "_http._tcp")
-            }
 
             let webSocketParameters = NWParameters.tcp
             webSocketParameters.allowLocalEndpointReuse = true
@@ -454,6 +504,7 @@ final class WebRemoteServer: @unchecked Sendable {
         webSocketListener = nil
         clients.values.forEach { $0.cancel() }
         clients.removeAll()
+        authThrottle.removeAll()
         readyListeners.removeAll()
         token = ""
         tokenKey = Data()
@@ -482,6 +533,7 @@ final class WebRemoteServer: @unchecked Sendable {
         webSocketListener = nil
         clients.values.forEach { $0.cancel() }
         clients.removeAll()
+        authThrottle.removeAll()
         readyListeners.removeAll()
         token = ""
         tokenKey = Data()
@@ -598,10 +650,27 @@ final class WebRemoteServer: @unchecked Sendable {
     }
 
     private func handleWebSocketConnection(_ connection: NWConnection) {
+        let unauthenticated = clients.values.lazy.filter { !$0.authenticated }.count
+        guard Self.allowsNewClient(
+            total: clients.count,
+            unauthenticated: unauthenticated
+        ) else {
+            webRemoteLogger.warning("Rejecting WebSocket client: connection limit reached")
+            connection.cancel()
+            return
+        }
         let id = UUID()
-        let client = WebRemoteClientConnection(id: id, connection: connection, server: self)
+        let client = WebRemoteClientConnection(
+            id: id,
+            authSourceKey: Self.authSourceKey(for: connection.endpoint),
+            connection: connection,
+            server: self
+        )
         clients[id] = client
-        client.start(on: queue)
+        client.start(
+            on: queue,
+            authenticationTimeout: Self.authenticationTimeoutSeconds
+        )
     }
 
     fileprivate func removeClient(_ id: UUID) {
@@ -683,7 +752,6 @@ final class WebRemoteServer: @unchecked Sendable {
                 failAuthenticationLocked(for: clientID)
                 return
             }
-            client.authFailureCount = 0
             let keys = WebRemoteCrypto.sessionKeys(tokenKey: tokenKey, challenge: challenge)
             client.beginEncryption(c2s: keys.c2s, s2c: keys.s2c)
             client.pendingChallenge = nil
@@ -986,12 +1054,13 @@ final class WebRemoteServer: @unchecked Sendable {
     }
 
     /// A failed/missing proof schedules an exponentially-backed-off
-    /// `unauthorized`, throttling online guessing of the access key.
+    /// `unauthorized`. Failure history is shared by source address, so reconnecting
+    /// does not reset the delay.
     private func failAuthenticationLocked(for clientID: UUID) {
         guard let client = clients[clientID] else { return }
-        client.authFailureCount = min(client.authFailureCount + 1, Self.authFailureCountCap)
         client.authBackoffPending = true
-        let delay = Self.authBackoffSeconds(forFailures: client.authFailureCount)
+        let failureCount = authThrottle.recordFailure(for: client.authSourceKey)
+        let delay = Self.authBackoffSeconds(forFailures: failureCount)
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
             self?.completeAuthFailure(for: clientID)
         }
@@ -1055,13 +1124,13 @@ final class WebRemoteServer: @unchecked Sendable {
 
 private final class WebRemoteClientConnection: @unchecked Sendable {
     let id: UUID
+    let authSourceKey: String
     var authenticated = false
     var subscribedPane: String?
     var pendingPane: String?
     var pendingSelectionOutput = WebRemoteOutputBuffer(byteLimit: 0)
     var terminalSize: WebRemoteTerminalSize?
     var terminalSizeRevision: UInt64 = 0
-    var authFailureCount = 0
     var authBackoffPending = false
 
     /// Challenge-response + encryption state. `pendingChallenge` is set when the
@@ -1084,13 +1153,19 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
     private var sendInFlight = false
     private var cancelled = false
 
-    init(id: UUID, connection: NWConnection, server: WebRemoteServer) {
+    init(
+        id: UUID,
+        authSourceKey: String,
+        connection: NWConnection,
+        server: WebRemoteServer
+    ) {
         self.id = id
+        self.authSourceKey = authSourceKey
         self.connection = connection
         self.server = server
     }
 
-    func start(on queue: DispatchQueue) {
+    func start(on queue: DispatchQueue, authenticationTimeout: TimeInterval) {
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
             switch state {
@@ -1114,6 +1189,10 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
             }
         }
         connection.start(queue: queue)
+        queue.asyncAfter(deadline: .now() + authenticationTimeout) { [weak self] in
+            guard let self, !authenticated else { return }
+            cancel()
+        }
     }
 
     func cancel() {

@@ -1,4 +1,5 @@
 import CryptoKit
+import Network
 import XCTest
 @testable import Glint
 
@@ -144,6 +145,50 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         XCTAssertLessThan(second, 3.0)
     }
 
+    func testAuthenticationBackoffSpansSeparateConnectionsFromSameSource() async throws {
+        let firstTask = makeWebSocket()
+        let secondTask = makeWebSocket()
+        defer {
+            firstTask.cancel(with: .goingAway, reason: nil)
+            secondTask.cancel(with: .goingAway, reason: nil)
+        }
+        _ = try await receiveAuthChallenge(firstTask)
+        _ = try await receiveAuthChallenge(secondTask)
+
+        let firstStart = Date()
+        try await send(firstTask, ["type": "authenticate", "proof": wrongProofBase64])
+        let firstReply = try await receiveJSON(firstTask)
+        XCTAssertEqual(firstReply["code"] as? String, "unauthorized")
+        let first = Date().timeIntervalSince(firstStart)
+
+        let secondStart = Date()
+        try await send(secondTask, ["type": "authenticate", "proof": wrongProofBase64])
+        let secondReply = try await receiveJSON(secondTask)
+        XCTAssertEqual(secondReply["code"] as? String, "unauthorized")
+        let second = Date().timeIntervalSince(secondStart)
+
+        XCTAssertGreaterThan(second, first)
+        XCTAssertGreaterThanOrEqual(second, first * 1.4)
+        XCTAssertLessThan(second, 3.0)
+    }
+
+    func testAuthenticationThrottleSpansConnectionsFromSameSource() {
+        var throttle = WebRemoteAuthThrottle(expirySeconds: 60)
+
+        XCTAssertEqual(throttle.recordFailure(for: "127.0.0.1", now: 1_000), 1)
+        XCTAssertEqual(
+            throttle.recordFailure(for: "127.0.0.1", now: 1_001),
+            2,
+            "A new connection from the same source must not reset the backoff"
+        )
+        XCTAssertEqual(throttle.recordFailure(for: "192.0.2.10", now: 1_001), 1)
+        XCTAssertEqual(
+            throttle.recordFailure(for: "127.0.0.1", now: 1_061),
+            1,
+            "Idle failure history should expire"
+        )
+    }
+
     private var wrongProofBase64: String {
         Data(repeating: 0, count: WebRemoteCrypto.challengeLength).base64EncodedString()
     }
@@ -163,6 +208,54 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         // Out-of-range inputs clamp, never grow unbounded.
         XCTAssertEqual(WebRemoteServer.authBackoffSeconds(forFailures: 0), 0.25, accuracy: 0.0001)
         XCTAssertEqual(WebRemoteServer.authBackoffSeconds(forFailures: 1_000), 16, accuracy: 0.0001)
+    }
+
+    func testClientAdmissionCapsTotalAndUnauthenticatedConnections() {
+        XCTAssertTrue(WebRemoteServer.allowsNewClient(total: 0, unauthenticated: 0))
+        XCTAssertTrue(
+            WebRemoteServer.allowsNewClient(
+                total: WebRemoteServer.maxClientConnections - 1,
+                unauthenticated: WebRemoteServer.maxUnauthenticatedConnections - 1
+            )
+        )
+        XCTAssertFalse(
+            WebRemoteServer.allowsNewClient(
+                total: WebRemoteServer.maxClientConnections,
+                unauthenticated: 0
+            )
+        )
+        XCTAssertFalse(
+            WebRemoteServer.allowsNewClient(
+                total: 0,
+                unauthenticated: WebRemoteServer.maxUnauthenticatedConnections
+            )
+        )
+    }
+
+    func testAuthSourceKeyIgnoresEphemeralPort() throws {
+        let first = NWEndpoint.hostPort(
+            host: "127.0.0.1",
+            port: try XCTUnwrap(NWEndpoint.Port(rawValue: 12_001))
+        )
+        let second = NWEndpoint.hostPort(
+            host: "127.0.0.1",
+            port: try XCTUnwrap(NWEndpoint.Port(rawValue: 12_002))
+        )
+
+        XCTAssertEqual(
+            WebRemoteServer.authSourceKey(for: first),
+            WebRemoteServer.authSourceKey(for: second)
+        )
+    }
+
+    func testLANListenTargetsRequireActiveAttackWarning() {
+        XCTAssertFalse(
+            WebRemoteListenTarget.requiresActiveAttackWarning(WebRemoteListenTarget.loopback)
+        )
+        XCTAssertTrue(
+            WebRemoteListenTarget.requiresActiveAttackWarning(WebRemoteListenTarget.any)
+        )
+        XCTAssertTrue(WebRemoteListenTarget.requiresActiveAttackWarning("en0"))
     }
 
     func testListenTargetBindAddressResolvesSpecialCases() {

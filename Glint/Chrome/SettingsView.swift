@@ -1152,6 +1152,22 @@ private struct TerminalPane: View {
                         .help("Refresh interfaces")
                     }
                 }
+                if WebRemoteListenTarget.requiresActiveAttackWarning(
+                    store.webRemoteListenInterface
+                ) {
+                    SettingsDivider()
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Color.orange)
+                        Text("Without TLS, encryption only blocks passive sniffing. An active attacker on this network can replace the web client and capture the access key or terminal input.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.text2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.orange.opacity(0.055))
+                }
                 if case let .portConflict(port) = store.webRemoteStatus {
                     SettingsDivider()
                     SettingsRow(

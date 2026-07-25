@@ -633,6 +633,10 @@ enum WebRemoteListenTarget {
     static let loopback = "loopback"
     static let any = "any"
 
+    static func requiresActiveAttackWarning(_ key: String) -> Bool {
+        key != loopback
+    }
+
     /// The IPv4 to bind, or `nil` for a wildcard listener (all interfaces).
     static func bindAddress(for key: String) -> String? {
         switch key {
