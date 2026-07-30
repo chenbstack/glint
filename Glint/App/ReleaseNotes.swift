@@ -52,6 +52,21 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.27-beta.1",
+            en: [
+                "Control your terminals from a browser: open Glint's web remote on your phone or another machine on the same network, see live output, and type into any pane. Traffic is end-to-end encrypted and gated by an access key you can rotate at any time.",
+                "pi joins Claude Code and Codex as a built-in agent — install its hooks from Settings and Glint tracks its sessions, tool calls, and prompts for input just like the others, including session restore.",
+                "Middle-click a workspace in the sidebar to close it. Can be turned off in Settings ▸ General ▸ Workspace.",
+                "Fixed panes jumping to the wrong size while dragging a divider, and the resize cursor no longer disappears over dividers."
+            ],
+            zh: [
+                "用浏览器控制终端：在手机或同一网络下的另一台设备上打开 Glint 的网页远程端，即可实时查看输出并向任意窗格输入。通信全程加密，并由可随时重置的访问密钥保护。",
+                "pi 加入内置 Agent 行列，与 Claude Code、Codex 并列 —— 在设置里安装 hooks 后，Glint 会像对待其它 Agent 一样跟踪它的会话、工具调用和待输入提示，也支持会话恢复。",
+                "在侧栏用鼠标中键点击工作区即可关闭。可在「设置 ▸ 通用 ▸ 工作区」中关闭该行为。",
+                "修复拖动分隔条时窗格尺寸跳变的问题，分隔条上的调整光标也不再消失。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.26-beta.5",
             en: [
                 "Fixed panes showing another workspace's terminal after a workspace or tab switch: SwiftUI-recycled pane containers could be reclaimed by the outgoing workspace's terminal surface; that stale re-attach is now blocked."
