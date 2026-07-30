@@ -3,8 +3,8 @@
 # asset and register its sha256 in scripts/ghosttykit-checksums.txt.
 #
 # Run this locally after bumping the ghostty submodule. Requires:
-#   * a working GhosttyKit.xcframework in Vendor/ (build it however you can
-#     — Xcode + zig 0.15.2, or copy from a teammate)
+#   * a working GhosttyKit.xcframework in Vendor/ — run
+#     scripts/build-ghosttykit.sh, which handles the toolchain quirks
 #   * `gh` CLI logged in with write access to chenbstack/glint
 #
 # The release tag follows: xcframework-<short-sha>-v<N>
@@ -20,7 +20,7 @@ REGISTRY="$ROOT/scripts/ghosttykit-checksums.txt"
 REPO="${GHOSTTYKIT_RELEASE_REPO:-chenbstack/glint}"
 
 if [ ! -d "$FRAMEWORK" ]; then
-  echo "ERROR: $FRAMEWORK is missing — build it first." >&2
+  echo "ERROR: $FRAMEWORK is missing — run scripts/build-ghosttykit.sh first." >&2
   exit 1
 fi
 if ! command -v gh >/dev/null 2>&1; then

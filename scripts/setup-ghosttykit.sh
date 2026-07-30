@@ -21,8 +21,9 @@
 #     short-circuit when the marker already matches the submodule SHA.
 #
 # To publish a new framework (after bumping the ghostty submodule), run
-# scripts/publish-ghosttykit.sh — it builds locally with Xcode + a zig you
-# install ad-hoc, uploads to releases, and appends a line to the registry.
+# scripts/build-ghosttykit.sh — it pins the right zig and works around the
+# toolchain quirks above — then scripts/publish-ghosttykit.sh to upload the
+# result to releases and append a line to the registry.
 
 set -euo pipefail
 
@@ -69,8 +70,8 @@ ERROR: no prebuilt GhosttyKit listed for ghostty $GHOSTTY_SHA.
 
 Either:
   * roll the submodule back to a SHA listed in scripts/ghosttykit-checksums.txt, or
-  * publish a fresh prebuilt with scripts/publish-ghosttykit.sh
-    (requires a machine that can actually build it — Xcode + zig 0.15.2).
+  * build and publish a fresh prebuilt (requires full Xcode):
+      scripts/build-ghosttykit.sh && scripts/publish-ghosttykit.sh
 EOF
   exit 1
 fi
