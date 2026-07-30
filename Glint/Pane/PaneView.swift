@@ -68,6 +68,32 @@ struct PaneView: View {
                 Color.black.opacity(unfocusedDimOpacity)
                     .allowsHitTesting(false)
             }
+            if store.isWebRemoteControlled(workspaceID: workspaceID, paneID: paneID) {
+                VStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("Controlled from web", systemImage: "network")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(Theme.text1)
+                        Text("Layout may be inaccurate while controlled. It will restore automatically after disconnecting.")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(Theme.text3)
+                    }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(Theme.bgPane.opacity(0.94))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .stroke(Theme.overlay(0.12), lineWidth: 1)
+                        )
+                        .shadow(color: Color.black.opacity(0.22), radius: 8, y: 3)
+                        .padding(.top, 8)
+                    Spacer()
+                }
+                .allowsHitTesting(false)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture { store.focus(paneID) }

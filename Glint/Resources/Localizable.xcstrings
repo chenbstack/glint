@@ -344,6 +344,259 @@
         }
       }
     },
+    "Access key": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "访问密钥"
+          }
+        }
+      }
+    },
+    "Access URL": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "访问地址"
+          }
+        }
+      }
+    },
+    "Allow browser control": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许浏览器控制"
+          }
+        }
+      }
+    },
+    "Copy key": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制密钥"
+          }
+        }
+      }
+    },
+    "Copy link": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制链接"
+          }
+        }
+      }
+    },
+    "Could not start: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法启动：%@"
+          }
+        }
+      }
+    },
+    "Access key and ports reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "访问密钥和端口已重置"
+          }
+        }
+      }
+    },
+    "New ports: %d (web) and %d (terminal). Copy the new link and key to reconnect.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新端口：%d（网页）和 %d（终端）。请复制新链接和密钥重新连接。"
+          }
+        }
+      }
+    },
+    "Port %d is already in use.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端口 %d 已被占用。"
+          }
+        }
+      }
+    },
+    "Port %d is already in use. Resetting will generate a new key and ports, disconnect browsers, and invalidate old links.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端口 %d 已被占用。重置会生成新密钥和端口、断开浏览器，并使旧链接失效。"
+          }
+        }
+      }
+    },
+    "Port conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端口冲突"
+          }
+        }
+      }
+    },
+    "Web remote control unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页远程控制不可用"
+          }
+        }
+      }
+    },
+    "Web remote port conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页远程控制端口冲突"
+          }
+        }
+      }
+    },
+    "Controlled from web": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在通过网页控制"
+          }
+        }
+      }
+    },
+    "Layout may be inaccurate while controlled. It will restore automatically after disconnecting.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "控制期间布局可能不准确，断开后会自动恢复。"
+          }
+        }
+      }
+    },
+    "Off — no network ports are bound.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已关闭 — 未监听任何网络端口。"
+          }
+        }
+      }
+    },
+    "Ready — copy a session link to another browser.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已就绪 — 可复制会话链接到其他浏览器。"
+          }
+        }
+      }
+    },
+    "Reset access key and ports?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置访问密钥和端口？"
+          }
+        }
+      }
+    },
+    "Reset key and ports": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置密钥和端口"
+          }
+        }
+      }
+    },
+    "Connected browsers will be disconnected. A new key and ports will be generated, so old links will stop working.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接的浏览器将断开。系统会生成新密钥和端口，旧链接将失效。"
+          }
+        }
+      }
+    },
+    "Serves Glint's bundled browser terminal on this Mac for trusted LAN or VPN use. The copied link or access key grants terminal input; traffic is not TLS-encrypted. Off by default.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在这台 Mac 上提供 Glint 内置的浏览器终端，供可信的局域网或 VPN 使用。复制的链接或访问密钥可直接输入终端；流量未使用 TLS 加密。默认关闭。"
+          }
+        }
+      }
+    },
+    "Starting the local web server…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在启动本地网页服务器…"
+          }
+        }
+      }
+    },
+    "Web remote control": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页远程控制"
+          }
+        }
+      }
+    },
     "App icon": {
       "extractionState": "manual",
       "localizations": {
@@ -5577,6 +5830,347 @@
           "stringUnit": {
             "state": "translated",
             "value": "✗ 名称非法"
+          }
+        }
+      }
+    },
+    "Claude Code, Codex, OMP, hook routing": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code、Codex、OMP、hook 路由"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "OMP": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OMP"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "OMP detected — install the extension to show its status.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已检测到 OMP — 安装扩展以显示其状态。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "OMP not detected on this Mac.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 Mac 上未检测到 OMP。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "When Glint reopens, each pane that was running OMP at last quit is resumed via `omp -r <session-id>` — so multiple OMP panes in one workspace land back in their own sessions. Falls back to `omp -c` for panes whose session id wasn't captured.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 重新打开时，上次退出时在跑 OMP 的每个 pane 会通过 `omp -r <session-id>` 恢复会话，多个 OMP pane 各自回到自己的会话。未捕获 session id 时回退为 `omp -c`。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Extension file": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扩展文件"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Extension installed and registered with OMP.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扩展已安装并注册到 OMP。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Registered via ~/.omp/agent/settings.json; only reports when Glint's pane environment variables are present.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过 ~/.omp/agent/settings.json 注册；仅在存在 Glint 的 pane 环境变量时上报。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "~/.glint/hooks/omp-agent-bridge.ts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/.glint/hooks/omp-agent-bridge.ts"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Glint installs a portable TypeScript extension at ~/.glint/hooks/omp-agent-bridge.ts and registers that path in ~/.omp/agent/settings.json so Oh My Pi sessions report status like Claude. Uses a tilde path (not an absolute home path) so the same install works on any Mac.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 会在 ~/.glint/hooks/omp-agent-bridge.ts 安装可移植的 TypeScript 扩展，并在 ~/.omp/agent/settings.json 中注册该路径，使 Oh My Pi 会话像 Claude 一样上报状态。使用波浪线路径（而非绝对 home 路径），同一套安装在任意 Mac 上都能生效。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "awaiting reply": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待回复"
+          }
+        }
+      }
+    },
+    "thinking…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "思考中…"
+          }
+        }
+      }
+    },
+    "reply": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待回复"
+          }
+        }
+      }
+    },
+    "Agent is waiting for your reply": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent 等待你的回复"
+          }
+        }
+      }
+    },
+    "Claude Code, Codex, OMP, Grok, hook routing": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code、Codex、OMP、Grok、hook 路由"
+          }
+        }
+      }
+    },
+    "Grok": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grok"
+          }
+        }
+      }
+    },
+    "Hooks installed into your Grok hooks directory.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hook 已安装到你的 Grok hooks 目录。"
+          }
+        }
+      }
+    },
+    "Grok detected — install the reporter to show its status.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已检测到 Grok — 安装 reporter 即可显示其状态。"
+          }
+        }
+      }
+    },
+    "Grok not detected on this Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本机未检测到 Grok。"
+          }
+        }
+      }
+    },
+    "When Glint reopens, each pane that was running Grok at last quit is resumed via `grok --resume <session-id>` — so multiple Grok panes in one workspace land back in their own sessions. Falls back to `grok --continue` for panes whose session id wasn't captured.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 重新打开时，上次退出时正在运行 Grok 的每个窗格会通过 `grok --resume <session-id>` 恢复，因此同一工作区里的多个 Grok 窗格会回到各自会话。未捕获到 session id 的窗格会回退到 `grok --continue`。"
+          }
+        }
+      }
+    },
+    "Dedicated Glint hook file under Grok's global hooks directory; only reports when Glint's pane environment variables are present.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grok 全局 hooks 目录下的独立 Glint hook 文件；仅在存在 Glint 窗格环境变量时上报。"
+          }
+        }
+      }
+    },
+    "~/.grok/hooks/glint.json": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/.grok/hooks/glint.json"
+          }
+        }
+      }
+    },
+    "Glint writes ~/.grok/hooks/glint.json so Grok Build sessions report thinking, tools, and ask_user_question (awaiting reply). Dedicated file — not Claude's settings — so Grok is attributed as Grok. The reporter ignores Claude-compat dual-fires under Grok (GROK_SESSION_ID present).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 会写入 ~/.grok/hooks/glint.json，使 Grok Build 会话上报思考、工具调用，以及 ask_user_question（待回复）。使用独立文件（而非 Claude 的 settings），因此 Grok 会话会正确归到 Grok。在 Grok 下 reporter 会忽略 Claude 兼容 hooks 的双触发（存在 GROK_SESSION_ID 时）。"
+          }
+        }
+      }
+    },
+    "Listen on": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "监听网卡"
+          }
+        }
+      }
+    },
+    "Localhost only": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅本机"
+          }
+        }
+      }
+    },
+    "Only this Mac (127.0.0.1) can connect.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅本机（127.0.0.1）可连接。"
+          }
+        }
+      }
+    },
+    "Reachable from any network this Mac joins (least secure).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本机加入的任何网络均可访问（最不安全）。"
+          }
+        }
+      }
+    },
+    "Without TLS, encryption only blocks passive sniffing. An active attacker on this network can replace the web client and capture the access key or terminal input.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未使用 TLS 时，加密仅能防止被动嗅探。同一网络中的主动攻击者可以替换网页客户端，窃取访问密钥或终端输入。"
+          }
+        }
+      }
+    },
+    "All interfaces (less secure)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部网卡（较不安全）"
+          }
+        }
+      }
+    },
+    "Refresh interfaces": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新网卡列表"
+          }
+        }
+      }
+    },
+    "Selected interface is no longer available. Pick another or use All interfaces.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所选网卡已不可用。请另选一个或使用“全部网卡”。"
           }
         }
       }
