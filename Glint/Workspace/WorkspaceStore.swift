@@ -1251,6 +1251,14 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(sortCompletedFirst, forKey: "glint.sortCompletedFirst") }
     }
 
+    /// Middle-click on a workspace card in the sidebar closes it (same path
+    /// as the context menu's "Close Workspace"). Defaults to on so the
+    /// behaviour stays available without configuration; users who find it
+    /// surprising can disable it here.
+    @Published var middleClickClosesWorkspace: Bool = (UserDefaults.standard.object(forKey: "glint.middleClickClosesWorkspace") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(middleClickClosesWorkspace, forKey: "glint.middleClickClosesWorkspace") }
+    }
+
     /// Show the "Paste potentially unsafe text?" confirm dialog when the
     /// clipboard contains newlines or control characters. The underlying
     /// default (`glint.skipUnsafePasteConfirmation`) is inverted so the
