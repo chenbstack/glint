@@ -4,8 +4,18 @@ import AppKit
 enum SurfaceReassertionPolicy {
     static func shouldReassert(containerIsAttached: Bool,
                                expectedSurfaceMatches: Bool,
-                               paneIsVisible: Bool) -> Bool {
-        containerIsAttached && expectedSurfaceMatches && paneIsVisible
+                               paneIsVisible: Bool,
+                               hostClaimMatches: Bool) -> Bool {
+        containerIsAttached && expectedSurfaceMatches && paneIsVisible && hostClaimMatches
+    }
+}
+
+enum SurfaceHostClaimPolicy {
+    static func shouldClaim(candidateGeneration: UInt64,
+                            currentGeneration: UInt64,
+                            currentHostIsAttached: Bool,
+                            isSameHost: Bool) -> Bool {
+        isSameHost || !currentHostIsAttached || candidateGeneration >= currentGeneration
     }
 }
 
@@ -90,11 +100,13 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     /// row falls on a slightly different sub-pixel offset — the eye reads
     /// the result as a 1px "fault line" tearing through the rows.
     final class NoDragContainerView: NSView {
+        /// Creation order is the tie-breaker while an outgoing and incoming
+        /// split-tree host coexist. New tree containers must win even if an
+        /// old representable receives a late update.
+        let hostGeneration = mach_absolute_time()
+
         /// The surface this container most recently claimed via `attach`.
-        /// Read by the post-commit recheck to tell whether this container is
-        /// still the surface's rightful host (a later attach to a different
-        /// container overwrites the claim there, not here, so identity of
-        /// the pair (container, surface) is what's being verified).
+        /// Paired with the surface-side host claim for the post-commit recheck.
         weak var expectedSurface: GhosttySurfaceView?
 
         override var mouseDownCanMoveWindow: Bool { false }
@@ -134,6 +146,16 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     }
 
     private func attach(_ surface: GhosttySurfaceView, to container: NoDragContainerView) {
+        let currentHost = surface.paneHostView
+        guard SurfaceHostClaimPolicy.shouldClaim(
+            candidateGeneration: container.hostGeneration,
+            currentGeneration: surface.paneHostGeneration,
+            currentHostIsAttached: currentHost?.window != nil,
+            isSameHost: currentHost === container
+        ) else { return }
+
+        surface.paneHostView = container
+        surface.paneHostGeneration = container.hostGeneration
         container.expectedSurface = surface
         Self.pin(surface, in: container)
         // When the split tree reshapes (workspace switch, pane close), SwiftUI
@@ -149,7 +171,9 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
             guard SurfaceReassertionPolicy.shouldReassert(
                 containerIsAttached: container.window != nil,
                 expectedSurfaceMatches: container.expectedSurface === surface,
-                paneIsVisible: isPaneVisible()
+                paneIsVisible: isPaneVisible(),
+                hostClaimMatches: surface.paneHostView === container &&
+                    surface.paneHostGeneration == container.hostGeneration
             ) else { return }
             Self.pin(surface, in: container)
         }
