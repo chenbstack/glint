@@ -284,7 +284,13 @@ input:focus {
   background: var(--terminal-bg);
 }
 
-#terminal { min-width: 0; min-height: 0; padding: 12px 10px 4px; display: none; }
+#terminal {
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 10px 4px;
+  display: none;
+  touch-action: none;
+}
 #terminal.visible { display: block; }
 #terminal .xterm { height: 100%; }
 #terminal .xterm-viewport { scrollbar-color: color-mix(in srgb, var(--text) 16%, transparent) transparent; }

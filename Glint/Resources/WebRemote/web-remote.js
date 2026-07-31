@@ -86,7 +86,6 @@ const translations = {
     refresh: "刷新",
     remote_terminal: "远程终端",
     select_terminal: "选择一个终端",
-    selection_in_progress: "正在切换终端，请稍候",
     sync_description: "画面和输入会在浏览器与这台 Mac 上的 Glint 会话之间实时同步。",
     syncing_terminal: "正在同步终端画面…",
     terminal_count: "{count} 个终端",
@@ -137,7 +136,6 @@ const translations = {
     refresh: "Refresh",
     remote_terminal: "Remote terminal",
     select_terminal: "Select a terminal",
-    selection_in_progress: "Switching terminals, please wait",
     sync_description: "The browser stays in sync with this Mac's live Glint session.",
     syncing_terminal: "Syncing terminal…",
     terminal_count: "{count} terminal(s)",
@@ -246,6 +244,79 @@ document.fonts?.load('13px "Glint Nerd Symbols"').then(() => {
   terminal.refresh(0, terminal.rows - 1);
   fitTerminal();
 });
+
+let touchScrollY = null;
+let touchScrollRemainder = 0;
+
+function resetTouchScroll() {
+  touchScrollY = null;
+  touchScrollRemainder = 0;
+}
+
+function touchCenterY(touches) {
+  return (touches[0].clientY + touches[1].clientY) / 2;
+}
+
+function terminalLineHeight() {
+  const row = elements.terminal.querySelector(".xterm-rows > div");
+  const measured = row?.getBoundingClientRect().height;
+  return measured > 0
+    ? measured
+    : terminal.options.fontSize * terminal.options.lineHeight;
+}
+
+function scrollTerminalLinesFromTouch(lines, clientX, clientY) {
+  const screen = elements.terminal.querySelector(".xterm-screen");
+  let handledByTerminal = false;
+  if (screen) {
+    const direction = Math.sign(lines);
+    for (let index = 0; index < Math.abs(lines); index += 1) {
+      const wheelEvent = new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        clientX,
+        clientY,
+        deltaMode: WheelEvent.DOM_DELTA_LINE,
+        deltaY: direction,
+      });
+      if (!screen.dispatchEvent(wheelEvent)) handledByTerminal = true;
+    }
+  }
+  if (!handledByTerminal && terminal.buffer.active.baseY > 0) {
+    terminal.scrollLines(lines);
+  }
+}
+
+elements.terminal.addEventListener("touchstart", event => {
+  if (event.touches.length !== 2) {
+    resetTouchScroll();
+    return;
+  }
+  event.preventDefault();
+  touchScrollY = touchCenterY(event.touches);
+  touchScrollRemainder = 0;
+}, { passive: false });
+
+elements.terminal.addEventListener("touchmove", event => {
+  if (event.touches.length !== 2 || touchScrollY === null) {
+    resetTouchScroll();
+    return;
+  }
+  event.preventDefault();
+  const nextY = touchCenterY(event.touches);
+  touchScrollRemainder += touchScrollY - nextY;
+  touchScrollY = nextY;
+
+  const lineHeight = terminalLineHeight();
+  const lines = Math.trunc(touchScrollRemainder / lineHeight);
+  if (lines === 0) return;
+  const clientX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+  scrollTerminalLinesFromTouch(lines, clientX, nextY);
+  touchScrollRemainder -= lines * lineHeight;
+}, { passive: false });
+
+elements.terminal.addEventListener("touchend", resetTouchScroll);
+elements.terminal.addEventListener("touchcancel", resetTouchScroll);
 
 let socket;
 let reconnectTimer;
@@ -616,7 +687,6 @@ function errorLabel(code) {
     "workspace-archived": t("workspace_archived"),
     "last-terminal": t("last_terminal"),
     "terminal-not-ready": t("terminal_not_ready"),
-    "selection-in-progress": t("selection_in_progress"),
     "unknown-command": t("unknown_command"),
   };
   return labels[code] || t("operation_failed", { code });

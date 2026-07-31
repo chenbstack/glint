@@ -313,6 +313,37 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertNil(WebRemoteAssets.asset(for: "/favicon.ico"))
     }
 
+    func testBundledAssetsSupportTwoFingerTerminalScrolling() throws {
+        let scriptURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "web-remote", withExtension: "js")
+        )
+        let styleURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "web-remote", withExtension: "css")
+        )
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let style = try String(contentsOf: styleURL, encoding: .utf8)
+
+        XCTAssertTrue(script.contains("\"touchstart\""))
+        XCTAssertTrue(script.contains("\"touchmove\""))
+        XCTAssertTrue(script.contains("terminal.scrollLines"))
+        XCTAssertTrue(script.contains("terminal.buffer.active.baseY > 0"))
+        XCTAssertTrue(script.contains("new WheelEvent(\"wheel\""))
+        XCTAssertTrue(script.contains(".xterm-screen"))
+        XCTAssertTrue(script.contains("passive: false"))
+        XCTAssertTrue(style.contains("touch-action: none"))
+    }
+
+    func testSelectingNewPaneSupersedesPendingSelection() {
+        XCTAssertEqual(
+            WebRemoteServer.panesToReconcileWhenSelecting(
+                subscribedPane: nil,
+                pendingPane: "pane-a",
+                nextPane: "pane-b"
+            ),
+            Set(["pane-a"])
+        )
+    }
+
     func testHeadResponseKeepsContentLengthWithoutBody() {
         let body = Data("hello".utf8)
         let response = WebRemoteHTTPResponse.make(

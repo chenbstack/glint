@@ -195,6 +195,15 @@ final class WebRemoteServer: @unchecked Sendable {
         return String(describing: endpoint)
     }
 
+    static func panesToReconcileWhenSelecting(
+        subscribedPane: String?,
+        pendingPane: String?,
+        nextPane: String
+    ) -> Set<String>? {
+        guard pendingPane != nextPane else { return nil }
+        return Set([subscribedPane, pendingPane].compactMap { $0 })
+    }
+
     private enum ListenerKind: Hashable {
         case http
         case webSocket
@@ -863,12 +872,14 @@ final class WebRemoteServer: @unchecked Sendable {
         size: WebRemoteTerminalSize,
         for clientID: UUID
     ) {
-        guard let client = clients[clientID], client.pendingPane == nil else {
-            sendError("selection-in-progress", to: clientID)
-            return
-        }
+        guard let client = clients[clientID],
+              let previousPanes = Self.panesToReconcileWhenSelecting(
+                  subscribedPane: client.subscribedPane,
+                  pendingPane: client.pendingPane,
+                  nextPane: pane
+              )
+        else { return }
 
-        let previousPane = client.subscribedPane
         client.subscribedPane = nil
         client.pendingPane = pane
         client.pendingSelectionOutput = WebRemoteOutputBuffer(
@@ -876,9 +887,7 @@ final class WebRemoteServer: @unchecked Sendable {
         )
         client.terminalSize = nil
         updateSubscribedPanesLocked()
-        if let previousPane {
-            reconcileTerminalSizeLocked(for: previousPane)
-        }
+        previousPanes.forEach { reconcileTerminalSizeLocked(for: $0) }
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let store = WorkspaceStore.current else { return }
@@ -891,11 +900,15 @@ final class WebRemoteServer: @unchecked Sendable {
             let result = store.webRemoteTerminalSnapshot(pane: pane)
             self.queue.async { [weak self, weak store] in
                 guard let self,
-                      let store,
-                      let client = clients[clientID],
+                      let store
+                else { return }
+                guard let client = clients[clientID],
                       client.authenticated,
                       client.pendingPane == pane
-                else { return }
+                else {
+                    reconcileTerminalSizeLocked(for: pane)
+                    return
+                }
                 switch result {
                 case let .success(snapshot):
                     let bufferedOutput = client.pendingSelectionOutput.take(
