@@ -204,6 +204,15 @@ final class WebRemoteServer: @unchecked Sendable {
         return Set([subscribedPane, pendingPane].compactMap { $0 })
     }
 
+    static func isCurrentPaneSelection(
+        pendingPane: String?,
+        pendingGeneration: UInt64,
+        pane: String,
+        generation: UInt64
+    ) -> Bool {
+        pendingPane == pane && pendingGeneration == generation
+    }
+
     private enum ListenerKind: Hashable {
         case http
         case webSocket
@@ -880,6 +889,8 @@ final class WebRemoteServer: @unchecked Sendable {
               )
         else { return }
 
+        client.paneSelectionGeneration &+= 1
+        let selectionGeneration = client.paneSelectionGeneration
         client.subscribedPane = nil
         client.pendingPane = pane
         client.pendingSelectionOutput = WebRemoteOutputBuffer(
@@ -893,7 +904,12 @@ final class WebRemoteServer: @unchecked Sendable {
             guard let self, let store = WorkspaceStore.current else { return }
             if let error = store.controlFocus(pane: pane, activateApp: false) {
                 self.queue.async { [weak self] in
-                    self?.finishSelectionFailure(error, pane: pane, clientID: clientID)
+                    self?.finishSelectionFailure(
+                        error,
+                        pane: pane,
+                        generation: selectionGeneration,
+                        clientID: clientID
+                    )
                 }
                 return
             }
@@ -904,11 +920,13 @@ final class WebRemoteServer: @unchecked Sendable {
                 else { return }
                 guard let client = clients[clientID],
                       client.authenticated,
-                      client.pendingPane == pane
-                else {
-                    reconcileTerminalSizeLocked(for: pane)
-                    return
-                }
+                      Self.isCurrentPaneSelection(
+                          pendingPane: client.pendingPane,
+                          pendingGeneration: client.paneSelectionGeneration,
+                          pane: pane,
+                          generation: selectionGeneration
+                      )
+                else { return }
                 switch result {
                 case let .success(snapshot):
                     let bufferedOutput = client.pendingSelectionOutput.take(
@@ -935,14 +953,31 @@ final class WebRemoteServer: @unchecked Sendable {
                         }
                     }
                 case let .failure(error):
-                    finishSelectionFailure(error, pane: pane, clientID: clientID)
+                    finishSelectionFailure(
+                        error,
+                        pane: pane,
+                        generation: selectionGeneration,
+                        clientID: clientID
+                    )
                 }
             }
         }
     }
 
-    private func finishSelectionFailure(_ error: String, pane: String, clientID: UUID) {
-        guard let client = clients[clientID], client.pendingPane == pane else { return }
+    private func finishSelectionFailure(
+        _ error: String,
+        pane: String,
+        generation: UInt64,
+        clientID: UUID
+    ) {
+        guard let client = clients[clientID],
+              Self.isCurrentPaneSelection(
+                  pendingPane: client.pendingPane,
+                  pendingGeneration: client.paneSelectionGeneration,
+                  pane: pane,
+                  generation: generation
+              )
+        else { return }
         _ = client.pendingSelectionOutput.take()
         client.pendingPane = nil
         updateSubscribedPanesLocked()
@@ -1148,6 +1183,7 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
     var authenticated = false
     var subscribedPane: String?
     var pendingPane: String?
+    var paneSelectionGeneration: UInt64 = 0
     var pendingSelectionOutput = WebRemoteOutputBuffer(byteLimit: 0)
     var terminalSize: WebRemoteTerminalSize?
     var terminalSizeRevision: UInt64 = 0

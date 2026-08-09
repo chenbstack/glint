@@ -389,6 +389,7 @@ function connect() {
     if (!token) showAuth();
   });
   socket.addEventListener("message", event => {
+    if (socket !== currentSocket) return;
     lastServerMessageAt = Date.now();
     const data = event.data;
     if (typeof data === "string") {

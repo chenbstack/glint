@@ -344,7 +344,24 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertTrue(script.contains("window.addEventListener(\"online\", connect)"))
         XCTAssertTrue(script.contains("window.addEventListener(\"pageshow\", reconnectIfStale)"))
         XCTAssertTrue(script.contains("document.addEventListener(\"visibilitychange\""))
-        XCTAssertTrue(script.contains("if (socket !== currentSocket) return"))
+
+        let messageHandlerStart = try XCTUnwrap(
+            script.range(of: "socket.addEventListener(\"message\", event => {")
+        )
+        let closeHandlerStart = try XCTUnwrap(
+            script.range(
+                of: "socket.addEventListener(\"close\", () => {",
+                range: messageHandlerStart.upperBound ..< script.endIndex
+            )
+        )
+        let messageHandler = script[messageHandlerStart.lowerBound ..< closeHandlerStart.lowerBound]
+        let identityGuard = try XCTUnwrap(
+            messageHandler.range(of: "if (socket !== currentSocket) return")
+        )
+        let timestampUpdate = try XCTUnwrap(
+            messageHandler.range(of: "lastServerMessageAt = Date.now()")
+        )
+        XCTAssertLessThan(identityGuard.lowerBound, timestampUpdate.lowerBound)
     }
 
     func testSelectingNewPaneSupersedesPendingSelection() {
@@ -355,6 +372,25 @@ final class WebRemoteProtocolTests: XCTestCase {
                 nextPane: "pane-b"
             ),
             Set(["pane-a"])
+        )
+    }
+
+    func testRepeatedPaneSelectionOnlyAcceptsLatestGeneration() {
+        XCTAssertFalse(
+            WebRemoteServer.isCurrentPaneSelection(
+                pendingPane: "pane-a",
+                pendingGeneration: 3,
+                pane: "pane-a",
+                generation: 1
+            )
+        )
+        XCTAssertTrue(
+            WebRemoteServer.isCurrentPaneSelection(
+                pendingPane: "pane-a",
+                pendingGeneration: 3,
+                pane: "pane-a",
+                generation: 3
+            )
         )
     }
 
