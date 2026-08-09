@@ -1312,6 +1312,7 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
         connection.receiveMessage { [weak self] content, context, _, error in
             guard let self else { return }
             if error != nil {
+                cancel()
                 server?.removeClient(id)
                 return
             }

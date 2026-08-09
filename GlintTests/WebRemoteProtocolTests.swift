@@ -333,6 +333,20 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertTrue(style.contains("touch-action: none"))
     }
 
+    func testBundledClientRecoversStaleWebSocketConnections() throws {
+        let scriptURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "web-remote", withExtension: "js")
+        )
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+
+        XCTAssertTrue(script.contains("const serverSilenceTimeout = heartbeatInterval * 4"))
+        XCTAssertTrue(script.contains("Date.now() - lastServerMessageAt >= serverSilenceTimeout"))
+        XCTAssertTrue(script.contains("window.addEventListener(\"online\", connect)"))
+        XCTAssertTrue(script.contains("window.addEventListener(\"pageshow\", reconnectIfStale)"))
+        XCTAssertTrue(script.contains("document.addEventListener(\"visibilitychange\""))
+        XCTAssertTrue(script.contains("if (socket !== currentSocket) return"))
+    }
+
     func testSelectingNewPaneSupersedesPendingSelection() {
         XCTAssertEqual(
             WebRemoteServer.panesToReconcileWhenSelecting(

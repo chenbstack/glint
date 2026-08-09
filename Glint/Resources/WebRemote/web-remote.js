@@ -321,6 +321,9 @@ elements.terminal.addEventListener("touchcancel", resetTouchScroll);
 let socket;
 let reconnectTimer;
 let reconnectDelay = 500;
+const heartbeatInterval = 3000;
+const serverSilenceTimeout = heartbeatInterval * 4;
+let lastServerMessageAt = Date.now();
 let authenticated = false;
 let selectedPane = sessionStorage.getItem("glint-selected-pane") || "";
 let lastState;
@@ -370,6 +373,7 @@ function connect() {
   if (socket) {
     socket.close();
   }
+  lastServerMessageAt = Date.now();
   authenticated = false;
   controllingPane = "";
   resetSession();
@@ -378,12 +382,14 @@ function connect() {
   const currentSocket = socket;
   socket.binaryType = "arraybuffer";
   socket.addEventListener("open", () => {
+    lastServerMessageAt = Date.now();
     reconnectDelay = 500;
     // The server issues an auth-challenge as soon as the socket opens; we wait
     // for it rather than sending the token ourselves.
     if (!token) showAuth();
   });
   socket.addEventListener("message", event => {
+    lastServerMessageAt = Date.now();
     const data = event.data;
     if (typeof data === "string") {
       handleMessage(data);        // plaintext: auth-challenge / handshake error
@@ -400,6 +406,16 @@ function connect() {
     reconnectDelay = Math.min(reconnectDelay * 1.8, 8000);
   });
   socket.addEventListener("error", () => setStatus("error", t("unable_connect")));
+}
+
+function reconnectIfStale() {
+  const stale = authenticated && Date.now() - lastServerMessageAt >= serverSilenceTimeout;
+  if (!socket ||
+      socket.readyState === WebSocket.CLOSING ||
+      socket.readyState === WebSocket.CLOSED ||
+      stale) {
+    connect();
+  }
 }
 
 function resetSession() {
@@ -959,12 +975,22 @@ function encodeBase64(bytes) {
 }
 
 window.addEventListener("resize", syncVisualViewport);
+window.addEventListener("online", connect);
+window.addEventListener("pageshow", reconnectIfStale);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") reconnectIfStale();
+});
 window.visualViewport?.addEventListener("resize", syncVisualViewport);
 window.visualViewport?.addEventListener("scroll", syncVisualViewport);
 new ResizeObserver(fitTerminal).observe(elements.terminal);
 syncVisualViewport();
 setInterval(() => {
-  if (authenticated) send({ type: "list" });
-}, 3000);
+  if (!authenticated) return;
+  if (Date.now() - lastServerMessageAt >= serverSilenceTimeout) {
+    connect();
+    return;
+  }
+  send({ type: "list" });
+}, heartbeatInterval);
 
 connect();
