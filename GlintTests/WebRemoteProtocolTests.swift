@@ -162,7 +162,8 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertTrue(WebRemoteAccessToken.matches(token, expected: token))
         XCTAssertFalse(WebRemoteAccessToken.matches(nil, expected: token))
         XCTAssertFalse(WebRemoteAccessToken.matches(token + "0", expected: token))
-        XCTAssertFalse(WebRemoteAccessToken.matches(String(token.dropLast()) + "0", expected: token))
+        let differentSuffix = token.last == "0" ? "1" : "0"
+        XCTAssertFalse(WebRemoteAccessToken.matches(String(token.dropLast()) + differentSuffix, expected: token))
     }
 
     func testAccessKeyPersistsUntilExplicitReset() {
