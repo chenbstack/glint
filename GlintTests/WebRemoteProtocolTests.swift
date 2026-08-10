@@ -162,7 +162,8 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertTrue(WebRemoteAccessToken.matches(token, expected: token))
         XCTAssertFalse(WebRemoteAccessToken.matches(nil, expected: token))
         XCTAssertFalse(WebRemoteAccessToken.matches(token + "0", expected: token))
-        XCTAssertFalse(WebRemoteAccessToken.matches(String(token.dropLast()) + "0", expected: token))
+        let differentSuffix = token.last == "0" ? "1" : "0"
+        XCTAssertFalse(WebRemoteAccessToken.matches(String(token.dropLast()) + differentSuffix, expected: token))
     }
 
     func testAccessKeyPersistsUntilExplicitReset() {
@@ -311,6 +312,87 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertEqual(WebRemoteAssets.asset(for: "/symbols-nerd-font-mono.ttf")?.contentType, "font/ttf")
         XCTAssertNil(WebRemoteAssets.asset(for: "/../state.json"))
         XCTAssertNil(WebRemoteAssets.asset(for: "/favicon.ico"))
+    }
+
+    func testBundledAssetsSupportTwoFingerTerminalScrolling() throws {
+        let scriptURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "web-remote", withExtension: "js")
+        )
+        let styleURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "web-remote", withExtension: "css")
+        )
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let style = try String(contentsOf: styleURL, encoding: .utf8)
+
+        XCTAssertTrue(script.contains("\"touchstart\""))
+        XCTAssertTrue(script.contains("\"touchmove\""))
+        XCTAssertTrue(script.contains("terminal.scrollLines"))
+        XCTAssertTrue(script.contains("terminal.buffer.active.baseY > 0"))
+        XCTAssertTrue(script.contains("new WheelEvent(\"wheel\""))
+        XCTAssertTrue(script.contains(".xterm-screen"))
+        XCTAssertTrue(script.contains("passive: false"))
+        XCTAssertTrue(style.contains("touch-action: none"))
+    }
+
+    func testBundledClientRecoversStaleWebSocketConnections() throws {
+        let scriptURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "web-remote", withExtension: "js")
+        )
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+
+        XCTAssertTrue(script.contains("const serverSilenceTimeout = heartbeatInterval * 4"))
+        XCTAssertTrue(script.contains("Date.now() - lastServerMessageAt >= serverSilenceTimeout"))
+        XCTAssertTrue(script.contains("window.addEventListener(\"online\", connect)"))
+        XCTAssertTrue(script.contains("window.addEventListener(\"pageshow\", reconnectIfStale)"))
+        XCTAssertTrue(script.contains("document.addEventListener(\"visibilitychange\""))
+
+        let messageHandlerStart = try XCTUnwrap(
+            script.range(of: "socket.addEventListener(\"message\", event => {")
+        )
+        let closeHandlerStart = try XCTUnwrap(
+            script.range(
+                of: "socket.addEventListener(\"close\", () => {",
+                range: messageHandlerStart.upperBound ..< script.endIndex
+            )
+        )
+        let messageHandler = script[messageHandlerStart.lowerBound ..< closeHandlerStart.lowerBound]
+        let identityGuard = try XCTUnwrap(
+            messageHandler.range(of: "if (socket !== currentSocket) return")
+        )
+        let timestampUpdate = try XCTUnwrap(
+            messageHandler.range(of: "lastServerMessageAt = Date.now()")
+        )
+        XCTAssertLessThan(identityGuard.lowerBound, timestampUpdate.lowerBound)
+    }
+
+    func testSelectingNewPaneSupersedesPendingSelection() {
+        XCTAssertEqual(
+            WebRemoteServer.panesToReconcileWhenSelecting(
+                subscribedPane: nil,
+                pendingPane: "pane-a",
+                nextPane: "pane-b"
+            ),
+            Set(["pane-a"])
+        )
+    }
+
+    func testRepeatedPaneSelectionOnlyAcceptsLatestGeneration() {
+        XCTAssertFalse(
+            WebRemoteServer.isCurrentPaneSelection(
+                pendingPane: "pane-a",
+                pendingGeneration: 3,
+                pane: "pane-a",
+                generation: 1
+            )
+        )
+        XCTAssertTrue(
+            WebRemoteServer.isCurrentPaneSelection(
+                pendingPane: "pane-a",
+                pendingGeneration: 3,
+                pane: "pane-a",
+                generation: 3
+            )
+        )
     }
 
     func testHeadResponseKeepsContentLengthWithoutBody() {

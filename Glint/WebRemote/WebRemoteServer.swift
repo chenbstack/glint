@@ -195,6 +195,24 @@ final class WebRemoteServer: @unchecked Sendable {
         return String(describing: endpoint)
     }
 
+    static func panesToReconcileWhenSelecting(
+        subscribedPane: String?,
+        pendingPane: String?,
+        nextPane: String
+    ) -> Set<String>? {
+        guard pendingPane != nextPane else { return nil }
+        return Set([subscribedPane, pendingPane].compactMap { $0 })
+    }
+
+    static func isCurrentPaneSelection(
+        pendingPane: String?,
+        pendingGeneration: UInt64,
+        pane: String,
+        generation: UInt64
+    ) -> Bool {
+        pendingPane == pane && pendingGeneration == generation
+    }
+
     private enum ListenerKind: Hashable {
         case http
         case webSocket
@@ -863,12 +881,16 @@ final class WebRemoteServer: @unchecked Sendable {
         size: WebRemoteTerminalSize,
         for clientID: UUID
     ) {
-        guard let client = clients[clientID], client.pendingPane == nil else {
-            sendError("selection-in-progress", to: clientID)
-            return
-        }
+        guard let client = clients[clientID],
+              let previousPanes = Self.panesToReconcileWhenSelecting(
+                  subscribedPane: client.subscribedPane,
+                  pendingPane: client.pendingPane,
+                  nextPane: pane
+              )
+        else { return }
 
-        let previousPane = client.subscribedPane
+        client.paneSelectionGeneration &+= 1
+        let selectionGeneration = client.paneSelectionGeneration
         client.subscribedPane = nil
         client.pendingPane = pane
         client.pendingSelectionOutput = WebRemoteOutputBuffer(
@@ -876,25 +898,34 @@ final class WebRemoteServer: @unchecked Sendable {
         )
         client.terminalSize = nil
         updateSubscribedPanesLocked()
-        if let previousPane {
-            reconcileTerminalSizeLocked(for: previousPane)
-        }
+        previousPanes.forEach { reconcileTerminalSizeLocked(for: $0) }
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let store = WorkspaceStore.current else { return }
             if let error = store.controlFocus(pane: pane, activateApp: false) {
                 self.queue.async { [weak self] in
-                    self?.finishSelectionFailure(error, pane: pane, clientID: clientID)
+                    self?.finishSelectionFailure(
+                        error,
+                        pane: pane,
+                        generation: selectionGeneration,
+                        clientID: clientID
+                    )
                 }
                 return
             }
             let result = store.webRemoteTerminalSnapshot(pane: pane)
             self.queue.async { [weak self, weak store] in
                 guard let self,
-                      let store,
-                      let client = clients[clientID],
+                      let store
+                else { return }
+                guard let client = clients[clientID],
                       client.authenticated,
-                      client.pendingPane == pane
+                      Self.isCurrentPaneSelection(
+                          pendingPane: client.pendingPane,
+                          pendingGeneration: client.paneSelectionGeneration,
+                          pane: pane,
+                          generation: selectionGeneration
+                      )
                 else { return }
                 switch result {
                 case let .success(snapshot):
@@ -922,14 +953,31 @@ final class WebRemoteServer: @unchecked Sendable {
                         }
                     }
                 case let .failure(error):
-                    finishSelectionFailure(error, pane: pane, clientID: clientID)
+                    finishSelectionFailure(
+                        error,
+                        pane: pane,
+                        generation: selectionGeneration,
+                        clientID: clientID
+                    )
                 }
             }
         }
     }
 
-    private func finishSelectionFailure(_ error: String, pane: String, clientID: UUID) {
-        guard let client = clients[clientID], client.pendingPane == pane else { return }
+    private func finishSelectionFailure(
+        _ error: String,
+        pane: String,
+        generation: UInt64,
+        clientID: UUID
+    ) {
+        guard let client = clients[clientID],
+              Self.isCurrentPaneSelection(
+                  pendingPane: client.pendingPane,
+                  pendingGeneration: client.paneSelectionGeneration,
+                  pane: pane,
+                  generation: generation
+              )
+        else { return }
         _ = client.pendingSelectionOutput.take()
         client.pendingPane = nil
         updateSubscribedPanesLocked()
@@ -1135,6 +1183,7 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
     var authenticated = false
     var subscribedPane: String?
     var pendingPane: String?
+    var paneSelectionGeneration: UInt64 = 0
     var pendingSelectionOutput = WebRemoteOutputBuffer(byteLimit: 0)
     var terminalSize: WebRemoteTerminalSize?
     var terminalSizeRevision: UInt64 = 0
@@ -1299,6 +1348,7 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
         connection.receiveMessage { [weak self] content, context, _, error in
             guard let self else { return }
             if error != nil {
+                cancel()
                 server?.removeClient(id)
                 return
             }

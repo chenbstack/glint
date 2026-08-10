@@ -86,7 +86,6 @@ const translations = {
     refresh: "刷新",
     remote_terminal: "远程终端",
     select_terminal: "选择一个终端",
-    selection_in_progress: "正在切换终端，请稍候",
     sync_description: "画面和输入会在浏览器与这台 Mac 上的 Glint 会话之间实时同步。",
     syncing_terminal: "正在同步终端画面…",
     terminal_count: "{count} 个终端",
@@ -137,7 +136,6 @@ const translations = {
     refresh: "Refresh",
     remote_terminal: "Remote terminal",
     select_terminal: "Select a terminal",
-    selection_in_progress: "Switching terminals, please wait",
     sync_description: "The browser stays in sync with this Mac's live Glint session.",
     syncing_terminal: "Syncing terminal…",
     terminal_count: "{count} terminal(s)",
@@ -247,9 +245,85 @@ document.fonts?.load('13px "Glint Nerd Symbols"').then(() => {
   fitTerminal();
 });
 
+let touchScrollY = null;
+let touchScrollRemainder = 0;
+
+function resetTouchScroll() {
+  touchScrollY = null;
+  touchScrollRemainder = 0;
+}
+
+function touchCenterY(touches) {
+  return (touches[0].clientY + touches[1].clientY) / 2;
+}
+
+function terminalLineHeight() {
+  const row = elements.terminal.querySelector(".xterm-rows > div");
+  const measured = row?.getBoundingClientRect().height;
+  return measured > 0
+    ? measured
+    : terminal.options.fontSize * terminal.options.lineHeight;
+}
+
+function scrollTerminalLinesFromTouch(lines, clientX, clientY) {
+  const screen = elements.terminal.querySelector(".xterm-screen");
+  let handledByTerminal = false;
+  if (screen) {
+    const direction = Math.sign(lines);
+    for (let index = 0; index < Math.abs(lines); index += 1) {
+      const wheelEvent = new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        clientX,
+        clientY,
+        deltaMode: WheelEvent.DOM_DELTA_LINE,
+        deltaY: direction,
+      });
+      if (!screen.dispatchEvent(wheelEvent)) handledByTerminal = true;
+    }
+  }
+  if (!handledByTerminal && terminal.buffer.active.baseY > 0) {
+    terminal.scrollLines(lines);
+  }
+}
+
+elements.terminal.addEventListener("touchstart", event => {
+  if (event.touches.length !== 2) {
+    resetTouchScroll();
+    return;
+  }
+  event.preventDefault();
+  touchScrollY = touchCenterY(event.touches);
+  touchScrollRemainder = 0;
+}, { passive: false });
+
+elements.terminal.addEventListener("touchmove", event => {
+  if (event.touches.length !== 2 || touchScrollY === null) {
+    resetTouchScroll();
+    return;
+  }
+  event.preventDefault();
+  const nextY = touchCenterY(event.touches);
+  touchScrollRemainder += touchScrollY - nextY;
+  touchScrollY = nextY;
+
+  const lineHeight = terminalLineHeight();
+  const lines = Math.trunc(touchScrollRemainder / lineHeight);
+  if (lines === 0) return;
+  const clientX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+  scrollTerminalLinesFromTouch(lines, clientX, nextY);
+  touchScrollRemainder -= lines * lineHeight;
+}, { passive: false });
+
+elements.terminal.addEventListener("touchend", resetTouchScroll);
+elements.terminal.addEventListener("touchcancel", resetTouchScroll);
+
 let socket;
 let reconnectTimer;
 let reconnectDelay = 500;
+const heartbeatInterval = 3000;
+const serverSilenceTimeout = heartbeatInterval * 4;
+let lastServerMessageAt = Date.now();
 let authenticated = false;
 let selectedPane = sessionStorage.getItem("glint-selected-pane") || "";
 let lastState;
@@ -299,6 +373,7 @@ function connect() {
   if (socket) {
     socket.close();
   }
+  lastServerMessageAt = Date.now();
   authenticated = false;
   controllingPane = "";
   resetSession();
@@ -307,12 +382,15 @@ function connect() {
   const currentSocket = socket;
   socket.binaryType = "arraybuffer";
   socket.addEventListener("open", () => {
+    lastServerMessageAt = Date.now();
     reconnectDelay = 500;
     // The server issues an auth-challenge as soon as the socket opens; we wait
     // for it rather than sending the token ourselves.
     if (!token) showAuth();
   });
   socket.addEventListener("message", event => {
+    if (socket !== currentSocket) return;
+    lastServerMessageAt = Date.now();
     const data = event.data;
     if (typeof data === "string") {
       handleMessage(data);        // plaintext: auth-challenge / handshake error
@@ -329,6 +407,16 @@ function connect() {
     reconnectDelay = Math.min(reconnectDelay * 1.8, 8000);
   });
   socket.addEventListener("error", () => setStatus("error", t("unable_connect")));
+}
+
+function reconnectIfStale() {
+  const stale = authenticated && Date.now() - lastServerMessageAt >= serverSilenceTimeout;
+  if (!socket ||
+      socket.readyState === WebSocket.CLOSING ||
+      socket.readyState === WebSocket.CLOSED ||
+      stale) {
+    connect();
+  }
 }
 
 function resetSession() {
@@ -616,7 +704,6 @@ function errorLabel(code) {
     "workspace-archived": t("workspace_archived"),
     "last-terminal": t("last_terminal"),
     "terminal-not-ready": t("terminal_not_ready"),
-    "selection-in-progress": t("selection_in_progress"),
     "unknown-command": t("unknown_command"),
   };
   return labels[code] || t("operation_failed", { code });
@@ -889,12 +976,22 @@ function encodeBase64(bytes) {
 }
 
 window.addEventListener("resize", syncVisualViewport);
+window.addEventListener("online", connect);
+window.addEventListener("pageshow", reconnectIfStale);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") reconnectIfStale();
+});
 window.visualViewport?.addEventListener("resize", syncVisualViewport);
 window.visualViewport?.addEventListener("scroll", syncVisualViewport);
 new ResizeObserver(fitTerminal).observe(elements.terminal);
 syncVisualViewport();
 setInterval(() => {
-  if (authenticated) send({ type: "list" });
-}, 3000);
+  if (!authenticated) return;
+  if (Date.now() - lastServerMessageAt >= serverSilenceTimeout) {
+    connect();
+    return;
+  }
+  send({ type: "list" });
+}, heartbeatInterval);
 
 connect();
