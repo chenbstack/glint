@@ -52,6 +52,17 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.27-beta.2",
+            en: [
+                "Web Remote is steadier on phones: two-finger scrolling works in terminal panes, rapid pane switches no longer bounce back, and stale connections automatically reconnect after network or page interruptions.",
+                "Closing a split no longer briefly leaves the surviving terminal blank; the remaining pane stays attached throughout the layout transition."
+            ],
+            zh: [
+                "网页远程端在手机上更稳定：终端窗格支持双指滚动，快速切换窗格不再跳回旧选择，网络或页面中断导致连接失效时也会自动重连。",
+                "关闭分屏时，保留下来的终端不再短暂白屏；布局切换过程中窗格会持续保持连接。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.27-beta.1",
             en: [
                 "Control your terminals from a browser: open Glint's web remote on your phone or another machine on the same network, see live output, and type into any pane. Traffic is end-to-end encrypted and gated by an access key you can rotate at any time.",
