@@ -17,6 +17,17 @@ enum SurfaceHostClaimPolicy {
                             isSameHost: Bool) -> Bool {
         isSameHost || !currentHostIsAttached || candidateGeneration >= currentGeneration
     }
+
+    static func shouldDeferUntilAfterCommit(candidateGeneration: UInt64,
+                                            currentGeneration: UInt64,
+                                            currentHostExists: Bool,
+                                            currentHostIsAttached: Bool,
+                                            isSameHost: Bool) -> Bool {
+        !isSameHost &&
+            currentHostExists &&
+            !currentHostIsAttached &&
+            candidateGeneration < currentGeneration
+    }
 }
 
 /// Hosts a stable, store-owned `GhosttySurfaceView` inside a fresh container
@@ -145,14 +156,38 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
         GhosttyManager.shared.applyTerminalBacking(to: container.layer)
     }
 
-    private func attach(_ surface: GhosttySurfaceView, to container: NoDragContainerView) {
+    private func attach(_ surface: GhosttySurfaceView,
+                        to container: NoDragContainerView,
+                        isPostCommitRetry: Bool = false) {
         let currentHost = surface.paneHostView
-        guard SurfaceHostClaimPolicy.shouldClaim(
+        if !isPostCommitRetry,
+           SurfaceHostClaimPolicy.shouldDeferUntilAfterCommit(
+               candidateGeneration: container.hostGeneration,
+               currentGeneration: surface.paneHostGeneration,
+               currentHostExists: currentHost != nil,
+               currentHostIsAttached: currentHost?.window != nil,
+               isSameHost: currentHost === container
+           ) {
+            // During a split collapse the incoming host can claim the surface
+            // just before SwiftUI gives the outgoing tree one last update.
+            // The incoming container is not in the window yet, so the old host
+            // would otherwise mistake it for abandoned and steal the surface
+            // back. Resolve that ambiguity after the current commit: the new
+            // host will be attached if it survived, or still detached if the
+            // older host genuinely needs to recover it.
+            DispatchQueue.main.async {
+                guard container.window != nil, isPaneVisible() else { return }
+                attach(surface, to: container, isPostCommitRetry: true)
+            }
+            return
+        }
+        let shouldClaim = SurfaceHostClaimPolicy.shouldClaim(
             candidateGeneration: container.hostGeneration,
             currentGeneration: surface.paneHostGeneration,
             currentHostIsAttached: currentHost?.window != nil,
             isSameHost: currentHost === container
-        ) else { return }
+        )
+        guard shouldClaim else { return }
 
         surface.paneHostView = container
         surface.paneHostGeneration = container.hostGeneration

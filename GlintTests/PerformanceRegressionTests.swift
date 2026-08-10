@@ -187,6 +187,32 @@ final class PerformanceRegressionTests: XCTestCase {
         ))
     }
 
+    func testOlderOutgoingHostDefersWhileNewerClaimIsPreCommit() {
+        XCTAssertTrue(SurfaceHostClaimPolicy.shouldDeferUntilAfterCommit(
+            candidateGeneration: 10,
+            currentGeneration: 11,
+            currentHostExists: true,
+            currentHostIsAttached: false,
+            isSameHost: false
+        ))
+
+        // Once the incoming host survives the commit and attaches, the stale
+        // outgoing host must not steal the surface back.
+        XCTAssertFalse(SurfaceHostClaimPolicy.shouldDeferUntilAfterCommit(
+            candidateGeneration: 10,
+            currentGeneration: 11,
+            currentHostExists: true,
+            currentHostIsAttached: true,
+            isSameHost: false
+        ))
+        XCTAssertFalse(SurfaceHostClaimPolicy.shouldClaim(
+            candidateGeneration: 10,
+            currentGeneration: 11,
+            currentHostIsAttached: true,
+            isSameHost: false
+        ))
+    }
+
     func testNewestHostWinsDeterministicOutgoingIncomingOutgoingRace() {
         let outgoingHost = NSView()
         let incomingHost = NSView()
