@@ -4289,6 +4289,8 @@ extension WorkspaceStore {
         let status: PaneAgentStatus
         /// Turn start — drives the "2m" elapsed label (total turn time).
         let since: Date
+        /// Last hook time — freezes the elapsed label once the turn stops.
+        let updatedAt: Date
         var id: PaneID { paneID }
     }
 
@@ -4304,7 +4306,8 @@ extension WorkspaceStore {
             guard let e = paneAgentState[key], e.status != .idle else { continue }
             out.append((AgentPaneInfo(paneID: item.pane, number: idx + 1,
                                       label: item.label, kind: e.kind,
-                                      status: e.status, since: e.turnStartedAt),
+                                      status: e.status, since: e.turnStartedAt,
+                                      updatedAt: e.updatedAt),
                         e.updatedAt))
         }
         out.sort {
@@ -4337,7 +4340,7 @@ extension WorkspaceStore {
     /// A turn is actively running in these states — used to anchor the turn
     /// clock (set on the first non-busy → busy transition, kept through the
     /// turn). `.justCompleted`/`.failed`/`.idle` are turn-end / no-turn.
-    static func isBusyStatus(_ s: PaneAgentStatus) -> Bool {
+    nonisolated static func isBusyStatus(_ s: PaneAgentStatus) -> Bool {
         switch s {
         case .thinking, .tool, .compacting, .needsPermission: return true
         case .justCompleted, .failed, .needsReply, .idle:     return false
