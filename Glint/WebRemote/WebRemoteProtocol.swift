@@ -345,7 +345,7 @@ enum WebRemoteCrypto {
 /// Where the web remote's access token lives. The token is the only thing
 /// between the network and a live shell, so it is never written to disk in
 /// cleartext — see `WebRemoteKeychainStorage`.
-protocol WebRemoteSecretStorage {
+protocol WebRemoteSecretStorage: Sendable {
     func secret(for account: String) -> String?
     @discardableResult
     func setSecret(_ value: String, for account: String) -> Bool

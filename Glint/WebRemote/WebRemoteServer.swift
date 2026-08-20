@@ -245,8 +245,24 @@ final class WebRemoteServer: @unchecked Sendable {
     private var terminalSizeRevision: UInt64 = 0
     private var assetCache: [String: Data] = [:]
     private var statusHandler: ((WebRemoteStatus) -> Void)?
+    private var secretStorage: WebRemoteSecretStorage = WebRemoteKeychainStorage.shared
 
     private init() {}
+
+    /// Swap the access-token backing store. Staged like `setListenInterface`:
+    /// it takes effect on the next `start()`.
+    ///
+    /// Only the tests use this. Driving the real server against the Keychain
+    /// pops a login-password prompt, because the test binary is ad-hoc signed
+    /// and so is not the identity the Keychain item's ACL trusts — the run
+    /// then blocks on that dialog until `start()` times out. Injecting
+    /// `WebRemoteEphemeralSecretStorage` keeps the token in memory for the
+    /// test process and leaves the user's Keychain untouched.
+    func setSecretStorage(_ storage: WebRemoteSecretStorage) {
+        queue.async { [weak self] in
+            self?.secretStorage = storage
+        }
+    }
 
     func setStatusHandler(_ handler: @escaping (WebRemoteStatus) -> Void) {
         queue.async { [weak self] in
@@ -362,7 +378,7 @@ final class WebRemoteServer: @unchecked Sendable {
     private func startLocked() {
         stopLocked(emitStatus: false)
         emit(.starting)
-        token = WebRemoteAccessKeyStore.loadOrCreate()
+        token = WebRemoteAccessKeyStore.loadOrCreate(storage: secretStorage)
         tokenKey = WebRemoteCrypto.tokenKey(from: token) ?? Data()
         ports = WebRemotePortStore.loadOrCreate()
         let currentRun = UUID()
@@ -490,7 +506,7 @@ final class WebRemoteServer: @unchecked Sendable {
     }
 
     private func resetCredentialsLocked() {
-        WebRemoteAccessKeyStore.reset()
+        WebRemoteAccessKeyStore.reset(storage: secretStorage)
         WebRemotePortStore.reset()
         startLocked()
     }

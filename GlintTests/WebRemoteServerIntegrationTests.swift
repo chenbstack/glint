@@ -10,7 +10,8 @@ import XCTest
 ///
 /// These tests bind the project's persisted HTTP/WebSocket port pair on
 /// 127.0.0.1, so they will conflict with a concurrently running Glint whose web
-/// remote is enabled. The server is started fresh in `setUp` and stopped in
+/// remote is enabled. The access token is served from an in-memory store, so
+/// the run never reads or writes the user's Keychain. The server is started fresh in `setUp` and stopped in
 /// `tearDown`; test methods run serially within the class.
 final class WebRemoteServerIntegrationTests: XCTestCase {
     private var urlSession: URLSession!
@@ -41,6 +42,10 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         }
         // Bind to loopback only — never touch a real NIC from tests.
         WebRemoteServer.shared.setListenInterface(WebRemoteListenTarget.loopback)
+        // Keep the access token in memory. Against the real Keychain this
+        // prompts for the login password (the test binary is not the signed
+        // identity the item's ACL trusts) and `start()` then times out.
+        WebRemoteServer.shared.setSecretStorage(WebRemoteEphemeralSecretStorage())
         WebRemoteServer.shared.start()
         try await fulfillment(of: [ready], timeout: 10)
         XCTAssertNotNil(readyToken, "Server should expose an access token in its ready URL")
