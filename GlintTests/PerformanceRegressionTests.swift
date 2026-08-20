@@ -242,6 +242,133 @@ final class PerformanceRegressionTests: XCTestCase {
         XCTAssertEqual(currentGeneration, 11)
     }
 
+    func testRecordedHostKeepsVetoWhileItStillExpectsTheSurface() {
+        // The split-collapse steal-back guard must survive untouched: a live
+        // host that still holds this surface is not a stale recording.
+        XCTAssertFalse(SurfaceHostClaimPolicy.recordedHostIsStale(
+            currentHostExists: true,
+            currentHostIsAttached: true,
+            currentHostExpectsThisSurface: true,
+            isSameHost: false
+        ))
+    }
+
+    func testRecycledRecordedHostLosesItsVeto() {
+        // SwiftUI reused the recorded container for another pane's surface.
+        // It is still alive and attached, but it no longer speaks for this
+        // surface, so its newer generation must stop declining the attach.
+        XCTAssertTrue(SurfaceHostClaimPolicy.recordedHostIsStale(
+            currentHostExists: true,
+            currentHostIsAttached: true,
+            currentHostExpectsThisSurface: false,
+            isSameHost: false
+        ))
+    }
+
+    func testDetachedOrMissingRecordedHostIsStale() {
+        XCTAssertTrue(SurfaceHostClaimPolicy.recordedHostIsStale(
+            currentHostExists: true,
+            currentHostIsAttached: false,
+            currentHostExpectsThisSurface: true,
+            isSameHost: false
+        ))
+        XCTAssertTrue(SurfaceHostClaimPolicy.recordedHostIsStale(
+            currentHostExists: false,
+            currentHostIsAttached: false,
+            currentHostExpectsThisSurface: false,
+            isSameHost: false
+        ))
+    }
+
+    func testSameHostIsNeverTreatedAsStaleRecording() {
+        XCTAssertFalse(SurfaceHostClaimPolicy.recordedHostIsStale(
+            currentHostExists: true,
+            currentHostIsAttached: true,
+            currentHostExpectsThisSurface: false,
+            isSameHost: true
+        ))
+    }
+
+    /// Reproduces the workspace-switch shape from #103: SwiftUI recycles the
+    /// split containers in flipped order, so surface A's recording ends up
+    /// pointing at the container that now hosts surface B. Without the
+    /// post-commit staleness recheck, A's legitimate attach is declined
+    /// forever and its pane keeps rendering the outgoing workspace.
+    func testSurfaceRecoversFromRecordingPointingAtRecycledContainer() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.borderless], backing: .buffered, defer: false
+        )
+        let root = NSView(frame: window.contentLayoutRect)
+        window.contentView = root
+
+        // Two recycled containers, both live in the window across the switch.
+        let older = NSView()
+        let newer = NSView()
+        root.addSubview(older)
+        root.addSubview(newer)
+        let generation: [ObjectIdentifier: UInt64] = [
+            ObjectIdentifier(older): 10,
+            ObjectIdentifier(newer): 11,
+        ]
+
+        let surfaceA = NSView()
+        let surfaceB = NSView()
+
+        // What each container currently expects, and what each surface has
+        // recorded as its host — the pair `attach` keeps in sync.
+        var expectedSurface: [ObjectIdentifier: NSView] = [:]
+        var recordedHost: [ObjectIdentifier: NSView] = [:]
+
+        func pin(_ surface: NSView, in container: NSView) {
+            for child in container.subviews where child !== surface {
+                child.removeFromSuperview()
+            }
+            surface.removeFromSuperview()
+            container.addSubview(surface)
+            expectedSurface[ObjectIdentifier(container)] = surface
+            recordedHost[ObjectIdentifier(surface)] = container
+        }
+
+        func attach(_ surface: NSView, to container: NSView) {
+            let host = recordedHost[ObjectIdentifier(surface)]
+            let claimed = SurfaceHostClaimPolicy.shouldClaim(
+                candidateGeneration: generation[ObjectIdentifier(container)]!,
+                currentGeneration: host.map { generation[ObjectIdentifier($0)]! } ?? 0,
+                currentHostIsAttached: host?.window != nil,
+                isSameHost: host === container
+            )
+            if claimed {
+                pin(surface, in: container)
+                return
+            }
+            // Post-commit recovery.
+            guard SurfaceHostClaimPolicy.recordedHostIsStale(
+                currentHostExists: host != nil,
+                currentHostIsAttached: host?.window != nil,
+                currentHostExpectsThisSurface:
+                    host.flatMap { expectedSurface[ObjectIdentifier($0)] } === surface,
+                isSameHost: host === container
+            ) else { return }
+            pin(surface, in: container)
+        }
+
+        // Outgoing workspace: A lives in the newer container.
+        attach(surfaceA, to: newer)
+        XCTAssertTrue(surfaceA.superview === newer)
+
+        // Incoming workspace reuses that same container for B, and hands A the
+        // older one. A's recording still points at `newer`, which is attached
+        // and outranks `older` on generation.
+        attach(surfaceB, to: newer)
+        attach(surfaceA, to: older)
+
+        XCTAssertTrue(surfaceB.superview === newer)
+        XCTAssertTrue(surfaceA.superview === older,
+                      "surface A must recover its pane instead of staying evicted")
+        XCTAssertTrue(recordedHost[ObjectIdentifier(surfaceA)] === older)
+    }
+
     func testSplitLayoutExplicitlyAccountsForBothBranchesAndDivider() {
         let lengths = SplitLayoutPolicy.lengths(
             total: 1_556,

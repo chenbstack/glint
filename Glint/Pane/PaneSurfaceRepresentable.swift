@@ -28,6 +28,29 @@ enum SurfaceHostClaimPolicy {
             !currentHostIsAttached &&
             candidateGeneration < currentGeneration
     }
+
+    /// Whether the surface's recorded host claim has gone stale and must stop
+    /// vetoing a live container's attach.
+    ///
+    /// `shouldClaim` assumes the recorded host is still the surface's rightful
+    /// owner. That stops being true when SwiftUI recycles containers across a
+    /// workspace switch: the recording is never cleared when a surface is
+    /// evicted from a container, so it can point at a container that is still
+    /// alive and attached but now hosts a *different* surface. Its newer
+    /// generation would otherwise decline the one legitimate attach forever,
+    /// leaving the pane showing the outgoing workspace's terminal.
+    ///
+    /// A recorded host that still expects this surface is NOT stale — the
+    /// generation verdict stands there, so the split-collapse steal-back
+    /// guard is unaffected.
+    static func recordedHostIsStale(currentHostExists: Bool,
+                                    currentHostIsAttached: Bool,
+                                    currentHostExpectsThisSurface: Bool,
+                                    isSameHost: Bool) -> Bool {
+        guard !isSameHost else { return false }
+        guard currentHostExists else { return true }
+        return !currentHostIsAttached || !currentHostExpectsThisSurface
+    }
 }
 
 /// Hosts a stable, store-owned `GhosttySurfaceView` inside a fresh container
@@ -156,11 +179,24 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
         GhosttyManager.shared.applyTerminalBacking(to: container.layer)
     }
 
+    /// Which attach attempt this is. The passes differ only in which guard
+    /// they are allowed to skip.
+    private enum AttachPass {
+        /// SwiftUI's own `makeNSView` / `updateNSView` call.
+        case initial
+        /// Re-run once the commit made the incoming host's attachment state
+        /// readable, resolving the split-collapse ambiguity.
+        case postCommitDeferred
+        /// Re-run after the commit found the surface's recorded host claim
+        /// stale: the recording loses its veto and this container pins.
+        case staleRecordingRecovery
+    }
+
     private func attach(_ surface: GhosttySurfaceView,
                         to container: NoDragContainerView,
-                        isPostCommitRetry: Bool = false) {
+                        pass: AttachPass = .initial) {
         let currentHost = surface.paneHostView
-        if !isPostCommitRetry,
+        if pass == .initial,
            SurfaceHostClaimPolicy.shouldDeferUntilAfterCommit(
                candidateGeneration: container.hostGeneration,
                currentGeneration: surface.paneHostGeneration,
@@ -177,17 +213,22 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
             // older host genuinely needs to recover it.
             DispatchQueue.main.async {
                 guard container.window != nil, isPaneVisible() else { return }
-                attach(surface, to: container, isPostCommitRetry: true)
+                attach(surface, to: container, pass: .postCommitDeferred)
             }
             return
         }
-        let shouldClaim = SurfaceHostClaimPolicy.shouldClaim(
-            candidateGeneration: container.hostGeneration,
-            currentGeneration: surface.paneHostGeneration,
-            currentHostIsAttached: currentHost?.window != nil,
-            isSameHost: currentHost === container
-        )
-        guard shouldClaim else { return }
+        if pass != .staleRecordingRecovery {
+            let shouldClaim = SurfaceHostClaimPolicy.shouldClaim(
+                candidateGeneration: container.hostGeneration,
+                currentGeneration: surface.paneHostGeneration,
+                currentHostIsAttached: currentHost?.window != nil,
+                isSameHost: currentHost === container
+            )
+            guard shouldClaim else {
+                scheduleStaleRecordingRecovery(surface, to: container)
+                return
+            }
+        }
 
         surface.paneHostView = container
         surface.paneHostGeneration = container.hostGeneration
@@ -211,6 +252,27 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
                     surface.paneHostGeneration == container.hostGeneration
             ) else { return }
             Self.pin(surface, in: container)
+        }
+    }
+
+    /// A declined claim used to be final, so a surface whose recorded host had
+    /// been recycled onto another pane stayed stuck on the outgoing
+    /// workspace's terminal until relaunch. Re-check after the commit: if the
+    /// recording no longer describes a live host that expects this surface, it
+    /// has no standing to veto and this container takes over.
+    private func scheduleStaleRecordingRecovery(_ surface: GhosttySurfaceView,
+                                                to container: NoDragContainerView) {
+        DispatchQueue.main.async {
+            guard container.window != nil, isPaneVisible() else { return }
+            let host = surface.paneHostView
+            guard SurfaceHostClaimPolicy.recordedHostIsStale(
+                currentHostExists: host != nil,
+                currentHostIsAttached: host?.window != nil,
+                currentHostExpectsThisSurface:
+                    (host as? NoDragContainerView)?.expectedSurface === surface,
+                isSameHost: host === container
+            ) else { return }
+            attach(surface, to: container, pass: .staleRecordingRecovery)
         }
     }
 
