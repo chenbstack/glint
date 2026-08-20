@@ -926,7 +926,8 @@ private struct WorkspaceCard: View {
     }
 
     @ViewBuilder
-    private func secondaryRow(summary: (status: PaneAgentStatus, since: Date)?, active: Bool) -> some View {
+    private func secondaryRow(summary: (status: PaneAgentStatus, since: Date, updatedAt: Date)?,
+                              active: Bool) -> some View {
         // Wrap the two branches in a single Group keyed off the row's
         // logical identity so SwiftUI treats a status flip as a view
         // replacement and the `.transition(.opacity)` actually fires.
@@ -939,11 +940,15 @@ private struct WorkspaceCard: View {
                     Text(statusText(summary.status))
                         .foregroundStyle(statusTextColor(summary.status))
                         .fontWeight(.medium)
-                    if showsTimer(summary.status) {
-                        TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                            Text("· \(elapsedString(since: summary.since, now: ctx.date))")
-                                .foregroundStyle(active ? Theme.text3 : Theme.text4)
-                        }
+                    // Shown in every non-idle state, but only *running* while
+                    // the turn is: once it ends the label freezes at the turn's
+                    // total, matching the pane-summary popover.
+                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                        let ref = agentElapsedReferenceDate(status: summary.status,
+                                                            updatedAt: summary.updatedAt,
+                                                            now: ctx.date)
+                        Text("· \(agentElapsedLabel(since: summary.since, now: ref))")
+                            .foregroundStyle(active ? Theme.text3 : Theme.text4)
                     }
                 }
                 .font(.system(size: 11, design: .monospaced))
@@ -1058,25 +1063,6 @@ private struct WorkspaceCard: View {
         }
     }
 
-    private func showsTimer(_ s: PaneAgentStatus) -> Bool {
-        switch s {
-        case .thinking, .tool, .compacting, .needsPermission: return true
-        case .justCompleted, .failed, .needsReply, .idle:     return false
-        }
-    }
-
-    /// Compact mm:ss for the first hour, then h:mm. Most turns end inside a
-    /// minute so we want second-precision early; long-running tools care
-    /// about the gross magnitude, not seconds.
-    private func elapsedString(since start: Date, now: Date) -> String {
-        let total = max(0, Int(now.timeIntervalSince(start)))
-        if total < 3600 {
-            return String(format: "%d:%02d", total / 60, total % 60)
-        }
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        return "\(h)h\(m)m"
-    }
 
     /// Card surface fill — extracted so the body's modifier chain stays
     /// inside SwiftUI's type-inference budget. Three states: selected,
@@ -1186,14 +1172,19 @@ private struct WorkspaceCard: View {
 
     /// Spoken description for VoiceOver: the agent-status text the card
     /// already renders, plus a spelled-out elapsed time ("1 minute, 24
-    /// seconds") when the visual row shows a timer. Idle cards read the
-    /// same metadata line they display.
-    private func accessibilityStatus(summary: (status: PaneAgentStatus, since: Date)?) -> String {
+    /// seconds") matching the visible timer — live mid-turn, frozen at the
+    /// turn's total once it ends. Idle cards read the same metadata line
+    /// they display.
+    private func accessibilityStatus(
+        summary: (status: PaneAgentStatus, since: Date, updatedAt: Date)?
+    ) -> String {
         guard let summary, summary.status != .idle else { return cwdLine }
         var parts = [plainStatusText(summary.status)]
-        if showsTimer(summary.status),
-           let spoken = Self.spokenDurationFormatter.string(
-               from: max(0, Date().timeIntervalSince(summary.since))) {
+        let ref = agentElapsedReferenceDate(status: summary.status,
+                                            updatedAt: summary.updatedAt,
+                                            now: Date())
+        if let spoken = Self.spokenDurationFormatter.string(
+            from: max(0, ref.timeIntervalSince(summary.since))) {
             parts.append(spoken)
         }
         return parts.joined(separator: ", ")

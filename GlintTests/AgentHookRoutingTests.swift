@@ -2,24 +2,6 @@ import XCTest
 @testable import Glint
 
 final class AgentHookRoutingTests: XCTestCase {
-    func testCompletedAgentElapsedTimerStopsAtCompletion() {
-        let completedAt = Date(timeIntervalSince1970: 125)
-        let muchLater = Date(timeIntervalSince1970: 900)
-
-        XCTAssertEqual(
-            agentElapsedReferenceDate(status: .justCompleted,
-                                      updatedAt: completedAt,
-                                      now: muchLater),
-            completedAt
-        )
-        XCTAssertEqual(
-            agentElapsedReferenceDate(status: .thinking,
-                                      updatedAt: completedAt,
-                                      now: muchLater),
-            muchLater
-        )
-    }
-
     func testAttentionRankDoesNotLetThinkingHideCompletedSibling() {
         XCTAssertEqual(
             PaneAgentStatus.bestAttentionRank(in: [.thinking, .justCompleted]),

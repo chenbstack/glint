@@ -1854,7 +1854,7 @@ private struct WorkspaceSwitcherRow: View {
                             .foregroundStyle(isCurrent ? Theme.text1 : Theme.text2)
                             .italic(!ws.userNamed)
                             .lineLimit(1)
-                        Text(secondaryText(summary: summary))
+                        Text(secondaryText(summary: summary?.status))
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(
                                 (summary?.status).flatMap(secondaryColor)
@@ -1864,7 +1864,7 @@ private struct WorkspaceSwitcherRow: View {
                             .truncationMode(.middle)
                     }
                     Spacer(minLength: 4)
-                    trailingBadge(summary: summary, infos: infos)
+                    trailingBadge(infos: infos)
                 }
                 // Hover expands per-pane detail inline (nested popover inside
                 // this switcher dropdown would be fragile).
@@ -1886,8 +1886,7 @@ private struct WorkspaceSwitcherRow: View {
     }
 
     @ViewBuilder
-    private func trailingBadge(summary: (status: PaneAgentStatus, since: Date)?,
-                               infos: [WorkspaceStore.AgentPaneInfo]) -> some View {
+    private func trailingBadge(infos: [WorkspaceStore.AgentPaneInfo]) -> some View {
         if isCurrent {
             Image(systemName: "checkmark")
                 .font(.system(size: 11, weight: .semibold))
@@ -1905,9 +1904,9 @@ private struct WorkspaceSwitcherRow: View {
         return .clear
     }
 
-    private func secondaryText(summary: (status: PaneAgentStatus, since: Date)?) -> String {
-        if let s = summary, s.status != .idle {
-            switch s.status {
+    private func secondaryText(summary status: PaneAgentStatus?) -> String {
+        if let status, status != .idle {
+            switch status {
             case .thinking:        return String(localized: "thinking…")
             case .tool:            return String(localized: "running…")
             case .needsPermission: return String(localized: "needs approval")
