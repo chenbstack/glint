@@ -1,0 +1,30 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSLocalNetworkUsageDescription": {
+      "comment": "Shown by macOS when Glint first reaches the local network for the web remote.",
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 使用本地网络，让通过验证的设备控制共享终端。"
+          }
+        }
+      }
+    },
+    "NSMicrophoneUsageDescription": {
+      "comment": "Shown by macOS when a program running inside a Glint terminal asks for the microphone.",
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 终端中运行的程序正在请求使用麦克风。"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

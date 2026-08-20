@@ -57,6 +57,7 @@
 		81532B36FEC3039B8EAD9CB1 /* AgentKindResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EEF00CBEF45A9D60423A207 /* AgentKindResolutionTests.swift */; };
 		930665E39CE84564CBF9D300 /* GlintTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150EEF32284061D527E51866 /* GlintTheme.swift */; };
 		942ED7C1C1A2E823BA52F67A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3023490E670A10EC38870B12 /* Assets.xcassets */; };
+		97FE40619FD0C44784E91017 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = C8CE97CEC40ECB2954522DD7 /* InfoPlist.xcstrings */; };
 		9A5EC6D5F8F65EE762FCD917 /* addon-fit.mjs in Resources */ = {isa = PBXBuildFile; fileRef = 5DB06D8C68CA7B9C7E1E83E7 /* addon-fit.mjs */; };
 		9F605AB2DC185A94ED28E6D4 /* AgentChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3EB9A1E80F3CC4BCA468774 /* AgentChoice.swift */; };
 		A019A2AD685F1407D7E2A7E1 /* AgentHookRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0082D535969C315B8D75D7 /* AgentHookRoutingTests.swift */; };
@@ -192,6 +193,7 @@
 		C11B3335E47DDAF77A883064 /* ModalOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalOverlay.swift; sourceTree = "<group>"; };
 		C6FB2646BF84D9DCBB89FC93 /* GitRepositoryWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRepositoryWatcher.swift; sourceTree = "<group>"; };
 		C753FB652599A4C7900F8AA4 /* FontCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontCatalog.swift; sourceTree = "<group>"; };
+		C8CE97CEC40ECB2954522DD7 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		C9E2B9ADF809766CE4278047 /* SafeJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeJSON.swift; sourceTree = "<group>"; };
 		D03AFC613028C5BB0D99238D /* zsh-autosuggestions.zsh */ = {isa = PBXFileReference; path = "zsh-autosuggestions.zsh"; sourceTree = "<group>"; };
 		D7F8C1899F93B387843907FF /* ReviewScopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewScopeTests.swift; sourceTree = "<group>"; };
@@ -252,6 +254,7 @@
 				3023490E670A10EC38870B12 /* Assets.xcassets */,
 				25DADCEBA9C483C729B69388 /* Glint.entitlements */,
 				F5A69ACF962AEDE189F98649 /* Info.plist */,
+				C8CE97CEC40ECB2954522DD7 /* InfoPlist.xcstrings */,
 				376568363043C189904E4E0A /* Localizable.xcstrings */,
 				6860F8F626EFDB9A289FC727 /* themes.json */,
 				A4271BA2785D3733E2F3908E /* ShellIntegration */,
@@ -551,6 +554,7 @@
 			files = (
 				A91EFEF0FEA392A0745724DE /* AppIcon.icon in Resources */,
 				942ED7C1C1A2E823BA52F67A /* Assets.xcassets in Resources */,
+				97FE40619FD0C44784E91017 /* InfoPlist.xcstrings in Resources */,
 				FCB67525DF16A4DCF9B2AF7A /* Localizable.xcstrings in Resources */,
 				09AAB5DF2BA70FCAADAB4C2C /* SymbolsNerdFontMono-Regular.ttf in Resources */,
 				632C9446752A79B9C95A5D0D /* addon-fit-LICENSE.txt in Resources */,

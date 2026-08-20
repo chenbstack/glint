@@ -33,6 +33,8 @@
 	<string>© 2026 Glint</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Glint uses your local network to let authenticated devices control shared terminals.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>A program running in a Glint terminal is requesting access to your microphone.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>SUEnableAutomaticChecks</key>
