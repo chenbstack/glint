@@ -52,6 +52,19 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.28-beta.1",
+            en: [
+                "Switching workspaces no longer leaves a pane showing the previous workspace's terminal — a pane that lost its surface to a recycled container now reclaims it instead of waiting for a relaunch.",
+                "Programs run inside a Glint terminal can now ask for microphone access; the request used to be denied outright instead of showing a prompt.",
+                "The agent turn timer stops when the turn does. Both the sidebar and the pane summary now freeze at the turn's total time instead of counting up forever or hiding the number."
+            ],
+            zh: [
+                "切换工作区后，窗格不再显示上一个工作区的终端 —— 容器被回收导致丢失画面的窗格会自行重新接管，不用再重启应用。",
+                "终端里运行的程序现在可以申请麦克风权限；此前这类请求会被直接拒绝，连授权框都弹不出来。",
+                "Agent 回合计时器会随回合结束而停止。侧边栏和窗格摘要现在都会停在这一回合的总耗时，不再一直往上走、也不再直接把数字藏掉。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.27-beta.2",
             en: [
                 "Web Remote is steadier on phones: two-finger scrolling works in terminal panes, rapid pane switches no longer bounce back, and stale connections automatically reconnect after network or page interruptions.",
