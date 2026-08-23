@@ -1,6 +1,6 @@
 import { Terminal } from "/xterm.mjs";
 import { FitAddon } from "/addon-fit.mjs";
-import { installIOSIMEInputFallback } from "/ime-input.mjs";
+import { installIOSIMEInputFallback, installIOSNativeTouchInput } from "/ime-input.mjs";
 import {
   hmacSha256,
   hkdfExtractExpand,
@@ -245,6 +245,7 @@ const iosIMEInputFallback = installIOSIMEInputFallback(
   terminal,
   data => sendInputBytes(textEncoder.encode(data))
 );
+installIOSNativeTouchInput(terminal, text => terminal.paste(text));
 document.fonts?.load('13px "Glint Nerd Symbols"').then(() => {
   terminal.refresh(0, terminal.rows - 1);
   fitTerminal();

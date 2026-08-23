@@ -295,6 +295,34 @@ input:focus {
 #terminal .xterm { height: 100%; }
 #terminal .xterm-viewport { scrollbar-color: color-mix(in srgb, var(--text) 16%, transparent) transparent; }
 
+.xterm.glint-native-touch-input,
+.xterm.glint-native-touch-input .xterm-screen,
+.xterm.glint-native-touch-input .xterm-rows,
+.xterm.glint-native-touch-input .xterm-rows * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default;
+}
+
+.xterm.glint-native-touch-input .xterm-rows { pointer-events: auto !important; }
+.xterm.glint-native-touch-input .xterm-rows span { display: inline !important; }
+
+.xterm.glint-native-touch-input .xterm-helper-textarea {
+  opacity: 1;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: transparent;
+  outline: none;
+  text-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+  pointer-events: auto;
+}
+
 .empty-state {
   position: absolute;
   inset: 0 0 48px;

@@ -8,6 +8,96 @@ export function isIOSInputEnvironment(navigatorLike) {
     || (platform === "MacIntel" && touchPoints > 1);
 }
 
+export function shouldUseNativeTouchInput(navigatorLike, targetWindow) {
+  if (!isIOSInputEnvironment(navigatorLike)) return false;
+  return targetWindow?.matchMedia?.("(hover: none) and (pointer: coarse)").matches ?? true;
+}
+
+function pastedTextFromInput(baseline, newValue, eventData) {
+  if (baseline) {
+    const prefix = baseline.value.slice(0, baseline.start);
+    const suffix = baseline.value.slice(baseline.end);
+    if (newValue.startsWith(prefix) && newValue.endsWith(suffix)) {
+      return newValue.slice(prefix.length, newValue.length - suffix.length);
+    }
+  }
+  return typeof eventData === "string" ? eventData : newValue;
+}
+
+export function installIOSNativeTouchInput(
+  terminal,
+  pasteText,
+  navigatorLike = navigator,
+  targetWindow = window
+) {
+  if (!shouldUseNativeTouchInput(navigatorLike, targetWindow)
+      || !terminal.element
+      || !terminal.textarea) return null;
+
+  const screen = terminal.element.querySelector(".xterm-screen");
+  const rows = terminal.element.querySelector(".xterm-rows");
+  if (!screen || !rows) return null;
+
+  const textarea = terminal.textarea;
+  let pendingPaste = null;
+  terminal.element.classList.add("glint-native-touch-input");
+
+  const syncTextarea = () => {
+    const row = terminal.element.querySelector(".xterm-rows > div");
+    const measuredHeight = row?.getBoundingClientRect().height;
+    const cellHeight = measuredHeight > 0
+      ? measuredHeight
+      : (terminal.options?.fontSize || 13) * (terminal.options?.lineHeight || 1);
+    const screenWidth = screen.getBoundingClientRect().width;
+    const cellWidth = terminal.cols > 0 ? screenWidth / terminal.cols : 0;
+    const cursor = terminal.buffer.active;
+    textarea.style.left = `${cursor.cursorX * cellWidth}px`;
+    textarea.style.top = `${cursor.cursorY * cellHeight}px`;
+    textarea.style.width = `${Math.max(cellWidth, 80)}px`;
+    textarea.style.height = `${Math.max(cellHeight, 32)}px`;
+    textarea.style.lineHeight = `${cellHeight}px`;
+    textarea.style.zIndex = "10";
+  };
+
+  terminal.onRender?.(syncTextarea);
+  terminal.onCursorMove?.(syncTextarea);
+  if (targetWindow.requestAnimationFrame) targetWindow.requestAnimationFrame(syncTextarea);
+  else syncTextarea();
+
+  const handleNativeMouseDown = event => {
+    if (terminal.modes?.mouseTrackingMode
+        && terminal.modes.mouseTrackingMode !== "none") return;
+    event.stopPropagation();
+    terminal.focus();
+  };
+  rows.addEventListener("mousedown", handleNativeMouseDown, { capture: true });
+  textarea.addEventListener("mousedown", handleNativeMouseDown, { capture: true });
+
+  textarea.addEventListener("paste", event => {
+    // Let xterm consume ClipboardEvent data, but stop WebKit from also inserting
+    // the same text into the helper textarea and producing a second input event.
+    if (event.clipboardData) event.preventDefault();
+  }, { capture: true });
+
+  textarea.addEventListener("beforeinput", event => {
+    if (event.inputType !== "insertFromPaste") return;
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? start;
+    pendingPaste = { value: textarea.value, start: Math.min(start, end), end: Math.max(start, end) };
+  }, { capture: true });
+
+  textarea.addEventListener("input", event => {
+    if (event.inputType !== "insertFromPaste") return;
+    const text = pastedTextFromInput(pendingPaste, textarea.value, event.data);
+    pendingPaste = null;
+    textarea.value = "";
+    event.stopImmediatePropagation();
+    if (text) pasteText(text);
+  }, { capture: true });
+
+  return { syncTextarea };
+}
+
 export function textareaDelta(oldValue, newValue) {
   if (oldValue === newValue) return "";
   if (newValue.length < oldValue.length) return DELETE;
