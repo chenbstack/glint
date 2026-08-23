@@ -95,6 +95,7 @@
 		F584D3237E44E7444086E011 /* ShellRcBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9550DD194D906A2B5168DBFD /* ShellRcBlock.swift */; };
 		F5AE37B67B17DD61B652E5B6 /* ReviewDiffParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CFFB91CE5C44976A6961F1F /* ReviewDiffParsingTests.swift */; };
 		F6AFF715FCE5357CEB07683D /* SettingsSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */; };
+		F706CFC2BB7DDA67F4B7D669 /* ime-input.mjs in Resources */ = {isa = PBXBuildFile; fileRef = 9E91B403BDA59652BE90F6ED /* ime-input.mjs */; };
 		F7ABF70CD455143BF89B89B3 /* SafeJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E2B9ADF809766CE4278047 /* SafeJSON.swift */; };
 		FAB0828152636BBBBC5989CD /* SyntaxHighlighterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FAD36B4BDB22AB47353C569 /* SyntaxHighlighterTests.swift */; };
 		FB4C8529271BF52873745556 /* crypto.mjs in Resources */ = {isa = PBXBuildFile; fileRef = F6DDF70810465204EB990667 /* crypto.mjs */; };
@@ -183,6 +184,7 @@
 		98BBD4C70C8DC534304294C9 /* InlineSuggestionInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineSuggestionInstaller.swift; sourceTree = "<group>"; };
 		9E574E2A2735328331FC3C78 /* CloseOnCmdW.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloseOnCmdW.swift; sourceTree = "<group>"; };
 		9E67CF5D8552AE1F51386161 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		9E91B403BDA59652BE90F6ED /* ime-input.mjs */ = {isa = PBXFileReference; path = "ime-input.mjs"; sourceTree = "<group>"; };
 		9E982534C8CF6270BCF39106 /* ReviewWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewWindow.swift; sourceTree = "<group>"; };
 		A8C269A6E9AE87961C3356DC /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		ABF0871355239B5D7C80B719 /* web-remote.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = "web-remote.css"; sourceTree = "<group>"; };
@@ -236,6 +238,7 @@
 				5DB06D8C68CA7B9C7E1E83E7 /* addon-fit.mjs */,
 				2C85E16653B066382F22FEDD /* crypto-LICENSE.txt */,
 				F6DDF70810465204EB990667 /* crypto.mjs */,
+				9E91B403BDA59652BE90F6ED /* ime-input.mjs */,
 				2B1F1216422BE2A4234ABA44 /* nerd-fonts-LICENSE.txt */,
 				5627A3DA0ADBDC6194E2D7A7 /* symbols-nerd-font-LICENSE.txt */,
 				911638005A9881330F4F855F /* SymbolsNerdFontMono-Regular.ttf */,
@@ -565,6 +568,7 @@
 				EE6D05AB1D935F502865ABDA /* crypto-LICENSE.txt in Resources */,
 				FB4C8529271BF52873745556 /* crypto.mjs in Resources */,
 				262CB25BEB2B28B12C162F66 /* ghostty in Resources */,
+				F706CFC2BB7DDA67F4B7D669 /* ime-input.mjs in Resources */,
 				3B439B6978244B06B9695824 /* nerd-fonts-LICENSE.txt in Resources */,
 				7E6DBB055150A4D140351EB6 /* symbols-nerd-font-LICENSE.txt in Resources */,
 				0D3661ECB91851F77B1E48CE /* terminfo in Resources */,

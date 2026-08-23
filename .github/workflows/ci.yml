@@ -60,6 +60,9 @@ jobs:
 
           scripts/verify-ghostty-resources.sh build/Build/Products/Debug/Glint.app
 
+      - name: Test Web Remote browser input
+        run: node --test scripts/test-web-remote-ime.mjs
+
       - name: Test Glint
         run: |
           set -euo pipefail

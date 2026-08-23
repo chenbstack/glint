@@ -1,5 +1,6 @@
 import { Terminal } from "/xterm.mjs";
 import { FitAddon } from "/addon-fit.mjs";
+import { installIOSIMEInputFallback } from "/ime-input.mjs";
 import {
   hmacSha256,
   hkdfExtractExpand,
@@ -240,6 +241,10 @@ const terminal = new Terminal({
 const fitAddon = new FitAddon();
 terminal.loadAddon(fitAddon);
 terminal.open(elements.terminal);
+const iosIMEInputFallback = installIOSIMEInputFallback(
+  terminal,
+  data => sendInputBytes(textEncoder.encode(data))
+);
 document.fonts?.load('13px "Glint Nerd Symbols"').then(() => {
   terminal.refresh(0, terminal.rows - 1);
   fitTerminal();
@@ -841,7 +846,10 @@ function sendInputBytes(bytes) {
   send({ type: "input", pane: selectedPane, data: encodeBase64(bytes) });
 }
 
-terminal.onData(data => sendInputBytes(new TextEncoder().encode(data)));
+terminal.onData(data => {
+  iosIMEInputFallback?.noteTerminalData(data);
+  sendInputBytes(textEncoder.encode(data));
+});
 terminal.onBinary(data => {
   const bytes = Uint8Array.from(data, character => character.charCodeAt(0) & 0xff);
   sendInputBytes(bytes);
