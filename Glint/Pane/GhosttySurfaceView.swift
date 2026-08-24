@@ -41,6 +41,28 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     var paneHostGeneration: UInt64 = 0
     private var focusUpdateGate = SurfaceFocusUpdateGate()
     private var trackingArea: NSTrackingArea?
+    /// Screen contents for the accessibility layer. AX clients poll AXValue
+    /// aggressively and `ghostty_surface_read_text` takes the renderer lock,
+    /// so cache with a short TTL (mirrors upstream SurfaceView_AppKit).
+    private lazy var cachedScreenContents: CachedValue<String> = .init(duration: .milliseconds(500)) { [weak self] in
+        guard let self, let surface = self.surface else { return "" }
+        var text = ghostty_text_s()
+        let sel = ghostty_selection_s(
+            top_left: ghostty_point_s(
+                tag: GHOSTTY_POINT_SCREEN,
+                coord: GHOSTTY_POINT_COORD_TOP_LEFT,
+                x: 0,
+                y: 0),
+            bottom_right: ghostty_point_s(
+                tag: GHOSTTY_POINT_SCREEN,
+                coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT,
+                x: 0,
+                y: 0),
+            rectangle: false)
+        guard ghostty_surface_read_text(surface, sel, &text) else { return "" }
+        defer { ghostty_surface_free_text(surface, &text) }
+        return String(cString: text.text)
+    }
     private var markedTextValue: NSAttributedString = NSAttributedString(string: "")
     /// While non-nil, `insertText`/`doCommand(by:)` divert into this buffer
     /// instead of touching the surface. Used to let the IME observe a chord
@@ -2656,6 +2678,188 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     func characterIndex(for point: NSPoint) -> Int {
         0
+    }
+}
+
+// MARK: - Accessibility
+//
+// Voice-input assistants (Qianwen dictation and friends) and screen readers
+// probe the FOCUSED element's AX role to decide whether the frontmost app has
+// a text field they can type into. Terminal.app / iTerm2 / Ghostty.app all
+// expose their terminal surface as AXTextArea; without these overrides this
+// view reports the NSView default (AXGroup), so Qianwen's hotkey input falls
+// back to its "no input field" quick-action popup (记便签 / 问千问 / 复制)
+// instead of typing here. Mirrors upstream ghostty's SurfaceView_AppKit
+// accessibility extension, plus a settable AXSelectedText (the standard
+// dictation insertion attribute) routed into the same pipe as `insertText`.
+
+extension GhosttySurfaceView {
+    /// Indicates that this view should be exposed to accessibility tools like VoiceOver.
+    override func isAccessibilityElement() -> Bool {
+        return true
+    }
+
+    /// We use .textArea because the terminal surface is essentially an editable
+    /// text area where users can input commands and view output.
+    override func accessibilityRole() -> NSAccessibility.Role? {
+        return .textArea
+    }
+
+    override func accessibilityHelp() -> String? {
+        return String(localized: "Terminal content area")
+    }
+
+    override func accessibilityValue() -> Any? {
+        return cachedScreenContents.get()
+    }
+
+    /// Range of text currently selected in the string exposed through AXValue.
+    /// Ghostty's offsets are terminal-cell coordinates, so only report a range
+    /// when the selected text maps unambiguously into that formatted string.
+    override func accessibilitySelectedTextRange() -> NSRange {
+        let notFound = NSRange(location: NSNotFound, length: 0)
+        guard let surface = surface else { return notFound }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &text) else { return notFound }
+        defer { ghostty_surface_free_text(surface, &text) }
+        let selectedText = String(cString: text.text)
+        return AccessibilityText.uniqueRange(
+            of: selectedText,
+            in: cachedScreenContents.get()
+        ) ?? notFound
+    }
+
+    override func accessibilitySelectedText() -> String? {
+        guard let surface = surface else { return nil }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        let str = String(cString: text.text)
+        return str.isEmpty ? nil : str
+    }
+
+    /// Dictation-style insertion channel: setting AXSelectedText means "type
+    /// this at the cursor". A terminal has no editable text, so the text goes
+    /// down the same IME-aware commit pipe as `insertText`. Implementing the
+    /// setter also makes `AXUIElementIsAttributeSettable(kAXSelectedText)`
+    /// report true, which Qianwen's editable-element detection checks.
+    override func setAccessibilitySelectedText(_ text: String?) {
+        guard let text, !text.isEmpty, let s = surface else { return }
+        noteUserInputForIdleTracking()
+        // UTF-8 length, not strlen — mirrors injectText.
+        let n = text.utf8.count
+        text.withCString { ptr in
+            ghostty_surface_text_input(s, ptr, UInt(n))
+        }
+        // Same residual-preedit cleanup insertText performs after a commit.
+        ghostty_surface_preedit(s, nil, 0)
+        markScrollbackDirty()
+    }
+
+    override func accessibilityNumberOfCharacters() -> Int {
+        let content = cachedScreenContents.get()
+        return AccessibilityText.utf16Count(content)
+    }
+
+    /// For terminals, we typically show all content as visible.
+    override func accessibilityVisibleCharacterRange() -> NSRange {
+        let content = cachedScreenContents.get()
+        return NSRange(location: 0, length: AccessibilityText.utf16Count(content))
+    }
+
+    override func accessibilityLine(for index: Int) -> Int {
+        let content = cachedScreenContents.get()
+        return AccessibilityText.lineNumber(in: content, atUTF16Index: index)
+    }
+
+    override func accessibilityString(for range: NSRange) -> String? {
+        let content = cachedScreenContents.get()
+        return AccessibilityText.substring(in: content, range: range)
+    }
+
+    /// Right now this only applies font information (same trade-off as
+    /// upstream ghostty; per-run colors would need ghostty core support).
+    override func accessibilityAttributedString(for range: NSRange) -> NSAttributedString? {
+        guard let surface = surface,
+              let plainString = accessibilityString(for: range) else { return nil }
+
+        var attributes: [NSAttributedString.Key: Any] = [:]
+        if let fontRaw = ghostty_surface_quicklook_font(surface) {
+            let font = Unmanaged<CTFont>.fromOpaque(fontRaw)
+            attributes[.font] = font.takeUnretainedValue()
+            font.release()
+        }
+        return NSAttributedString(string: plainString, attributes: attributes)
+    }
+}
+
+enum AccessibilityText {
+    static func utf16Count(_ text: String) -> Int {
+        (text as NSString).length
+    }
+
+    static func substring(in text: String, range: NSRange) -> String? {
+        let text = text as NSString
+        guard range.location != NSNotFound,
+              range.location <= text.length,
+              range.length <= text.length - range.location else { return nil }
+        return text.substring(with: range)
+    }
+
+    static func lineNumber(in text: String, atUTF16Index index: Int) -> Int {
+        let clampedIndex = min(max(index, 0), utf16Count(text))
+        return text.utf16.prefix(clampedIndex).reduce(into: 0) { line, codeUnit in
+            if codeUnit == 0x0A { line += 1 }
+        }
+    }
+
+    static func uniqueRange(of selectedText: String, in exposedText: String) -> NSRange? {
+        let exposedText = exposedText as NSString
+        guard !selectedText.isEmpty else { return nil }
+
+        let first = exposedText.range(of: selectedText)
+        guard first.location != NSNotFound else { return nil }
+
+        let nextLocation = first.location + 1
+        if nextLocation <= exposedText.length {
+            let remaining = NSRange(
+                location: nextLocation,
+                length: exposedText.length - nextLocation
+            )
+            guard exposedText.range(of: selectedText, range: remaining).location == NSNotFound else {
+                return nil
+            }
+        }
+        return first
+    }
+}
+
+/// Caches a value for a short period on the AppKit main actor. Expiration is
+/// checked on demand so no background task can race with accessibility polls.
+@MainActor
+final class CachedValue<T> {
+    private var value: T?
+    private var expiresAt: ContinuousClock.Instant?
+    private let fetch: @MainActor () -> T
+    private let duration: Duration
+
+    init(duration: Duration, fetch: @escaping @MainActor () -> T) {
+        self.duration = duration
+        self.fetch = fetch
+    }
+
+    func get() -> T {
+        let now = ContinuousClock.now
+        if let value, let expiresAt, now < expiresAt {
+            return value
+        }
+
+        // No cached value (or it expired) — fetch and store.
+        let result = fetch()
+        self.value = result
+        self.expiresAt = now + duration
+
+        return result
     }
 }
 
