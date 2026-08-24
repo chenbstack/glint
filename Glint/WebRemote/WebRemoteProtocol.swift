@@ -627,6 +627,13 @@ enum WebRemoteAssets {
                 contentType: "text/javascript; charset=utf-8",
                 cacheControl: "public, max-age=31536000, immutable"
             )
+        case "/ime-input.mjs":
+            WebRemoteAsset(
+                resource: "ime-input",
+                fileExtension: "mjs",
+                contentType: "text/javascript; charset=utf-8",
+                cacheControl: "no-cache"
+            )
         case "/symbols-nerd-font-mono.ttf":
             WebRemoteAsset(
                 resource: "SymbolsNerdFontMono-Regular",

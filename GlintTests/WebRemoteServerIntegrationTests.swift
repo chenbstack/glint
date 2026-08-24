@@ -84,6 +84,13 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         XCTAssertFalse(data.isEmpty)
     }
 
+    func testHTTPServesIOSIMEInputFallback() async throws {
+        let (data, http) = try await request("/ime-input.mjs")
+        XCTAssertEqual(http.statusCode, 200)
+        XCTAssertNotNil(http.value(forHTTPHeaderField: "Content-Type")?.range(of: "text/javascript"))
+        XCTAssertFalse(data.isEmpty)
+    }
+
     func testHTTPReturns404ForUnknownAsset() async throws {
         let (data, http) = try await request("/favicon.ico")
         XCTAssertEqual(http.statusCode, 404)

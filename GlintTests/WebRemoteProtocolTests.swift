@@ -309,6 +309,7 @@ final class WebRemoteProtocolTests: XCTestCase {
     func testAssetsOnlyExposeBundledAllowlist() {
         XCTAssertEqual(WebRemoteAssets.asset(for: "/")?.resource, "web-remote-index")
         XCTAssertEqual(WebRemoteAssets.asset(for: "/xterm.mjs")?.contentType, "text/javascript; charset=utf-8")
+        XCTAssertEqual(WebRemoteAssets.asset(for: "/ime-input.mjs")?.resource, "ime-input")
         XCTAssertEqual(WebRemoteAssets.asset(for: "/symbols-nerd-font-mono.ttf")?.contentType, "font/ttf")
         XCTAssertNil(WebRemoteAssets.asset(for: "/../state.json"))
         XCTAssertNil(WebRemoteAssets.asset(for: "/favicon.ico"))
