@@ -278,6 +278,7 @@
     <div class="dots-legend">
       <span><i style="color:var(--amber)"></i><span data-i18n="legend_run">运行中</span></span>
       <span><i style="color:var(--red)"></i><span data-i18n="legend_perm">等待批准</span></span>
+      <span><i style="color:#5A99F2"></i><span data-i18n="legend_reply">待回复</span></span>
       <span><i style="color:var(--green)"></i><span data-i18n="legend_done">已完成</span></span>
       <span><i style="color:var(--cyan)"></i><span data-i18n="legend_idle">空闲</span></span>
     </div>
@@ -342,23 +343,53 @@
   <div class="wrap">
     <div class="sec-head">
       <h2 data-i18n="feat_hd">为「多开党」设计的终端</h2>
-      <p data-i18n="feat_sub">一个 workspace 里同时跑 Claude、Codex、OpenCode、Devin,分屏、多 tab,谁也不抢谁的注意力。</p>
+      <p data-i18n="feat_sub">一个 workspace 里同时跑 Claude Code、Codex、OpenCode、Devin、OMP、Grok Build、pi —— 分屏、多 tab,谁也不抢谁的注意力。</p>
     </div>
     <div class="cards">
       <div class="card">
         <div class="ic">🎯</div>
         <h3 data-i18n="f1_h">per-pane 状态一览</h3>
-        <p data-i18n="f1_p">每个 pane 的 AI 代理在干什么,状态点 + 悬浮明细一眼看清,不用逐个切过去问。</p>
+        <p data-i18n="f1_p">每个 pane 的 AI 代理在干什么,状态点 + 悬浮明细一眼看清 —— 思考中、运行中、待批准、待回复、已完成,不用逐个切过去问。</p>
       </div>
       <div class="card">
         <div class="ic">⚡️</div>
         <h3 data-i18n="f2_h">多 agent 并行</h3>
-        <p data-i18n="f2_p">左边 Claude、右边 Codex、另一个 tab 跑 OpenCode 或 Devin,各自独立会话互不打扰。</p>
+        <p data-i18n="f2_p">内置 Claude Code、Codex、OpenCode、Devin、OMP、Grok Build、pi 七个 agent,设置里一键装 hook;左右分屏各跑各的,独立会话互不打扰。</p>
+      </div>
+      <div class="card">
+        <div class="ic">🔔</div>
+        <h3 data-i18n="f9_h">⌘⇧A 关注直达</h3>
+        <p data-i18n="f9_p">待批准、待回复、刚完成的任务自动在侧边栏置顶;⌘⇧A 一键跳到需要你的窗格,提示音、Dock 角标、系统通知一个不落。</p>
+      </div>
+      <div class="card">
+        <div class="ic">🔍</div>
+        <h3 data-i18n="f7_h">Review 审阅改动</h3>
+        <p data-i18n="f7_p">内置 Review 窗口:并排 / 统一 diff、语法高亮、只看改动;SSH 远程会话里也能跟随远端目录,直接审阅远端仓库。</p>
       </div>
       <div class="card">
         <div class="ic">🪟</div>
         <h3 data-i18n="f3_h">分屏 · 多标签</h3>
         <p data-i18n="f3_p">workspace-global 的 pane 模型,⌘T 开标签、随手分屏,布局怎么切 key 都不变。</p>
+      </div>
+      <div class="card">
+        <div class="ic">💾</div>
+        <h3 data-i18n="f10_h">会话恢复</h3>
+        <p data-i18n="f10_p">重启后每个窗格精确接回自己的 agent 会话,Claude、Codex 各回各家,不再被合并到最近一次。</p>
+      </div>
+      <div class="card">
+        <div class="ic">📱</div>
+        <h3 data-i18n="f8_h">网页远程控制</h3>
+        <p data-i18n="f8_p">手机或同网设备的浏览器里实时看输出、直接敲键盘;端到端加密,访问密钥可随时轮换。</p>
+      </div>
+      <div class="card">
+        <div class="ic">💬</div>
+        <h3 data-i18n="f11_h">zsh 命令提示</h3>
+        <p data-i18n="f11_p">输入时浅色显示最近匹配的历史命令,→ 接受;zsh 原生渲染,字体间距零漂移,也不打扰你已有的配置。</p>
+      </div>
+      <div class="card">
+        <div class="ic">☀️</div>
+        <h3 data-i18n="f12_h">亮色 · 暗色</h3>
+        <p data-i18n="f12_p">亮色模式覆盖全应用 —— 窗口、侧边栏、玻璃浮岛、Review 都跟主题走;终端还支持 CJK 回退字体。</p>
       </div>
       <div class="card">
         <div class="ic">✨</div>
@@ -457,7 +488,7 @@ const I18N = {
     sub:'为 vibe coding 而生的精致 macOS 终端。底层基于 Ghostty,侧边栏一眼看清每个 AI 代理 —— 谁在跑、谁等你、谁跑完了。',
     dl_macos:'↓ 下载 for macOS', view_gh:'在 GitHub 上查看',
     pill_dl:'次下载', pill_latest:'最新稳定版', pill_mit:'MIT 开源',
-    legend_run:'运行中', legend_perm:'等待批准', legend_done:'已完成', legend_idle:'空闲',
+    legend_run:'运行中', legend_perm:'等待批准', legend_reply:'待回复', legend_done:'已完成', legend_idle:'空闲',
     stat_total:'累计下载', stat_total_sub:'手动 + 自动更新 + brew',
     stat_latest:'最新稳定版下载', stat_beta:'Beta 通道(峰值)', stat_beta_sub:'最高单版 ≈ 通道人数',
     beta_hd_1:'测试版分布 · ', beta_hd_2:' 之后各 beta 下载数 · 取峰值 ≈ beta 通道人数(求和会重复计同一人)',
@@ -466,11 +497,17 @@ const I18N = {
     hist_hd:'历史稳定版下载', hist_sub:'采用趋势 + 下载量榜单。',
     hist_trend:'采用趋势 · 旧 → 新',
     feat_hd:'为「多开党」设计的终端',
-    feat_sub:'一个 workspace 里同时跑 Claude、Codex、OpenCode、Devin,分屏、多 tab,谁也不抢谁的注意力。',
-    f1_h:'per-pane 状态一览', f1_p:'每个 pane 的 AI 代理在干什么,状态点 + 悬浮明细一眼看清,不用逐个切过去问。',
-    f2_h:'多 agent 并行', f2_p:'左边 Claude、右边 Codex、另一个 tab 跑 OpenCode 或 Devin,各自独立会话互不打扰。',
+    feat_sub:'一个 workspace 里同时跑 Claude Code、Codex、OpenCode、Devin、OMP、Grok Build、pi —— 分屏、多 tab,谁也不抢谁的注意力。',
+    f1_h:'per-pane 状态一览', f1_p:'每个 pane 的 AI 代理在干什么,状态点 + 悬浮明细一眼看清 —— 思考中、运行中、待批准、待回复、已完成,不用逐个切过去问。',
+    f2_h:'多 agent 并行', f2_p:'内置 Claude Code、Codex、OpenCode、Devin、OMP、Grok Build、pi 七个 agent,设置里一键装 hook;左右分屏各跑各的,独立会话互不打扰。',
     f3_h:'分屏 · 多标签', f3_p:'workspace-global 的 pane 模型,⌘T 开标签、随手分屏,布局怎么切 key 都不变。',
     f4_h:'Liquid Glass 头部', f4_p:'macOS 26 玻璃浮岛 header,终端内容顶到顶部,质感拉满。',
+    f7_h:'Review 审阅改动', f7_p:'内置 Review 窗口:并排 / 统一 diff、语法高亮、只看改动;SSH 远程会话里也能跟随远端目录,直接审阅远端仓库。',
+    f8_h:'网页远程控制', f8_p:'手机或同网设备的浏览器里实时看输出、直接敲键盘;端到端加密,访问密钥可随时轮换。',
+    f9_h:'⌘⇧A 关注直达', f9_p:'待批准、待回复、刚完成的任务自动在侧边栏置顶;⌘⇧A 一键跳到需要你的窗格,提示音、Dock 角标、系统通知一个不落。',
+    f10_h:'会话恢复', f10_p:'重启后每个窗格精确接回自己的 agent 会话,Claude、Codex 各回各家,不再被合并到最近一次。',
+    f11_h:'zsh 命令提示', f11_p:'输入时浅色显示最近匹配的历史命令,→ 接受;zsh 原生渲染,字体间距零漂移,也不打扰你已有的配置。',
+    f12_h:'亮色 · 暗色', f12_p:'亮色模式覆盖全应用 —— 窗口、侧边栏、玻璃浮岛、Review 都跟主题走;终端还支持 CJK 回退字体。',
     f5_h:'基于 Ghostty', f5_p:'底层用 Ghostty 渲染,SwiftUI + AppKit 重写交互,快且原生。',
     f6_h:'Sparkle 自动更新', f6_p:'新版本静默推送、一键升级,brew cask 也能跟上。',
     sc1_h:'侧边栏:谁在跑 · 谁等你 · 谁跑完了', sc1_p:'每个工作区显示当前代理、状态与已用时长,红点等批准、绿勾已完成。',
@@ -494,7 +531,7 @@ const I18N = {
     sub:'A refined macOS terminal built for vibe coding. Powered by Ghostty — the sidebar shows every AI agent at a glance: who’s running, who needs you, who’s done.',
     dl_macos:'↓ Download for macOS', view_gh:'View on GitHub',
     pill_dl:'downloads', pill_latest:'Latest stable', pill_mit:'MIT licensed',
-    legend_run:'Running', legend_perm:'Needs approval', legend_done:'Done', legend_idle:'Idle',
+    legend_run:'Running', legend_perm:'Needs approval', legend_reply:'Awaiting reply', legend_done:'Done', legend_idle:'Idle',
     stat_total:'Total downloads', stat_total_sub:'manual + auto-update + brew',
     stat_latest:'Latest stable downloads', stat_beta:'Beta channel (peak)', stat_beta_sub:'peak single build ≈ channel size',
     beta_hd_1:'Beta breakdown · downloads per beta after ', beta_hd_2:' · peak ≈ beta channel size (summing double-counts the same user)',
@@ -503,11 +540,17 @@ const I18N = {
     hist_hd:'Stable release downloads', hist_sub:'Adoption trend + download leaderboard.',
     hist_trend:'Adoption · old → new',
     feat_hd:'A terminal for power multitaskers',
-    feat_sub:'Run Claude, Codex, OpenCode and Devin in one workspace — split panes, tabs, none stealing your attention.',
-    f1_h:'Per-pane status at a glance', f1_p:'See what each pane’s agent is doing — status dots plus a hover breakdown, no switching around to check.',
-    f2_h:'Multiple agents in parallel', f2_p:'Claude on the left, Codex on the right, OpenCode or Devin in another tab — independent sessions, no crosstalk.',
+    feat_sub:'Run Claude Code, Codex, OpenCode, Devin, OMP, Grok Build and pi in one workspace — split panes, tabs, none stealing your attention.',
+    f1_h:'Per-pane status at a glance', f1_p:'See what each pane’s agent is doing — status dots plus a hover breakdown: thinking, running, awaiting approval, awaiting reply, done. No switching around to check.',
+    f2_h:'Multiple agents in parallel', f2_p:'Seven built-in agents — Claude Code, Codex, OpenCode, Devin, OMP, Grok Build and pi — with one-click hook install. Split them across panes: independent sessions, no crosstalk.',
     f3_h:'Splits & tabs', f3_p:'A workspace-global pane model: ⌘T for tabs, split anytime — keys stay stable however you rearrange.',
     f4_h:'Liquid Glass header', f4_p:'A macOS 26 floating glass header; terminal content runs right to the top.',
+    f7_h:'Review built in', f7_p:'A Review window with split and unified diffs, syntax highlighting and changes-only mode — it even follows SSH sessions to review remote repos like local ones.',
+    f8_h:'Web remote control', f8_p:'Open a browser on your phone or another machine on the LAN — live output, direct typing. End-to-end encrypted, with an access key you can rotate anytime.',
+    f9_h:'⌘⇧A jump to attention', f9_p:'Approvals, questions and finished turns float to the top of the sidebar; ⌘⇧A jumps straight to the pane that needs you — chime, Dock badge and native notifications included.',
+    f10_h:'Sessions survive restarts', f10_p:'On relaunch every pane resumes its own agent session — Claude, Codex and friends each pick up exactly where they left off.',
+    f11_h:'zsh command suggestions', f11_p:'Faint ghost text shows your latest matching history command — accept with →. Rendered by zsh itself, so alignment is pixel-perfect and your existing setup stays untouched.',
+    f12_h:'Light & dark', f12_p:'Light mode covers the whole app — window, sidebar, glass capsules and Review all follow the theme. Plus a CJK fallback font picker for the terminal.',
     f5_h:'Built on Ghostty', f5_p:'Ghostty under the hood, interaction rewritten in SwiftUI + AppKit — fast and native.',
     f6_h:'Sparkle auto-update', f6_p:'New versions pushed silently, one-click upgrade; the brew cask keeps up too.',
     sc1_h:'Sidebar: who’s running · who needs you · who’s done', sc1_p:'Each workspace shows its agent, status and elapsed time — red dot waiting for approval, green check done.',
