@@ -52,6 +52,17 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.28-beta.2",
+            en: [
+                "Typing Chinese — or any other IME language — into the web remote from an iPhone or iPad no longer drops the composed text.",
+                "Long-pressing in the web remote on iPhone and iPad now brings up the system selection and paste menu, so you can paste into a terminal from your phone."
+            ],
+            zh: [
+                "在 iPhone / iPad 上通过网页远程输入中文（以及其它需要输入法的语言）不再丢字。",
+                "iPhone / iPad 上网页远程长按可以正常呼出系统的选择与粘贴菜单，终于能从手机往终端里粘贴内容了。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.28-beta.1",
             en: [
                 "Switching workspaces no longer leaves a pane showing the previous workspace's terminal — a pane that lost its surface to a recycled container now reclaims it instead of waiting for a relaunch.",
