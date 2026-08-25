@@ -4940,6 +4940,17 @@
         }
       }
     },
+    "Terminal content area": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "终端内容区域"
+          }
+        }
+      }
+    },
     "Terminal failed to start": {
       "extractionState": "stale",
       "localizations": {
