@@ -52,6 +52,17 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.28-beta.3",
+            en: [
+                "Dictation and voice input now work in a terminal. Glint exposes each pane as a standard text area, so hotkey dictation — the system's own, Qianwen, and friends — types straight into the terminal instead of falling back to its \"no text field here\" popup. Dictated text goes through the same input path as the keyboard, and anything a shell would execute on the spot (newlines, control characters) is refused rather than run.",
+                "VoiceOver can read a terminal: its contents, the current selection, and line-by-line navigation, with emoji and CJK text landing at the right offsets."
+            ],
+            zh: [
+                "终端现在支持听写和语音输入。Glint 把每个窗格暴露为标准文本区，系统听写、千问等快捷键听写会直接把文字打进终端，不再弹「这里没有输入框」的备用菜单。听写文本走的是和键盘一样的输入通道；换行、控制字符这类 shell 会立刻执行的内容会被拒绝，不会被执行。",
+                "VoiceOver 现在可以朗读终端：内容、当前选中的文本，以及逐行导航，emoji 和中日韩文字的位置也不会再错位。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.28-beta.2",
             en: [
                 "Typing Chinese — or any other IME language — into the web remote from an iPhone or iPad no longer drops the composed text.",
