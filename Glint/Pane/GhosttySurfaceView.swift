@@ -39,6 +39,20 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// representables alive; the older one must not re-parent the surface back.
     weak var paneHostView: NSView?
     var paneHostGeneration: UInt64 = 0
+    /// A claim that was declined while a recorded host still vetoed, kept so
+    /// the invalidation that dissolves the veto can re-drive it through full
+    /// arbitration (the event-driven side of the recovery in
+    /// `PaneSurfaceRepresentable`). Weak — a dismantled candidate must not be
+    /// kept alive; the visibility closure captures the store weakly because
+    /// the store owns the surfaces and a strong capture would be a cycle.
+    weak var pendingRecoveryHost: NSView?
+    var pendingRecoveryVisibility: (() -> Bool)?
+    /// Bumped on every arm/disarm of the pending recovery. Backstop chains
+    /// capture the epoch at scheduling time and die when it no longer
+    /// matches, so a chain queued for an old claim cannot act after a
+    /// success cleared the pending state or a newer decline re-armed it.
+    var pendingRecoveryEpoch: UInt = 0
+
     private var focusUpdateGate = SurfaceFocusUpdateGate()
     private var trackingArea: NSTrackingArea?
     /// Screen contents for the accessibility layer. AX clients poll AXValue
