@@ -58,8 +58,11 @@ struct PaneView: View {
                 surfaceView: store.surfaceView(workspaceID: workspaceID, paneID: paneID, cwd: cwd),
                 focused: isFocused,
                 deferFocus: store.commandPaletteOpen || store.agentChooserIntent != nil,
-                isPaneVisible: {
-                    store.isPaneVisible(.init(workspace: workspaceID, pane: paneID))
+                isPaneVisible: { [weak store = store] in
+                    // Weak on purpose: the recovery stores this closure on the
+                    // surface for longer than a view lifetime, and the store
+                    // owns the surfaces — a strong capture would be a cycle.
+                    store?.isPaneVisible(.init(workspace: workspaceID, pane: paneID)) ?? false
                 }
             )
             if !isFocused {
