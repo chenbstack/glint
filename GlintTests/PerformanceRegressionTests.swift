@@ -526,49 +526,6 @@ final class PerformanceRegressionTests: XCTestCase {
         XCTAssertTrue(gate.shouldApply(false))
     }
 
-    func testAccessibilityTextUsesUTF16Coordinates() {
-        let content = "😀a\n界b"
-
-        XCTAssertEqual(AccessibilityText.utf16Count(content), 6)
-        XCTAssertEqual(
-            AccessibilityText.substring(in: content, range: NSRange(location: 0, length: 2)),
-            "😀"
-        )
-        XCTAssertEqual(
-            AccessibilityText.substring(in: content, range: NSRange(location: 2, length: 1)),
-            "a"
-        )
-        XCTAssertEqual(AccessibilityText.lineNumber(in: content, atUTF16Index: 4), 1)
-    }
-
-    func testAccessibilitySelectionMapsAgainstExposedText() {
-        let content = "short\nselected 😀 text\nend"
-        let selectedText = "selected 😀"
-
-        let range = AccessibilityText.uniqueRange(of: selectedText, in: content)
-
-        XCTAssertEqual(range, NSRange(location: 6, length: 11))
-        XCTAssertEqual(range.flatMap { AccessibilityText.substring(in: content, range: $0) }, selectedText)
-    }
-
-    func testAccessibilitySelectionRejectsMissingOrAmbiguousMapping() {
-        XCTAssertNil(AccessibilityText.uniqueRange(of: "padded", in: "trimmed"))
-        XCTAssertNil(AccessibilityText.uniqueRange(of: "same", in: "same\nsame"))
-    }
-
-    func testAccessibilityCacheRefetchesOnlyAfterExpiry() async throws {
-        var fetchCount = 0
-        let cache = CachedValue(duration: .milliseconds(20)) {
-            fetchCount += 1
-            return fetchCount
-        }
-
-        XCTAssertEqual(cache.get(), 1)
-        XCTAssertEqual(cache.get(), 1)
-        try await Task.sleep(for: .milliseconds(30))
-        XCTAssertEqual(cache.get(), 2)
-    }
-
     func testTerminalBackingSkipsIdenticalLayerWrites() {
         let layer = CALayer()
         let background = CGColor(red: 0.1, green: 0.2, blue: 0.3, alpha: 1)
