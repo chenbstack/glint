@@ -1,4 +1,5 @@
 import XCTest
+import GhosttyKit
 @testable import Glint
 
 /// String-level regression tests for the terminal accessibility layer
@@ -7,6 +8,25 @@ import XCTest
 /// `.trim = false`) emits for `read_text` / `read_selection`.
 @MainActor
 final class AccessibilityTests: XCTestCase {
+    /// The AX layer must read the VIEWPORT, not the whole screen. The
+    /// viewport is bounded by window size, so a per-poll `read_text` and
+    /// `lineNumber`'s O(index) walk stay cheap however deep the scrollback
+    /// gets, and history contents are never handed to an AX client that asks.
+    /// Nothing else in the app observes this tag, so without an assertion the
+    /// choice reverts to `GHOSTTY_POINT_SCREEN` silently.
+    func testAccessibilityReadsViewportNotScrollback() {
+        let selection = GhosttySurfaceView.viewportSelection()
+
+        XCTAssertEqual(selection.top_left.tag, GHOSTTY_POINT_VIEWPORT)
+        XCTAssertEqual(selection.bottom_right.tag, GHOSTTY_POINT_VIEWPORT)
+        XCTAssertEqual(selection.top_left.coord, GHOSTTY_POINT_COORD_TOP_LEFT)
+        XCTAssertEqual(selection.bottom_right.coord, GHOSTTY_POINT_COORD_BOTTOM_RIGHT)
+        // A rectangle (alt-drag) shape joins partial row segments with
+        // newlines the exposed text doesn't contain, which would break
+        // `uniqueRange`'s substring mapping.
+        XCTAssertFalse(selection.rectangle)
+    }
+
     func testTextUsesUTF16Coordinates() {
         let content = "😀a\n界b"
 
@@ -40,7 +60,10 @@ final class AccessibilityTests: XCTestCase {
     /// A soft-wrapped line is joined without a newline in the exposed text
     /// (`.unwrap = true`), and a linear selection crossing the wrap junction
     /// is formatted the same way — so it must still map into the exposed
-    /// text. This pins the assumption `uniqueRange` relies on.
+    /// text. The fixture is hand-written, so this pins `uniqueRange` against
+    /// a shape the formatter is known to emit; it cannot detect the formatter
+    /// itself changing (that claim rests on both calls sharing
+    /// `dumpTextLocked`, and would go stale silently).
     func testSelectionSpansSoftWrapJunction() {
         // A 16-col terminal shows "echo 一二三四 five six" as two visual
         // rows ("prompt$ echo 一二三四" / "five six"); the dump joins them
@@ -60,8 +83,8 @@ final class AccessibilityTests: XCTestCase {
     /// non-blank text; one whose text simply isn't present must not map.
     func testSelectionAgainstTrailingBlankTrimmedRows() {
         // Visible rows "abc   " and "def" dump as "abc\ndef" — trailing blank
-        // cells are trimmed. A user selection of "abc" (or "abc   ") maps to
-        // the trimmed row text.
+        // cells are trimmed, on both sides, so a user selection of the first
+        // row maps by its non-blank text.
         let exposed = "abc\ndef"
         XCTAssertEqual(AccessibilityText.uniqueRange(of: "abc", in: exposed), NSRange(location: 0, length: 3))
         // A selection spanning "abc" through the start of "def" crosses a

@@ -67,21 +67,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// `accessibilityLine(for:)` walks stay cheap even with a huge scrollback,
     /// and history contents (old tokens, secrets) are not handed to any AX
     /// client that asks.
-    lazy var cachedVisibleContents: CachedValue<String> = .init(duration: .milliseconds(500)) { [weak self] in
+    private(set) lazy var cachedVisibleContents: CachedValue<String> = .init(duration: .milliseconds(500)) { [weak self] in
         guard let self, let surface = self.surface else { return "" }
         var text = ghostty_text_s()
-        let sel = ghostty_selection_s(
-            top_left: ghostty_point_s(
-                tag: GHOSTTY_POINT_VIEWPORT,
-                coord: GHOSTTY_POINT_COORD_TOP_LEFT,
-                x: 0,
-                y: 0),
-            bottom_right: ghostty_point_s(
-                tag: GHOSTTY_POINT_VIEWPORT,
-                coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT,
-                x: 0,
-                y: 0),
-            rectangle: false)
+        let sel = GhosttySurfaceView.viewportSelection()
         guard ghostty_surface_read_text(surface, sel, &text) else { return "" }
         defer { ghostty_surface_free_text(surface, &text) }
         return String(cString: text.text)

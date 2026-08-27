@@ -14,6 +14,31 @@ import GhosttyKit
 // dictation insertion attribute) routed into the same pipe as `insertText`.
 
 extension GhosttySurfaceView {
+    /// The whole visible viewport, as a ghostty selection — the region
+    /// `cachedVisibleContents` reads, and so the region every override below
+    /// exposes.
+    ///
+    /// Split out of that closure so the viewport-vs-screen choice is pinned by
+    /// a test rather than by a literal buried in a lazy initializer. It is the
+    /// difference between handing AX clients a bounded, window-sized string
+    /// and handing them the entire scrollback, yet flipping the tag back to
+    /// `GHOSTTY_POINT_SCREEN` changes nothing that any other code path — or,
+    /// before this helper existed, any test — would notice.
+    static func viewportSelection() -> ghostty_selection_s {
+        ghostty_selection_s(
+            top_left: ghostty_point_s(
+                tag: GHOSTTY_POINT_VIEWPORT,
+                coord: GHOSTTY_POINT_COORD_TOP_LEFT,
+                x: 0,
+                y: 0),
+            bottom_right: ghostty_point_s(
+                tag: GHOSTTY_POINT_VIEWPORT,
+                coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT,
+                x: 0,
+                y: 0),
+            rectangle: false)
+    }
+
     /// Indicates that this view should be exposed to accessibility tools like VoiceOver.
     override func isAccessibilityElement() -> Bool {
         return true
