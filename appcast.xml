@@ -6,17 +6,24 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.28-beta.3</title>
-      <sparkle:version>202608250738</sparkle:version>
-      <sparkle:shortVersionString>0.1.28-beta.3</sparkle:shortVersionString>
+      <title>Glint 0.1.28-beta.4</title>
+      <sparkle:version>202608270727</sparkle:version>
+      <sparkle:shortVersionString>0.1.28-beta.4</sparkle:shortVersionString>
       <sparkle:channel>beta</sparkle:channel>
-      <pubDate>Tue, 25 Aug 2026 07:41:00 +0000</pubDate>
+      <pubDate>Thu, 27 Aug 2026 07:29:35 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.28-beta.3</h3><ul>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.28-beta.4</h3><ul>
+    <li><strong>perf(accessibility): expose viewport contents instead of full scrollback (#110)</strong><br><span style="color:#666">终端无障碍层改为只暴露视口内容,不再暴露整个 scrollback。AXValue 走</span></li>
+    <li><strong>fix(pane): harden the host-claim landing after review</strong><br><span style="color:#666">#109 落地后的评审加固。① 解码时修复悬空 selectedTabID —— 新的 attach</span></li>
+    <li><strong>fix(pane): close host-claim races reopened by the stale-recording recovery (#109)</strong><br><span style="color:#666">修复 #103 引入的恢复通道重新打开 #93/#96 两个旧问题。一次性采样过早</span></li>
+    <li><strong>release: prepare v0.1.28-beta.4</strong><br><span style="color:#666">补 0.1.28-beta.4 的「更新内容」—— beta.2 / beta.3 上复发的窗格搁浅问题</span></li>
+    <li><strong>test(accessibility): pin the viewport choice the change is named after</strong><br><span style="color:#666">#110 落地后的评审加固。① 标题里那个改动本身没有任何测试兜底 —— 把 tag</span></li>
+    <li>release: appcast for v0.1.28-beta.3</li>
+  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.28-beta.3</h3><ul>
     <li><strong>feat(accessibility): expose terminal panes as AXTextArea (#108)</strong><br><span style="color:#666">终端窗格现在以 AXTextArea 暴露给辅助功能,系统听写 / 千问等语音输入</span></li>
     <li><strong>release: prepare v0.1.28-beta.3</strong><br><span style="color:#666">补 0.1.28-beta.3 的「更新内容」——终端支持听写 / 语音输入,以及</span></li>
     <li>release: appcast for v0.1.28-beta.2</li>
-  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.28-beta.2</h3><ul>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.28-beta.2</h3><ul>
     <li><strong>fix(web-remote): support iOS Chinese IME input and long-press paste (#107)</strong><br><span style="color:#666">修复网页远程在 iOS / iPadOS 上的中文输入法输入丢字，以及长按无法调出</span></li>
     <li><strong>release: prepare v0.1.28-beta.2</strong><br><span style="color:#666">补 0.1.28-beta.2 的「更新内容」——网页远程在 iPhone / iPad 上的中文</span></li>
     <li><strong>docs(website): catch the feature cards up to v0.1.27 (#104)</strong><br><span style="color:#666">官网功能介绍追平 v0.1.27:功能卡从 6 张扩到 12 张,补上 Review 窗口、</span></li>
@@ -96,14 +103,108 @@
     <li><strong>fix: back off Git refresh during filesystem storms / 降低文件系统风暴期间的 Git 刷新频率 (#88)</strong><br><span style="color:#666">文件系统风暴期间降低 Git 刷新频率:首次刷新与普通尾随刷新保持不变,同一 workspace 持续 FSEvents 风暴时尾随刷新从 1.5 秒退避到 6 秒;刷新执行或取消时清理风暴计数,避免旧状态影响后续;新增风暴回归测试。</span></li>
     <li><strong>release: prepare v0.1.26-beta.4</strong><br><span style="color:#666">补充 0.1.26-beta.4 更新内容:Grok Build 内置 Agent、可选的空闲终端自动释放、刷新开销与 Git 风暴退避性能优化。</span></li>
     <li>release: appcast for v0.1.26-beta.3</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.26-beta.3</h3><ul>
-    <li><strong>feat: integrate OMP as a first-class agent with needsReply status / OMP 作为内置 Agent 接入,新增 needsReply 状态 (#87)</strong><br><span style="color:#666">OMP 作为第五个内置 Agent 接入(对齐 Devin/OpenCode 模式):hook 安装器写入便携 TS 扩展桥接 OMP 生命周期事件,吉祥物动画、设置卡片、会话恢复、中文本地化;新增 needsReply 状态(ask 工具等待用户输入时显示「等待回复」),thinking/tool 标签拆分为「思考中…/运行中…」;修复 OMP 16.5.2 hasUI 误报导致 hook 事件被吞、嵌套子代理提前清状态等问题。</span></li>
-    <li><strong>style: realign status switch columns, mark manual xcstrings entries / 对齐状态 switch 列,补 xcstrings manual 标记</strong><br><span style="color:#666">修正 #87 引入的状态 switch 列对齐偏差,statusRank 块整体加宽对齐;为三个新增 xcstrings 条目补 extractionState=manual 标记。无行为变化。</span></li>
-    <li><strong>fix: Review correctness and performance regressions / 修复 Review 正确性与性能问题 (#84)</strong><br><span style="color:#666">修复 Review 正确性与性能问题:远程 Review 不再读本地文件时间、首开去重重载、已删除树定位最近现存父目录;透明度/模糊滑块拖动结束一次性提交、释放被替换的 Ghostty 配置、应用焦点同步 Ghostty;保留事件驱动刷新并排除归档/非活跃 workspace,git 子进程可取消,worktree 分支校验防抖。</span></li>
-    <li><strong>release: prepare v0.1.26-beta.3</strong><br><span style="color:#666">补充 0.1.26-beta.3 更新内容:OMP 内置 Agent、「待回复」状态、思考中/运行中标签拆分、滑块一次性提交与 Review 修复、后台开销降低。</span></li>
-    <li><strong>docs: correct NeedsReply comment — fired by OMP&#x27;s ask tool mid-turn, not turn end</strong><br><span style="color:#666">修正 NeedsReply 注释——它由 OMP 的 ask 工具在 turn 中途阻塞等待输入时触发,并非 turn 结束(正常结束仍是 Stop);补充回答后经 PostToolUse 回到 busy 的清除路径。</span></li>
-    <li>release: appcast for v0.1.26-beta.2</li>
   </ul></div>]]></description>
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.28-beta.4/Glint-0.1.28-beta.4.dmg" length="21075724" type="application/octet-stream" sparkle:edSignature="IEikG4/CnmQtVPth+v2xtpn4R56PBuQc2Ps0rGkEh7wSuCDyvs6etbMIW9DroDfqoSFFkHUZxbyTrEUI6CYxDA==" />
+    </item>
+    <item>
+      <title>Glint 0.1.28-beta.3</title>
+      <sparkle:version>202608250738</sparkle:version>
+      <sparkle:shortVersionString>0.1.28-beta.3</sparkle:shortVersionString>
+      <sparkle:channel>beta</sparkle:channel>
+      <pubDate>Tue, 25 Aug 2026 07:41:00 +0000</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description>&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.28-beta.3&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(accessibility): expose terminal panes as AXTextArea (#108)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;终端窗格现在以 AXTextArea 暴露给辅助功能,系统听写 / 千问等语音输入&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.28-beta.3&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补 0.1.28-beta.3 的「更新内容」——终端支持听写 / 语音输入,以及&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.28-beta.2&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;!--GLINT_HISTORY_BELOW--&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3 style="color:#666;"&gt;历史版本 · Previous releases&lt;/h3&gt;&lt;/div&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.28-beta.2&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix(web-remote): support iOS Chinese IME input and long-press paste (#107)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复网页远程在 iOS / iPadOS 上的中文输入法输入丢字，以及长按无法调出&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.28-beta.2&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补 0.1.28-beta.2 的「更新内容」——网页远程在 iPhone / iPad 上的中文&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;docs(website): catch the feature cards up to v0.1.27 (#104)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;官网功能介绍追平 v0.1.27:功能卡从 6 张扩到 12 张,补上 Review 窗口、&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.28-beta.1&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.28-beta.1&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;refactor(agent): freeze the sidebar turn timer instead of hiding it&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;侧边栏的回合计时器改为「冻结」而不是「隐藏」——回合结束后停在总耗时，&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(agent): freeze elapsed timer after completion (#102)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;agent 完成后冻结摘要里的计时，不再让已结束的行继续往上走。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(permissions): declare microphone usage so terminal children can prompt (#100)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补上麦克风权限声明，终端里跑的程序才能弹授权框；同时把它和本地网络说明的中文翻译一起加进 InfoPlist 字符串目录。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(pane): recover from a stale surface host recording (#103)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 workspace 切换后 pane 显示上一个工作区终端的问题。surface 记录的&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.28-beta.1&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补 0.1.28-beta.1 的「更新内容」——workspace 切换后窗格串台的修复、&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;test(webremote): keep the integration tests off the Keychain&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复跑测试时弹出「Glint 想要使用你储存在钥匙串中的机密信息」的登录密码&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.27&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.27&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;feat: 网页远程终端控制 / Browser-based remote terminal control (#92)&lt;/li&gt;
+    &lt;li&gt;feat: integrate pi as a first-class agent / pi 作为内置 Agent 接入 (#95)&lt;/li&gt;
+    &lt;li&gt;feat(sidebar): middle-click to close workspace / 中键关闭工作区 (#94)&lt;/li&gt;
+    &lt;li&gt;fix(pane): avoid white flash when closing a split (#99)&lt;/li&gt;
+    &lt;li&gt;fix: improve Web Remote mobile scrolling and connection recovery (#97)&lt;/li&gt;
+    &lt;li&gt;fix: stabilize pane resize host ownership and divider dragging / 稳定 pane 尺寸调整的 host 归属与分隔条拖动 (#96)&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.27-beta.2&lt;/li&gt;
+    &lt;li&gt;release: prepare v0.1.27-beta.2&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.27-beta.1&lt;/li&gt;
+    &lt;li&gt;release: prepare v0.1.27-beta.1&lt;/li&gt;
+    &lt;li&gt;chore: add scripts/build-ghosttykit.sh / 补齐 GhosttyKit 本地构建脚本&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.26&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.27-beta.2&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;fix(pane): avoid white flash when closing a split (#99)&lt;/li&gt;
+    &lt;li&gt;fix: improve Web Remote mobile scrolling and connection recovery (#97)&lt;/li&gt;
+    &lt;li&gt;release: prepare v0.1.27-beta.2&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.27-beta.1&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.27-beta.1&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;feat: 网页远程终端控制 / Browser-based remote terminal control (#92)&lt;/li&gt;
+    &lt;li&gt;release: prepare v0.1.27-beta.1&lt;/li&gt;
+    &lt;li&gt;chore: add scripts/build-ghosttykit.sh / 补齐 GhosttyKit 本地构建脚本&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.26&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat: auto-release idle terminals / 自动释放空闲终端 (#90)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增可选设置:终端在 shell 提示符上空闲超过配置时长后自动释放 surface(PTY、shell 进程、每 pane 约 4MB Metal 队列与 IOSurface)。释放条件全部 fail-closed:OSC 133 确认停在提示符、前台是裸 shell、无子进程、无未回车输入、无键盘焦点;释放前 scrollback 落盘,唤醒时原目录重建并恢复历史;一次性启动输入不会重跑 agent 恢复命令。为提示符检测捆绑 ghostty terminfo 与 shell-integration 资源;与 #89 focus gate 的冲突按「gate + 空闲记录」组合解决,推送的 focus 值保持原语义。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: integrate Grok Build as a first-class agent / Grok Build 作为内置 Agent 接入 (#91)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;接入 Grok Build 为内置 Agent:专属 hooks、双 fire 抑制、会话恢复、Settings/侧边栏状态与吉祥物资源、中英文本地化与单测。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: integrate OMP as a first-class agent with needsReply status / OMP 作为内置 Agent 接入,新增 needsReply 状态 (#87)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;OMP 作为第五个内置 Agent 接入(对齐 Devin/OpenCode 模式):hook 安装器写入便携 TS 扩展桥接 OMP 生命周期事件,吉祥物动画、设置卡片、会话恢复、中文本地化;新增 needsReply 状态(ask 工具等待用户输入时显示「等待回复」),thinking/tool 标签拆分为「思考中…/运行中…」;修复 OMP 16.5.2 hasUI 误报导致 hook 事件被吞、嵌套子代理提前清状态等问题。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;feat(open): accept folder/file/glint:// path args / 接收 文件夹/文件/glint:// 路径参数 (#76)&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;refactor: dedupe pane-visibility check into WorkspaceStore / 收敛 pane 可见性判断&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;将 PaneView 中与 WorkspaceStore.isPaneVisible 逐字重复的 pane 可见性判断收敛为共享实现(纯静态核心 + 实例包装),并补充可见性语义的单元测试,防止两处逻辑日后漂移。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;perf: reduce terminal refresh churn / 降低终端刷新开销 (#89)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;降低终端刷新开销:高频变化的 pane 活动状态从 WorkspaceStore 拆到独立的 PaneActivityStore,agent 状态变化不再触发整棵视图树重估;新增 SurfaceFocusUpdateGate 去重跨 Ghostty C 边界的重复 focus 调用;GhosttyManager 跳过与当前值相同的 layer 写入;补注释标明故意不读的 activity 订阅锚点;含回归测试。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;style: realign status switch columns, mark manual xcstrings entries / 对齐状态 switch 列,补 xcstrings manual 标记&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修正 #87 引入的状态 switch 列对齐偏差,statusRank 块整体加宽对齐;为三个新增 xcstrings 条目补 extractionState=manual 标记。无行为变化。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;perf: event-driven refresh + coalesced git status / 事件驱动刷新 + git status 合并去重 (#83)&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: prevent stale terminal surface repins on workspace switch / 阻止 workspace 切换时旧终端 surface 重新挂载 (#93)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;延迟 re-pin 执行时重新确认该 pane 仍在当前 workspace 当前 tab 中可见,防止切换后被复用的容器被旧树的 stale 求值重新挂上旧 surface,导致终端内容串台。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: unbreak idle release for empty prompts, cover remaining input paths / 修复空提示符永不释放与遗漏的输入路径&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;复审修复:上一轮 fail-closed 改动把 selectCursorLine 失败一律当「未知」,但该调用对「输入段裁剪后为空」(即空提示符,最主要的释放场景)同样返回 false,导致功能永远不触发;改用网格导出的光标标志(模式可见且在视口内)消歧——空提示符可释放,滚出视口/隐藏光标仍保护。补上绕过输入跟踪的路径:拖拽/⌘V 响应链/菜单粘贴的文件路径注入、图片粘贴、控制 socket 按键注入。confirm-close-surface=&amp;quot;always&amp;quot; 改判为不可靠(fork 中恒报 needsConfirmQuit,开关本来就静默失效);会改选区状态的探测移到 canReliablyDetectIdlePrompt 与 needsConfirmQuit 守卫之后,不可释放的 pane 不再每轮白跑。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: close idle-release safety gaps from #90 review / 修复 #90 评审发现的空闲释放安全漏洞&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 #90 评审发现的问题:钉住 term=xterm-256color(捆绑 terminfo 曾把所有新 shell 切成 xterm-ghostty,导致 ssh 到无该 terminfo 的主机后 TUI/提示符损坏,shell integration 与 TERM 无关,提示符检测不受影响);未提交输入检测改为 fail-closed(逐 pane 跟踪按键/IME/粘贴/控制注入,自上次 OSC 133 命令结束后有过输入即视为有未提交内容;光标滚出视口时按未知处理而非「无输入」);可见 pane 保护(选中 workspace 里挂在窗口上的 pane 不再因键盘焦点在侧栏而被释放,app 激活时唤醒全部可见 pane);释放路径加固(最终 flush 前强制标脏 scrollback,超时守卫先于会改选区状态的昂贵探测)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: back off Git refresh during filesystem storms / 降低文件系统风暴期间的 Git 刷新频率 (#88)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;文件系统风暴期间降低 Git 刷新频率:首次刷新与普通尾随刷新保持不变,同一 workspace 持续 FSEvents 风暴时尾随刷新从 1.5 秒退避到 6 秒;刷新执行或取消时清理风暴计数,避免旧状态影响后续;新增风暴回归测试。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: Review correctness and performance regressions / 修复 Review 正确性与性能问题 (#84)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 Review 正确性与性能问题:远程 Review 不再读本地文件时间、首开去重重载、已删除树定位最近现存父目录;透明度/模糊滑块拖动结束一次性提交、释放被替换的 Ghostty 配置、应用焦点同步 Ghostty;保留事件驱动刷新并排除归档/非活跃 workspace,git 子进程可取消,worktree 分支校验防抖。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;fix(codex): stabilize quota windows / 稳定 Codex 额度窗口 (#81)&lt;/li&gt;
+    &lt;li&gt;fix(agent): stop flagging Codex auto-review as needs-permission / Codex 自动审批不再误标为待审批 (#79)&lt;/li&gt;
+    &lt;li&gt;fix(open): unarchive deduped workspace path opens&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.26-beta.5&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.26-beta.5&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补充 0.1.26-beta.5 更新内容:修复 workspace/标签页切换后窗格被旧终端 surface 重新占用的问题。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.26-beta.4&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.26-beta.4&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补充 0.1.26-beta.4 更新内容:Grok Build 内置 Agent、可选的空闲终端自动释放、刷新开销与 Git 风暴退避性能优化。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.26-beta.3&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.26-beta.3&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补充 0.1.26-beta.3 更新内容:OMP 内置 Agent、「待回复」状态、思考中/运行中标签拆分、滑块一次性提交与 Review 修复、后台开销降低。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;docs: correct NeedsReply comment — fired by OMP&amp;#x27;s ask tool mid-turn, not turn end&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修正 NeedsReply 注释——它由 OMP 的 ask 工具在 turn 中途阻塞等待输入时触发,并非 turn 结束(正常结束仍是 Stop);补充回答后经 PostToolUse 回到 busy 的清除路径。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.26-beta.2&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.26-beta.2&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 Git 刷新丢失、Agent 关闭确认、侧边栏关注排序、SSH 路径识别和标签页新建入口，并补充 0.1.26-beta.2 更新内容。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.26-beta.1&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.25&lt;/li&gt;
+    &lt;li&gt;Attention &amp;amp; sidebar: ⌘⇧A jump-to-attention, sidebar sort + drag / 关注与侧边栏:⌘⇧A 跳转、排序与拖拽 (#82)&lt;/li&gt;
+    &lt;li&gt;Path actions: tab context menu, ⌘⇧C Copy Path, review-file right-click / 路径操作:标签右键菜单、⌘⇧C 拷贝路径、审阅右键 (#77)&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release-notes: 0.1.26-beta.1&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;0.1.26-beta.1 更新内容:外部打开文件夹/文件/glint:// 链接,重复命中已归档工作区会自动恢复。&lt;/span&gt;&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.26-beta.5&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;refactor: dedupe pane-visibility check into WorkspaceStore / 收敛 pane 可见性判断&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;将 PaneView 中与 WorkspaceStore.isPaneVisible 逐字重复的 pane 可见性判断收敛为共享实现(纯静态核心 + 实例包装),并补充可见性语义的单元测试,防止两处逻辑日后漂移。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: prevent stale terminal surface repins on workspace switch / 阻止 workspace 切换时旧终端 surface 重新挂载 (#93)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;延迟 re-pin 执行时重新确认该 pane 仍在当前 workspace 当前 tab 中可见,防止切换后被复用的容器被旧树的 stale 求值重新挂上旧 surface,导致终端内容串台。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.26-beta.5&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补充 0.1.26-beta.5 更新内容:修复 workspace/标签页切换后窗格被旧终端 surface 重新占用的问题。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.26-beta.4&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.26-beta.4&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat: auto-release idle terminals / 自动释放空闲终端 (#90)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;新增可选设置:终端在 shell 提示符上空闲超过配置时长后自动释放 surface(PTY、shell 进程、每 pane 约 4MB Metal 队列与 IOSurface)。释放条件全部 fail-closed:OSC 133 确认停在提示符、前台是裸 shell、无子进程、无未回车输入、无键盘焦点;释放前 scrollback 落盘,唤醒时原目录重建并恢复历史;一次性启动输入不会重跑 agent 恢复命令。为提示符检测捆绑 ghostty terminfo 与 shell-integration 资源;与 #89 focus gate 的冲突按「gate + 空闲记录」组合解决,推送的 focus 值保持原语义。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: integrate Grok Build as a first-class agent / Grok Build 作为内置 Agent 接入 (#91)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;接入 Grok Build 为内置 Agent:专属 hooks、双 fire 抑制、会话恢复、Settings/侧边栏状态与吉祥物资源、中英文本地化与单测。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;perf: reduce terminal refresh churn / 降低终端刷新开销 (#89)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;降低终端刷新开销:高频变化的 pane 活动状态从 WorkspaceStore 拆到独立的 PaneActivityStore,agent 状态变化不再触发整棵视图树重估;新增 SurfaceFocusUpdateGate 去重跨 Ghostty C 边界的重复 focus 调用;GhosttyManager 跳过与当前值相同的 layer 写入;补注释标明故意不读的 activity 订阅锚点;含回归测试。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: unbreak idle release for empty prompts, cover remaining input paths / 修复空提示符永不释放与遗漏的输入路径&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;复审修复:上一轮 fail-closed 改动把 selectCursorLine 失败一律当「未知」,但该调用对「输入段裁剪后为空」(即空提示符,最主要的释放场景)同样返回 false,导致功能永远不触发;改用网格导出的光标标志(模式可见且在视口内)消歧——空提示符可释放,滚出视口/隐藏光标仍保护。补上绕过输入跟踪的路径:拖拽/⌘V 响应链/菜单粘贴的文件路径注入、图片粘贴、控制 socket 按键注入。confirm-close-surface=&amp;quot;always&amp;quot; 改判为不可靠(fork 中恒报 needsConfirmQuit,开关本来就静默失效);会改选区状态的探测移到 canReliablyDetectIdlePrompt 与 needsConfirmQuit 守卫之后,不可释放的 pane 不再每轮白跑。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: close idle-release safety gaps from #90 review / 修复 #90 评审发现的空闲释放安全漏洞&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 #90 评审发现的问题:钉住 term=xterm-256color(捆绑 terminfo 曾把所有新 shell 切成 xterm-ghostty,导致 ssh 到无该 terminfo 的主机后 TUI/提示符损坏,shell integration 与 TERM 无关,提示符检测不受影响);未提交输入检测改为 fail-closed(逐 pane 跟踪按键/IME/粘贴/控制注入,自上次 OSC 133 命令结束后有过输入即视为有未提交内容;光标滚出视口时按未知处理而非「无输入」);可见 pane 保护(选中 workspace 里挂在窗口上的 pane 不再因键盘焦点在侧栏而被释放,app 激活时唤醒全部可见 pane);释放路径加固(最终 flush 前强制标脏 scrollback,超时守卫先于会改选区状态的昂贵探测)。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: back off Git refresh during filesystem storms / 降低文件系统风暴期间的 Git 刷新频率 (#88)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;文件系统风暴期间降低 Git 刷新频率:首次刷新与普通尾随刷新保持不变,同一 workspace 持续 FSEvents 风暴时尾随刷新从 1.5 秒退避到 6 秒;刷新执行或取消时清理风暴计数,避免旧状态影响后续;新增风暴回归测试。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.26-beta.4&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补充 0.1.26-beta.4 更新内容:Grok Build 内置 Agent、可选的空闲终端自动释放、刷新开销与 Git 风暴退避性能优化。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.26-beta.3&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.26-beta.3&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat: integrate OMP as a first-class agent with needsReply status / OMP 作为内置 Agent 接入,新增 needsReply 状态 (#87)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;OMP 作为第五个内置 Agent 接入(对齐 Devin/OpenCode 模式):hook 安装器写入便携 TS 扩展桥接 OMP 生命周期事件,吉祥物动画、设置卡片、会话恢复、中文本地化;新增 needsReply 状态(ask 工具等待用户输入时显示「等待回复」),thinking/tool 标签拆分为「思考中…/运行中…」;修复 OMP 16.5.2 hasUI 误报导致 hook 事件被吞、嵌套子代理提前清状态等问题。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;style: realign status switch columns, mark manual xcstrings entries / 对齐状态 switch 列,补 xcstrings manual 标记&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修正 #87 引入的状态 switch 列对齐偏差,statusRank 块整体加宽对齐;为三个新增 xcstrings 条目补 extractionState=manual 标记。无行为变化。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix: Review correctness and performance regressions / 修复 Review 正确性与性能问题 (#84)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 Review 正确性与性能问题:远程 Review 不再读本地文件时间、首开去重重载、已删除树定位最近现存父目录;透明度/模糊滑块拖动结束一次性提交、释放被替换的 Ghostty 配置、应用焦点同步 Ghostty;保留事件驱动刷新并排除归档/非活跃 workspace,git 子进程可取消,worktree 分支校验防抖。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.26-beta.3&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补充 0.1.26-beta.3 更新内容:OMP 内置 Agent、「待回复」状态、思考中/运行中标签拆分、滑块一次性提交与 Review 修复、后台开销降低。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;docs: correct NeedsReply comment — fired by OMP&amp;#x27;s ask tool mid-turn, not turn end&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修正 NeedsReply 注释——它由 OMP 的 ask 工具在 turn 中途阻塞等待输入时触发,并非 turn 结束(正常结束仍是 Stop);补充回答后经 PostToolUse 回到 busy 的清除路径。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.26-beta.2&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;</description>
       <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.28-beta.3/Glint-0.1.28-beta.3.dmg" length="21073226" type="application/octet-stream" sparkle:edSignature="sV6daDvlrlXBdINwl6kBEBierSmx0Mye8QVOdd7l8aRsLz5k7ZEgo7IARIXF6WuFqtvfT9dlupx5HWq+JRt6Cw==" />
     </item>
     <item>
