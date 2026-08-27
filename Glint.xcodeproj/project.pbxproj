@@ -19,6 +19,7 @@
 		175E069EE844FB32C6EE51BB /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EDE0D7C434B8E9C76C4A297 /* Persistence.swift */; };
 		180444BD20493AE4822BD372 /* GhosttyTickSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D751E30DFF2EFA6F705A374 /* GhosttyTickSchedulerTests.swift */; };
 		21C03B3AE912F4D30FA6F92C /* PaneAgentState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41DDB9C7B5A277B7924270A3 /* PaneAgentState.swift */; };
+		2218BACA355875F975446783 /* GhosttySurfaceAccessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454D414FF362C09886EA963F /* GhosttySurfaceAccessibility.swift */; };
 		262CB25BEB2B28B12C162F66 /* ghostty in Resources */ = {isa = PBXBuildFile; fileRef = 1CD90B7C77381E05E8A2BA8C /* ghostty */; };
 		2D9012046800A06555DEA381 /* GitRefreshCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65BE76E8E627A5347D565968 /* GitRefreshCoordinatorTests.swift */; };
 		2DD19A3FDAE094EF32B0B9F0 /* zsh-autosuggestions.zsh in Resources */ = {isa = PBXBuildFile; fileRef = D03AFC613028C5BB0D99238D /* zsh-autosuggestions.zsh */; };
@@ -59,6 +60,7 @@
 		942ED7C1C1A2E823BA52F67A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3023490E670A10EC38870B12 /* Assets.xcassets */; };
 		97FE40619FD0C44784E91017 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = C8CE97CEC40ECB2954522DD7 /* InfoPlist.xcstrings */; };
 		9A5EC6D5F8F65EE762FCD917 /* addon-fit.mjs in Resources */ = {isa = PBXBuildFile; fileRef = 5DB06D8C68CA7B9C7E1E83E7 /* addon-fit.mjs */; };
+		9C8BC416E070194670E97100 /* AccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01DD41E0F48A7A20C41F3AE6 /* AccessibilityTests.swift */; };
 		9F605AB2DC185A94ED28E6D4 /* AgentChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3EB9A1E80F3CC4BCA468774 /* AgentChoice.swift */; };
 		A019A2AD685F1407D7E2A7E1 /* AgentHookRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0082D535969C315B8D75D7 /* AgentHookRoutingTests.swift */; };
 		A91EFEF0FEA392A0745724DE /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 89B8883C4456681F07B6D662 /* AppIcon.icon */; };
@@ -116,6 +118,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		01DD41E0F48A7A20C41F3AE6 /* AccessibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityTests.swift; sourceTree = "<group>"; };
 		050E267AE14712D4D6633B4F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		05F2CA2243872C8111048EF2 /* AgentBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBridge.swift; sourceTree = "<group>"; };
 		07C2CEDE2C717743C29E6026 /* web-remote.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "web-remote.js"; sourceTree = "<group>"; };
@@ -150,6 +153,7 @@
 		407B3A9D15F4B9E613DA1CF8 /* ReleaseNotes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotes.swift; sourceTree = "<group>"; };
 		41DDB9C7B5A277B7924270A3 /* PaneAgentState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneAgentState.swift; sourceTree = "<group>"; };
 		4408F9761E584DE2AB6630E2 /* UpdaterController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterController.swift; sourceTree = "<group>"; };
+		454D414FF362C09886EA963F /* GhosttySurfaceAccessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttySurfaceAccessibility.swift; sourceTree = "<group>"; };
 		45C96BF92C4618FF97D68919 /* WebRemoteServerIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRemoteServerIntegrationTests.swift; sourceTree = "<group>"; };
 		49C5AC93BE947131B5611EF8 /* xterm.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = xterm.css; sourceTree = "<group>"; };
 		49C888E59D1091BFC22A9EA4 /* GitRepositoryWatcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRepositoryWatcherTests.swift; sourceTree = "<group>"; };
@@ -271,6 +275,7 @@
 		5D84BADE56807E092D26B87B /* Pane */ = {
 			isa = PBXGroup;
 			children = (
+				454D414FF362C09886EA963F /* GhosttySurfaceAccessibility.swift */,
 				E298AD81B1615CBBFD69F48A /* GhosttySurfaceView.swift */,
 				98BBD4C70C8DC534304294C9 /* InlineSuggestionInstaller.swift */,
 				16137B405E48DBE262A15B6D /* PaneSurfaceRepresentable.swift */,
@@ -292,6 +297,7 @@
 		5F9010EBEE9DCDE13D866A74 /* GlintTests */ = {
 			isa = PBXGroup;
 			children = (
+				01DD41E0F48A7A20C41F3AE6 /* AccessibilityTests.swift */,
 				D36068DE0F0DDDECA779C743 /* AgentElapsedTimerTests.swift */,
 				FF0082D535969C315B8D75D7 /* AgentHookRoutingTests.swift */,
 				4EEF00CBEF45A9D60423A207 /* AgentKindResolutionTests.swift */,
@@ -590,6 +596,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9C8BC416E070194670E97100 /* AccessibilityTests.swift in Sources */,
 				D0C97B91E9D08E8943549FCD /* AgentElapsedTimerTests.swift in Sources */,
 				A019A2AD685F1407D7E2A7E1 /* AgentHookRoutingTests.swift in Sources */,
 				81532B36FEC3039B8EAD9CB1 /* AgentKindResolutionTests.swift in Sources */,
@@ -637,6 +644,7 @@
 				EF937781512647E835836F83 /* ControlBridge.swift in Sources */,
 				C11ED5034D6EF2BA539846AD /* FontCatalog.swift in Sources */,
 				3CB9F41E3B1CB4A8790D9159 /* GhosttyManager.swift in Sources */,
+				2218BACA355875F975446783 /* GhosttySurfaceAccessibility.swift in Sources */,
 				1115F230E14FBE3C1FC754A2 /* GhosttySurfaceView.swift in Sources */,
 				164C6F51683CE7942393E816 /* GitDiff.swift in Sources */,
 				6290F26DFE2D0D5E1FEB9FA9 /* GitRefreshCoordinator.swift in Sources */,
