@@ -52,6 +52,17 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.28-beta.4",
+            en: [
+                "Panes no longer get stranded when the layout changes. Two problems that came back in beta.2 and beta.3: after switching workspaces, a pane could keep showing the previous workspace's terminal until you relaunched Glint, and after closing or splitting panes, one side could stop resizing when you dragged the divider. Terminals are now handed between containers explicitly instead of racing for them.",
+                "VoiceOver and other accessibility tools now read the visible screen instead of the entire scrollback. Reading stays fast however much history a terminal has piled up, and that history — old tokens and secrets included — is no longer handed to any tool that asks for it. To read something that has scrolled off, scroll it back into view."
+            ],
+            zh: [
+                "布局变化不再让窗格「掉线」。beta.2 和 beta.3 上复发的两个问题：切换工作区后，窗格可能一直显示上一个工作区的终端，直到重启 Glint；关闭或拆分窗格后，拖动分割线可能有一侧不再跟着变化。终端现在在容器之间显式交接，不再靠抢。",
+                "VoiceOver 等辅助工具现在读取的是屏幕可视区，而不是整个滚动历史。无论终端积累了多少历史，朗读都保持流畅；这些历史内容（包括滚上去的旧 token 和密钥）也不再交给任何前来索取的辅助工具。想读已经滚出屏幕的内容，把它滚回可视区即可。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.28-beta.3",
             en: [
                 "Dictation and voice input now work in a terminal. Glint exposes each pane as a standard text area, so hotkey dictation — the system's own, Qianwen, and friends — types straight into the terminal instead of falling back to its \"no text field here\" popup. Dictated text goes through the same input path as the keyboard, and anything a shell would execute on the spot (newlines, control characters) is refused rather than run.",
