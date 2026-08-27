@@ -187,7 +187,14 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
             // recording still describes this container's tenure. All state
             // checks happen on the main queue, where the recording may since
             // have moved on.
-            guard let surface = expectedSurface else { return }
+            // Nothing armed means nothing to re-drive, and nothing can arm
+            // it later either: arming requires a decline, a decline requires a
+            // live vetoing host, and such a host would make
+            // `recoverPendingClaim` bail on its `paneHostView == nil` guard.
+            // So the early-out costs no coverage and spares the main queue a
+            // block per container teardown — one per pane on every reshape.
+            guard let surface = expectedSurface,
+                  surface.pendingRecoveryHost != nil else { return }
             let generation = hostGeneration
             DispatchQueue.main.async {
                 PaneSurfaceRepresentable.recoverPendingClaim(
@@ -417,6 +424,15 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
 
     /// Arms the event-driven recovery for a declined claim, bumping the epoch
     /// so any backstop chain queued for an earlier pending claim dies.
+    ///
+    /// One slot per surface, deliberately: a later decline overwrites an
+    /// earlier candidate rather than queueing beside it. A surface has exactly
+    /// one live representable, so only its most recent declined container can
+    /// still be the pane's real host — and a candidate that has since been
+    /// recycled onto another pane would, if re-driven, drag this surface into
+    /// someone else's container. (The visibility gate is the second line of
+    /// defence there: a re-drive for a pane that is no longer on screen is
+    /// refused outright.)
     private static func armPendingRecovery(_ surface: GhosttySurfaceView,
                                            host: NoDragContainerView,
                                            visible: @escaping () -> Bool) {
@@ -438,8 +454,11 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
 
     /// How many extra runloop turns the backstop may spend re-sampling the
     /// recorded host's fate. Small on purpose: correctness comes from the
-    /// invalidation event, not from polling.
-    private static let recoveryRetryBudget = 8
+    /// invalidation event, not from polling. Internal rather than private so
+    /// the regression tests can drain *past* it by construction instead of
+    /// hard-coding a number that silently stops clearing the budget if this
+    /// one ever grows.
+    static let recoveryRetryBudget = 8
 
     /// Deallocation follow-up for a host that died without an ownership
     /// hand-off — the last eventless path. The weak paneHostView nils
@@ -471,6 +490,13 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     static func invalidateStaleRecording(of surface: GhosttySurfaceView,
                                          hostedBy container: NSView) {
         guard surface.paneHostView === container else { return }
+        // Only the identity is dropped; `paneHostGeneration` deliberately
+        // keeps naming this container's tenure. It is the token
+        // `recoverPendingClaim` matches on after the container deallocates —
+        // by then the weak reference is nil and the generation is the only
+        // remaining proof of whose recording this was. Nothing else reads it
+        // while the host is nil (`shouldClaim` and
+        // `shouldDeferUntilAfterCommit` both short-circuit on a missing host).
         surface.paneHostView = nil
         // Never pin into a candidate that has not mounted: the surface would
         // ride a window-less container whose reassert bails on
@@ -489,6 +515,11 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
         // happened to use this container. With the workspace `.id()` removed
         // above, SwiftUI re-uses the same hosting NSView across switches, so
         // we have to actively clean up rather than rely on full teardown.
+        // `subviews` is a value copy, so the re-entrant attach an
+        // invalidation can trigger below is free to reshape the view tree
+        // mid-loop. That recursion terminates: the nested `performAttach`
+        // disarms the evicted surface's pending recovery before it claims, so
+        // a second invalidation of the same surface finds nothing to re-drive.
         for child in container.subviews where child !== surface {
             child.removeFromSuperview()
             if let evicted = child as? GhosttySurfaceView {

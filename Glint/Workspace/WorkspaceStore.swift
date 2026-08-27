@@ -362,7 +362,14 @@ struct Workspace: Identifiable, Codable {
 
         if let tabs = try? c.decode([WorkspaceTab].self, forKey: .tabs), !tabs.isEmpty {
             self.tabs = tabs
-            self.selectedTabID = (try? c.decode(TabID.self, forKey: .selectedTabID)) ?? tabs[0].id
+            // A selection naming no existing tab leaves `selectedTab` nil, and
+            // everything downstream degrades from there: `currentRoot` falls
+            // back to a synthetic leaf while `isPaneVisible` answers false for
+            // every pane — which `SurfaceAttachGate` reads as "this tree is on
+            // its way out", so the pane it still renders never gets a surface
+            // and stays blank. Snap a dangling selection back to the first tab.
+            let decodedTabID = (try? c.decode(TabID.self, forKey: .selectedTabID)) ?? tabs[0].id
+            self.selectedTabID = tabs.contains { $0.id == decodedTabID } ? decodedTabID : tabs[0].id
             let maxSeq = tabs.map(\.id.value).max() ?? 0
             self.nextTabSeq = (try? c.decode(UInt32.self, forKey: .nextTabSeq))
                 .map { Swift.max($0, maxSeq + 1) } ?? (maxSeq + 1)

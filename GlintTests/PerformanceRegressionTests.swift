@@ -349,6 +349,14 @@ final class PerformanceRegressionTests: XCTestCase {
         }
     }
 
+    /// Enough main-queue turns to outrun the backstop budget by construction.
+    /// Derived rather than hard-coded: a literal would quietly stop clearing
+    /// the budget — and stop testing what these cases claim to test — the day
+    /// `recoveryRetryBudget` grows.
+    private var pastBackstopBudget: Int {
+        PaneSurfaceRepresentable.recoveryRetryBudget + 4
+    }
+
     /// Pumps the main queue for `turns` DispatchQueue.main.async rounds. The
     /// awaited fulfillment guarantees every earlier main-queue block has run
     /// (FIFO), so N turns = N async generations.
@@ -445,9 +453,9 @@ final class PerformanceRegressionTests: XCTestCase {
         stage.attach(surfaceA, to: stage.newer, visible: true)
         stage.attach(surfaceA, to: stage.older, visible: true) // declined
 
-        // Drain well past the (private, 8-turn) backstop budget; the host
-        // keeps vetoing the whole time, as a rightful owner would.
-        await drainMainQueue(turns: 12)
+        // Drain well past the backstop budget; the host keeps vetoing the
+        // whole time, as a rightful owner would.
+        await drainMainQueue(turns: pastBackstopBudget)
 
         XCTAssertTrue(surfaceA.superview === stage.newer,
                       "a rightful owner must outlive the backstop budget")
@@ -494,7 +502,7 @@ final class PerformanceRegressionTests: XCTestCase {
 
         attach(surfaceA, to: newer!, visible: true)
         attach(surfaceA, to: older, visible: true) // declined, pending armed
-        await drainMainQueue(turns: 12)            // backstop budget exhausted
+        await drainMainQueue(turns: pastBackstopBudget) // backstop exhausted
 
         XCTAssertTrue(surfaceA.pendingRecoveryHost === older,
                       "precondition: the pending recovery is still armed")
@@ -574,7 +582,7 @@ final class PerformanceRegressionTests: XCTestCase {
         // The new host is momentarily detached mid-commit — exactly when a
         // stale chain, if it still ran, would re-claim `older`.
         newest.removeFromSuperview()
-        await drainMainQueue(turns: 12)
+        await drainMainQueue(turns: pastBackstopBudget)
 
         XCTAssertTrue(surfaceA.superview === newest,
                       "a stale backstop chain must not re-claim the old candidate")
@@ -604,7 +612,7 @@ final class PerformanceRegressionTests: XCTestCase {
         // …and the commit lands: the newer host survives and re-attaches.
         stage.window.contentView?.addSubview(stage.newer)
 
-        await drainMainQueue(turns: 12)
+        await drainMainQueue(turns: pastBackstopBudget)
 
         XCTAssertTrue(surfaceA.superview === stage.newer,
                       "the surface must never be stolen from a pre-commit host")
@@ -634,9 +642,10 @@ final class PerformanceRegressionTests: XCTestCase {
         // re-attach, so the pass observes the host attached again.
         stage.newer.removeFromSuperview()
         DispatchQueue.main.async { [weak stage] in
-            stage?.window.contentView?.addSubview(stage?.newer ?? NSView())
+            guard let stage else { return }
+            stage.window.contentView?.addSubview(stage.newer)
         }
-        await drainMainQueue(turns: 14)
+        await drainMainQueue(turns: pastBackstopBudget + 2)
 
         XCTAssertTrue(surfaceA.superview === stage.newer,
                       "a deferral-skipping re-entry steals from a pre-commit host")

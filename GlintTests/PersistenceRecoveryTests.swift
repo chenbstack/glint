@@ -72,4 +72,40 @@ final class PersistenceRecoveryTests: XCTestCase {
         let blob = try JSONSerialization.data(withJSONObject: ["not": "state"])
         XCTAssertNil(Persistence.stripBadWorkspaces(from: blob))
     }
+
+    /// A `selectedTabID` that names no existing tab used to survive decoding
+    /// intact, and every derived value then degraded quietly: `selectedTab`
+    /// nil, `currentRoot` a synthetic leaf, and `paneIsVisible` false for
+    /// every pane — which `SurfaceAttachGate` reads as "this tree is on its
+    /// way out", so the pane the tree still renders never gets a surface and
+    /// stays blank with no self-healing pass. Decode must snap the dangling
+    /// selection back to the first tab.
+    @MainActor
+    func testDanglingSelectedTabIDSnapsBackToFirstTab() throws {
+        let workspace = Workspace.fresh(name: "A", accentHex: "5E5CE6", symbol: "A")
+        let data = try stateData(workspaces: [workspace])
+
+        var root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var workspaces = try XCTUnwrap(root["workspaces"] as? [Any])
+        var encoded = try XCTUnwrap(workspaces[0] as? [String: Any])
+        encoded["selectedTabID"] = ["value": 999]
+        workspaces[0] = encoded
+        root["workspaces"] = workspaces
+        let tampered = try JSONSerialization.data(withJSONObject: root)
+
+        let decoded = try JSONDecoder().decode(PersistedState.self, from: tampered)
+        let recovered = try XCTUnwrap(decoded.workspaces.first)
+        let tab = try XCTUnwrap(recovered.selectedTab,
+                                "a dangling selection must not leave the workspace tab-less")
+        XCTAssertEqual(recovered.selectedTabID, try XCTUnwrap(recovered.tabs.first).id)
+
+        // The consequence the fix exists for: the rendered pane is visible, so
+        // the attach gate lets its surface mount.
+        let pane = try XCTUnwrap(tab.root.leaves.first)
+        XCTAssertTrue(WorkspaceStore.paneIsVisible(
+            .init(workspace: recovered.id, pane: pane),
+            selectedWorkspaceID: recovered.id,
+            in: recovered
+        ))
+    }
 }
