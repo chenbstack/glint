@@ -176,6 +176,21 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
         /// Paired with the surface-side host claim for the post-commit recheck.
         weak var expectedSurface: GhosttySurfaceView?
 
+        /// The surface whose declined claim is waiting for this candidate to
+        /// enter a window. Weak in both directions: the surface already keeps
+        /// `pendingRecoveryHost` weak, and neither side should prolong a stale
+        /// SwiftUI tree. `viewDidMoveToWindow` turns the mount itself into the
+        /// recovery event that invalidation/backstop cannot provide while the
+        /// candidate is still window-less.
+        weak var pendingRecoverySurface: GhosttySurfaceView?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil, let surface = pendingRecoverySurface else { return }
+            PaneSurfaceRepresentable.recoverPendingClaim(
+                for: surface, afterCandidateMount: self)
+        }
+
         deinit {
             // A host dismantled without an ownership hand-off nils the
             // surface's weak paneHostView silently — no invalidation event
@@ -436,9 +451,15 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     private static func armPendingRecovery(_ surface: GhosttySurfaceView,
                                            host: NoDragContainerView,
                                            visible: @escaping () -> Bool) {
+        if let previous = surface.pendingRecoveryHost as? NoDragContainerView,
+           previous !== host,
+           previous.pendingRecoverySurface === surface {
+            previous.pendingRecoverySurface = nil
+        }
         surface.pendingRecoveryHost = host
         surface.pendingRecoveryVisibility = visible
         surface.pendingRecoveryEpoch += 1
+        host.pendingRecoverySurface = surface
     }
 
     /// Clears the pending recovery (successful claim, or a gate-blocked
@@ -447,6 +468,10 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     private static func disarmPendingRecovery(_ surface: GhosttySurfaceView) {
         guard surface.pendingRecoveryHost != nil ||
               surface.pendingRecoveryVisibility != nil else { return }
+        if let candidate = surface.pendingRecoveryHost as? NoDragContainerView,
+           candidate.pendingRecoverySurface === surface {
+            candidate.pendingRecoverySurface = nil
+        }
         surface.pendingRecoveryHost = nil
         surface.pendingRecoveryVisibility = nil
         surface.pendingRecoveryEpoch += 1
@@ -459,6 +484,21 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     /// hard-coding a number that silently stops clearing the budget if this
     /// one ever grows.
     static let recoveryRetryBudget = 8
+
+    /// Mount follow-up for a declined candidate that missed both recovery
+    /// paths while it was window-less. The candidate/surface cross-checks make
+    /// the event generation-safe: a container recycled onto another pane, or
+    /// a surface re-armed for a newer candidate, has no authority here. Re-enter
+    /// the FULL `.initial` pass so visibility, generation arbitration, and the
+    /// pre-commit defer all keep their existing semantics.
+    static func recoverPendingClaim(for surface: GhosttySurfaceView,
+                                    afterCandidateMount candidate: NoDragContainerView) {
+        guard candidate.window != nil,
+              candidate.pendingRecoverySurface === surface,
+              surface.pendingRecoveryHost === candidate,
+              let visible = surface.pendingRecoveryVisibility else { return }
+        performAttach(surface, to: candidate, isPaneVisible: visible, pass: .initial)
+    }
 
     /// Deallocation follow-up for a host that died without an ownership
     /// hand-off — the last eventless path. The weak paneHostView nils

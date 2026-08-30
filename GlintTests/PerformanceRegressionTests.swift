@@ -526,12 +526,15 @@ final class PerformanceRegressionTests: XCTestCase {
     /// nil by then, so `shouldClaim` passes); pinning early would strand the
     /// surface in a window-less container whose reassert bails on
     /// `containerIsAttached`.
-    func testInvalidationRedriveSkipsUnmountedCandidate() {
+    func testUnmountedCandidateRecoversWhenItEntersWindow() {
         let stage = PaneHostStage()
         let surfaceA = GhosttySurfaceView(frame: .zero)
         let surfaceB = GhosttySurfaceView(frame: .zero)
+        let outgoingSurface = GhosttySurfaceView(frame: .zero)
 
-        // The candidate `older` is mid-commit: not in the window yet.
+        // The candidate is a recycled container that still renders the
+        // outgoing workspace's surface, then leaves the window mid-commit.
+        stage.attach(outgoingSurface, to: stage.older, visible: true)
         stage.older.removeFromSuperview()
 
         stage.attach(surfaceA, to: stage.newer, visible: true)
@@ -549,13 +552,41 @@ final class PerformanceRegressionTests: XCTestCase {
         XCTAssertTrue(surfaceA.pendingRecoveryHost === stage.older,
                       "the pending claim stays armed for the candidate's own mount")
 
-        // The candidate's commit lands: its representable mounts and claims
-        // (host nil → shouldClaim passes).
+        // The candidate's commit lands. Entering the window must itself
+        // re-drive the armed claim; SwiftUI is not required to issue another
+        // updateNSView after mounting an already-created representable.
         stage.window.contentView?.addSubview(stage.older)
-        stage.attach(surfaceA, to: stage.older, visible: true)
 
         XCTAssertTrue(surfaceA.superview === stage.older)
         XCTAssertTrue(surfaceA.paneHostView === stage.older)
+        XCTAssertFalse(outgoingSurface.superview === stage.older,
+                       "the recycled container must not keep showing the outgoing workspace")
+    }
+
+    /// Mount is an event, not permission to bypass arbitration. If the live
+    /// recorded host still expects the surface, entering the window must
+    /// re-run `.initial`, lose the generation verdict, and stay pending.
+    func testMountedCandidateDoesNotStealFromLiveHost() async {
+        let stage = PaneHostStage()
+        let surface = GhosttySurfaceView(frame: .zero)
+
+        stage.attach(surface, to: stage.newer, visible: true)
+        stage.older.removeFromSuperview()
+        stage.attach(surface, to: stage.older, visible: true) // declined
+
+        stage.window.contentView?.addSubview(stage.older)
+        await drainMainQueue(turns: pastBackstopBudget)
+
+        XCTAssertTrue(surface.superview === stage.newer)
+        XCTAssertTrue(surface.paneHostView === stage.newer)
+        XCTAssertNil(stage.older.expectedSurface)
+        XCTAssertTrue(surface.pendingRecoveryHost === stage.older,
+                      "mount must keep waiting while the rightful host still vetoes")
+
+        // Leave no pending backstop state for later tests.
+        stage.attach(surface, to: stage.older, visible: false)
+        XCTAssertNil(surface.pendingRecoveryHost)
+        XCTAssertNil(stage.older.pendingRecoverySurface)
     }
 
     /// P1 from the #109 review: a backstop chain queued for an OLD pending
@@ -671,6 +702,7 @@ final class PerformanceRegressionTests: XCTestCase {
         XCTAssertTrue(surfaceA.superview === newest)
         XCTAssertNil(surfaceA.pendingRecoveryHost)
         XCTAssertNil(surfaceA.pendingRecoveryVisibility)
+        XCTAssertNil(stage.older.pendingRecoverySurface)
     }
 
     func testSplitLayoutExplicitlyAccountsForBothBranchesAndDivider() {
