@@ -336,6 +336,14 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
             }
         }
 
+        // A successful claim recycles this candidate for `surface`, so any
+        // different surface still waiting for the candidate has been
+        // superseded. Clear both sides (and bump its epoch) before the mount
+        // callback can revive that stale claim and evict the new owner.
+        if let displacedPendingSurface = container.pendingRecoverySurface,
+           displacedPendingSurface !== surface {
+            disarmPendingRecovery(displacedPendingSurface)
+        }
         disarmPendingRecovery(surface)
         surface.paneHostView = container
         surface.paneHostGeneration = container.hostGeneration

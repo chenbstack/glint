@@ -563,6 +563,38 @@ final class PerformanceRegressionTests: XCTestCase {
                        "the recycled container must not keep showing the outgoing workspace")
     }
 
+    /// A candidate armed for A can be recycled onto visible surface B before
+    /// it mounts. The successful claim must retire A's pending recovery so the
+    /// mount callback cannot revive A and evict B from its new container.
+    func testReusedCandidateDoesNotRecoverPreviousPendingSurfaceOnMount() {
+        let stage = PaneHostStage()
+        let surfaceA = GhosttySurfaceView(frame: .zero)
+        let surfaceB = GhosttySurfaceView(frame: .zero)
+        let replacement = GhosttySurfaceView(frame: .zero)
+
+        stage.older.removeFromSuperview()
+        stage.attach(surfaceA, to: stage.newer, visible: true)
+        stage.attach(surfaceA, to: stage.older, visible: true) // declined, pending armed
+
+        // A's owner is reclaimed while its candidate is still window-less.
+        stage.attach(replacement, to: stage.newer, visible: true)
+        XCTAssertNil(surfaceA.paneHostView)
+        XCTAssertTrue(surfaceA.pendingRecoveryHost === stage.older)
+
+        // SwiftUI reuses the detached candidate for B before mounting it.
+        stage.attach(surfaceB, to: stage.older, visible: true)
+        XCTAssertTrue(surfaceB.superview === stage.older)
+        XCTAssertTrue(stage.older.expectedSurface === surfaceB)
+
+        stage.window.contentView?.addSubview(stage.older)
+
+        XCTAssertTrue(surfaceB.superview === stage.older,
+                      "mount must not revive the previous pending surface")
+        XCTAssertTrue(surfaceB.paneHostView === stage.older)
+        XCTAssertTrue(stage.older.expectedSurface === surfaceB)
+        XCTAssertNil(surfaceA.pendingRecoveryHost)
+    }
+
     /// Mount is an event, not permission to bypass arbitration. If the live
     /// recorded host still expects the surface, entering the window must
     /// re-run `.initial`, lose the generation verdict, and stay pending.
