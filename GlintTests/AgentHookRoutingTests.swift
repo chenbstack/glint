@@ -2,6 +2,50 @@ import XCTest
 @testable import Glint
 
 final class AgentHookRoutingTests: XCTestCase {
+    func testSecondSameFlavorBridgeUsesIndependentSocketPath() throws {
+        let root = URL(fileURLWithPath: "/tmp/gb-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var first: AgentBridge.SocketLease? = AgentBridge.acquireSocketLease(
+            in: root,
+            processID: 101
+        )
+        let second = AgentBridge.acquireSocketLease(in: root, processID: 202)
+
+        XCTAssertNotEqual(first?.path, second.path,
+                          "a second Glint process must not unlink the first process' agent socket")
+        XCTAssertTrue(second.path.hasSuffix("-202.sock"))
+
+        let canonical = first?.path
+        first = nil
+        let replacement = AgentBridge.acquireSocketLease(in: root, processID: 303)
+        XCTAssertEqual(replacement.path, canonical,
+                       "the stable socket name should be reusable after its owner exits")
+    }
+
+    func testReachableLegacySocketIsNotClaimedDuringUpgrade() throws {
+        let root = URL(fileURLWithPath: "/tmp/gb-\(UUID().uuidString)", isDirectory: true)
+        let socket = root.appendingPathComponent("agent-debug.sock")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let listener = Process()
+        listener.executableURL = URL(fileURLWithPath: "/usr/bin/nc")
+        listener.arguments = ["-lkU", socket.path]
+        try listener.run()
+        defer { if listener.isRunning { listener.terminate() } }
+        let deadline = Date().addingTimeInterval(1)
+        while !FileManager.default.fileExists(atPath: socket.path), Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: socket.path))
+
+        let lease = AgentBridge.acquireSocketLease(in: root, processID: 404)
+        XCTAssertNotEqual(lease.path, socket.path)
+        XCTAssertTrue(lease.path.hasSuffix("-404.sock"))
+    }
+
     func testAttentionRankDoesNotLetThinkingHideCompletedSibling() {
         XCTAssertEqual(
             PaneAgentStatus.bestAttentionRank(in: [.thinking, .justCompleted]),
