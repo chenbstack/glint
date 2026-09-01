@@ -49,7 +49,7 @@ final class AgentBridge {
         let canonical = runDir.appendingPathComponent("\(stem).sock").path
         let fallback = runDir.appendingPathComponent("\(stem)-\(processID).sock").path
         let lockPath = runDir.appendingPathComponent("\(stem).lock").path
-        let fd = open(lockPath, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        let fd = open(lockPath, O_CREAT | O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR)
         guard fd >= 0 else { return SocketLease(path: fallback) }
         chmod(lockPath, 0o600)
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {

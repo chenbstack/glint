@@ -1,7 +1,59 @@
+import Darwin
 import XCTest
 @testable import Glint
 
 final class AgentHookRoutingTests: XCTestCase {
+    func testCanonicalLeaseIsReleasedWhileExecDescendantRemainsAlive() throws {
+        let root = URL(fileURLWithPath: "/tmp/gb-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var owner: AgentBridge.SocketLease? = AgentBridge.acquireSocketLease(
+            in: root,
+            processID: 101
+        )
+        let canonical = try XCTUnwrap(owner?.path)
+
+        let executable = strdup("/bin/sleep")!
+        let arg0 = strdup("sleep")!
+        let arg1 = strdup("5")!
+        let argv = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: 3)
+        argv.initialize(repeating: nil, count: 3)
+        argv[0] = arg0
+        argv[1] = arg1
+        defer {
+            free(executable)
+            free(arg0)
+            free(arg1)
+            argv.deallocate()
+        }
+
+        var child: pid_t = 0
+        let spawnRC = posix_spawn(
+            &child,
+            executable,
+            nil,
+            nil,
+            argv,
+            nil
+        )
+        XCTAssertEqual(spawnRC, 0)
+        XCTAssertGreaterThan(child, 0)
+        guard spawnRC == 0, child > 0 else { return }
+        defer {
+            kill(child, SIGTERM)
+            waitpid(child, nil, 0)
+        }
+
+        // posix_spawn returns after exec; the descendant remains alive in sleep.
+        XCTAssertEqual(kill(child, 0), 0, "the exec descendant should still be alive")
+
+        owner = nil
+        let replacement = AgentBridge.acquireSocketLease(in: root, processID: 202)
+        XCTAssertEqual(replacement.path, canonical,
+                       "an exec descendant must not keep the canonical lease alive")
+    }
+
     func testSecondSameFlavorBridgeUsesIndependentSocketPath() throws {
         let root = URL(fileURLWithPath: "/tmp/gb-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
