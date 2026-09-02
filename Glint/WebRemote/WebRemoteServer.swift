@@ -213,6 +213,10 @@ final class WebRemoteServer: @unchecked Sendable {
         pendingPane == pane && pendingGeneration == generation
     }
 
+    static func shouldReleaseTerminalSize(hasPendingSelection: Bool) -> Bool {
+        !hasPendingSelection
+    }
+
     private enum ListenerKind: Hashable {
         case http
         case webSocket
@@ -1167,11 +1171,16 @@ final class WebRemoteServer: @unchecked Sendable {
             .filter { $0.authenticated && $0.subscribedPane == pane && $0.terminalSize != nil }
             .max { $0.terminalSizeRevision < $1.terminalSizeRevision }?
             .terminalSize
+        let hasPendingSelection = clients.values.contains {
+            $0.authenticated && $0.pendingPane == pane
+        }
         DispatchQueue.main.async {
             guard let store = WorkspaceStore.current else { return }
+            // Snapshot preparation owns the browser grid until the pending
+            // selection succeeds or fails; releasing here would undo it mid-restore.
             if let size {
                 _ = store.webRemoteSetTerminalSize(pane: pane, size: size)
-            } else {
+            } else if Self.shouldReleaseTerminalSize(hasPendingSelection: hasPendingSelection) {
                 store.webRemoteReleaseTerminalSize(pane: pane)
             }
         }
