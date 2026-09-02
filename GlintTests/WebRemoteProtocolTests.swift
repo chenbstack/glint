@@ -322,17 +322,39 @@ final class WebRemoteProtocolTests: XCTestCase {
         let styleURL = try XCTUnwrap(
             Bundle.main.url(forResource: "web-remote", withExtension: "css")
         )
+        let inputURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "ime-input", withExtension: "mjs")
+        )
         let script = try String(contentsOf: scriptURL, encoding: .utf8)
         let style = try String(contentsOf: styleURL, encoding: .utf8)
+        let input = try String(contentsOf: inputURL, encoding: .utf8)
 
-        XCTAssertTrue(script.contains("\"touchstart\""))
-        XCTAssertTrue(script.contains("\"touchmove\""))
-        XCTAssertTrue(script.contains("terminal.scrollLines"))
-        XCTAssertTrue(script.contains("terminal.buffer.active.baseY > 0"))
-        XCTAssertTrue(script.contains("new WheelEvent(\"wheel\""))
-        XCTAssertTrue(script.contains(".xterm-screen"))
-        XCTAssertTrue(script.contains("passive: false"))
+        XCTAssertTrue(script.contains("installTwoFingerTerminalScrolling"))
+        XCTAssertTrue(input.contains("\"touchstart\""))
+        XCTAssertTrue(input.contains("\"touchmove\""))
+        XCTAssertTrue(input.contains("terminal.scrollLines"))
+        XCTAssertTrue(input.contains("terminal.buffer.active.baseY > 0"))
+        XCTAssertTrue(input.contains("terminal.modes?.mouseTrackingMode === \"none\""))
+        XCTAssertTrue(input.contains("new WheelEventLike(\"wheel\""))
+        XCTAssertTrue(input.contains(".xterm-screen"))
+        XCTAssertTrue(input.contains("passive: false"))
         XCTAssertTrue(style.contains("touch-action: none"))
+    }
+
+    func testBundledClientCanDisableTerminalAutoFocus() throws {
+        let scriptURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "web-remote", withExtension: "js")
+        )
+        let htmlURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "web-remote-index", withExtension: "html")
+        )
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let html = try String(contentsOf: htmlURL, encoding: .utf8)
+
+        XCTAssertTrue(html.contains("id=\"auto-focus-terminal\""))
+        XCTAssertTrue(script.contains("glint-auto-focus-terminal"))
+        XCTAssertTrue(script.contains("(hover: none) and (pointer: coarse)"))
+        XCTAssertTrue(script.contains("if (autoFocusTerminal) terminal.focus()"))
     }
 
     func testBundledClientRecoversStaleWebSocketConnections() throws {
