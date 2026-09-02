@@ -595,6 +595,48 @@ final class PerformanceRegressionTests: XCTestCase {
         XCTAssertNil(surfaceA.pendingRecoveryHost)
     }
 
+    /// In a 3/4-pane switch, two surfaces can both have their claim for the
+    /// same window-less candidate declined before either owner is reclaimed.
+    /// Arming B must retire A's candidate link; otherwise A's later
+    /// invalidation can evict B after B has mounted and claimed the container.
+    func testRejectedClaimDisarmsPreviousSurfacePendingOnSameCandidate() {
+        let stage = PaneHostStage()
+        let hostB = PaneSurfaceRepresentable.NoDragContainerView()
+        stage.window.contentView?.addSubview(hostB)
+        let surfaceA = GhosttySurfaceView(frame: .zero)
+        let surfaceB = GhosttySurfaceView(frame: .zero)
+        let replacementA = GhosttySurfaceView(frame: .zero)
+        let replacementB = GhosttySurfaceView(frame: .zero)
+
+        stage.older.removeFromSuperview()
+        stage.attach(surfaceA, to: stage.newer, visible: true)
+        stage.attach(surfaceB, to: hostB, visible: true)
+
+        stage.attach(surfaceA, to: stage.older, visible: true) // declined
+        stage.attach(surfaceB, to: stage.older, visible: true) // declined, replaces A
+
+        XCTAssertNil(surfaceA.pendingRecoveryHost,
+                     "a candidate can have only one pending surface")
+        XCTAssertTrue(surfaceB.pendingRecoveryHost === stage.older)
+        XCTAssertTrue(stage.older.pendingRecoverySurface === surfaceB)
+
+        // B's owner is reclaimed while the candidate is still window-less;
+        // mounting the candidate then lets B take it over.
+        stage.attach(replacementB, to: hostB, visible: true)
+        stage.window.contentView?.addSubview(stage.older)
+        XCTAssertTrue(surfaceB.superview === stage.older)
+
+        // A's old owner is reclaimed later. A's superseded pending claim must
+        // not reattach and drive B out of the candidate.
+        stage.attach(replacementA, to: stage.newer, visible: true)
+
+        XCTAssertTrue(surfaceB.superview === stage.older,
+                      "A's stale recovery must not evict B")
+        XCTAssertTrue(surfaceB.paneHostView === stage.older)
+        XCTAssertTrue(stage.older.expectedSurface === surfaceB)
+        XCTAssertFalse(surfaceA.superview === stage.older)
+    }
+
     /// Mount is an event, not permission to bypass arbitration. If the live
     /// recorded host still expects the surface, entering the window must
     /// re-run `.initial`, lose the generation verdict, and stay pending.

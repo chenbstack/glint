@@ -459,6 +459,10 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     private static func armPendingRecovery(_ surface: GhosttySurfaceView,
                                            host: NoDragContainerView,
                                            visible: @escaping () -> Bool) {
+        if let displacedSurface = host.pendingRecoverySurface,
+           displacedSurface !== surface {
+            disarmPendingRecovery(displacedSurface)
+        }
         if let previous = surface.pendingRecoveryHost as? NoDragContainerView,
            previous !== host,
            previous.pendingRecoverySurface === surface {
