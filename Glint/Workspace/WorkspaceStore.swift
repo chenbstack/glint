@@ -2912,15 +2912,27 @@ final class WorkspaceStore: ObservableObject {
         ]
     }
 
-    func webRemoteTerminalSnapshot(pane: String) -> WebRemoteTerminalSnapshotResult {
-        guard let key = Self.parsePaneKey(pane) else { return .failure("bad-request") }
-        guard paneExists(key) else { return .failure("unknown-pane") }
-        guard let view = surfaceViews[key], view.ensureLiveForWebRemoteControl() else {
-            return .failure("pane-not-ready")
+    func webRemoteTerminalSnapshot(
+        pane: String,
+        size: WebRemoteTerminalSize,
+        completion: @escaping (WebRemoteTerminalSnapshotResult) -> Void
+    ) {
+        guard let key = Self.parsePaneKey(pane) else {
+            completion(.failure("bad-request")); return
+        }
+        guard paneExists(key) else {
+            completion(.failure("unknown-pane")); return
+        }
+        guard let view = surfaceViews[key] else {
+            completion(.failure("pane-not-ready")); return
         }
         webRemoteControlledPanes.insert(key)
-        guard let snapshot = view.webRemoteSnapshot() else { return .failure("pane-not-ready") }
-        return .success(snapshot)
+        view.webRemoteSnapshot(size: size) { snapshot in
+            guard let snapshot else {
+                completion(.failure("pane-not-ready")); return
+            }
+            completion(.success(snapshot))
+        }
     }
 
     func webRemoteSetTerminalSize(pane: String, size: WebRemoteTerminalSize) -> String? {

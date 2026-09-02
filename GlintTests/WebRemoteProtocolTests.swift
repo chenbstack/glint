@@ -3,6 +3,48 @@ import XCTest
 @testable import Glint
 
 final class WebRemoteProtocolTests: XCTestCase {
+    @MainActor
+    func testWebRemoteWakeSnapshotsPendingHistoryAtBrowserSize() throws {
+        let paneKey = "\(UUID().uuidString):0"
+        let archiveID = ScrollbackArchive.fileID(forPaneKey: paneKey)
+        let support = try XCTUnwrap(SupportDir.url)
+        let archiveDir = support.appendingPathComponent("scrollback", isDirectory: true)
+        let archive = archiveDir.appendingPathComponent("\(archiveID).ansi")
+        try FileManager.default.createDirectory(at: archiveDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: archive) }
+
+        let sentinel = "WEB_REMOTE_OFFLINE_HISTORY_SENTINEL"
+        let history = String(repeating: "W", count: 180) + sentinel
+        let historyData = Data(history.utf8)
+        try historyData.write(to: archive, options: [.atomic])
+        XCTAssertEqual(ScrollbackArchive.read(id: archiveID), historyData)
+
+        let defaults = UserDefaults.standard
+        let key = "glint.restoreTerminalScrollback"
+        let previous = defaults.object(forKey: key)
+        defaults.set(true, forKey: key)
+        defer {
+            if let previous { defaults.set(previous, forKey: key) }
+            else { defaults.removeObject(forKey: key) }
+        }
+
+        let view = GhosttySurfaceView(
+            frame: NSRect(x: 0, y: 0, width: 160, height: 120),
+            paneKey: paneKey
+        )
+        var receivedSnapshot: WebRemoteTerminalSnapshot?
+        view.webRemoteSnapshot(size: WebRemoteTerminalSize(columns: 240, rows: 40)) {
+            receivedSnapshot = $0
+        }
+        let deadline = Date().addingTimeInterval(1)
+        while receivedSnapshot == nil, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+
+        let snapshot = try XCTUnwrap(receivedSnapshot)
+        XCTAssertTrue(String(decoding: snapshot.payload, as: UTF8.self).contains(sentinel))
+    }
+
     func testTerminalSizeAcceptsBrowserGridWithinSafeBounds() {
         XCTAssertEqual(
             WebRemoteTerminalSize.parse(["columns": 132, "rows": 43]),
@@ -392,6 +434,19 @@ final class WebRemoteProtocolTests: XCTestCase {
                 pendingGeneration: 3,
                 pane: "pane-a",
                 generation: 3
+            )
+        )
+    }
+
+    func testPendingPaneSelectionPreventsTerminalSizeRelease() {
+        XCTAssertFalse(
+            WebRemoteServer.shouldReleaseTerminalSize(
+                hasPendingSelection: true
+            )
+        )
+        XCTAssertTrue(
+            WebRemoteServer.shouldReleaseTerminalSize(
+                hasPendingSelection: false
             )
         )
     }
