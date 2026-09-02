@@ -13,6 +13,10 @@ final class AgentHookRoutingTests: XCTestCase {
             processID: 101
         )
         let canonical = try XCTUnwrap(owner?.path)
+        var listenerFD = AgentBridge.createListeningSocket(at: canonical)
+        XCTAssertGreaterThanOrEqual(listenerFD, 0)
+        guard listenerFD >= 0 else { return }
+        defer { if listenerFD >= 0 { close(listenerFD) } }
 
         let executable = strdup("/bin/sleep")!
         let arg0 = strdup("sleep")!
@@ -48,6 +52,8 @@ final class AgentHookRoutingTests: XCTestCase {
         // posix_spawn returns after exec; the descendant remains alive in sleep.
         XCTAssertEqual(kill(child, 0), 0, "the exec descendant should still be alive")
 
+        close(listenerFD)
+        listenerFD = -1
         owner = nil
         let replacement = AgentBridge.acquireSocketLease(in: root, processID: 202)
         XCTAssertEqual(replacement.path, canonical,

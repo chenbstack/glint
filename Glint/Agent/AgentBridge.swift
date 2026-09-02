@@ -84,6 +84,49 @@ final class AgentBridge {
         } == 0
     }
 
+    static func createListeningSocket(at path: String) -> Int32 {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            NSLog("[glint] agent socket() failed: \(String(cString: strerror(errno)))")
+            return -1
+        }
+        guard fcntl(fd, F_SETFD, FD_CLOEXEC) == 0 else {
+            let error = errno
+            close(fd)
+            NSLog("[glint] agent socket close-on-exec failed: \(String(cString: strerror(error)))")
+            return -1
+        }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        path.withCString { src in
+            withUnsafeMutableBytes(of: &addr.sun_path) { dst in
+                let dstPtr = dst.baseAddress!.assumingMemoryBound(to: CChar.self)
+                _ = strlcpy(dstPtr, src, dst.count)
+            }
+        }
+
+        let addrLen = socklen_t(MemoryLayout<sockaddr_un>.size)
+        let bindRC = withUnsafePointer(to: &addr) { ptr -> Int32 in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { saPtr in
+                Darwin.bind(fd, saPtr, addrLen)
+            }
+        }
+        guard bindRC == 0 else {
+            NSLog("[glint] agent bind(\(path)) failed: \(String(cString: strerror(errno)))")
+            close(fd)
+            return -1
+        }
+        chmod(path, 0o600)
+
+        guard listen(fd, 16) == 0 else {
+            NSLog("[glint] agent listen() failed: \(String(cString: strerror(errno)))")
+            close(fd)
+            return -1
+        }
+        return fd
+    }
+
     /// Bind + listen. Path is short on purpose (sun_path is 104 chars on Darwin).
     ///
     /// The socket lives under `~/.glint/run/` (0700) rather than `/tmp`:
@@ -127,39 +170,8 @@ final class AgentBridge {
         // Reap any stale socket from a previous run.
         unlink(path)
 
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        let fd = Self.createListeningSocket(at: path)
         guard fd >= 0 else {
-            NSLog("[glint] agent socket() failed: \(String(cString: strerror(errno)))")
-            socketLease = nil
-            return
-        }
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        path.withCString { src in
-            withUnsafeMutableBytes(of: &addr.sun_path) { dst in
-                let dstPtr = dst.baseAddress!.assumingMemoryBound(to: CChar.self)
-                _ = strlcpy(dstPtr, src, dst.count)
-            }
-        }
-
-        let addrLen = socklen_t(MemoryLayout<sockaddr_un>.size)
-        let bindRC = withUnsafePointer(to: &addr) { ptr -> Int32 in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { saPtr in
-                Darwin.bind(fd, saPtr, addrLen)
-            }
-        }
-        guard bindRC == 0 else {
-            NSLog("[glint] agent bind(\(path)) failed: \(String(cString: strerror(errno)))")
-            close(fd)
-            socketLease = nil
-            return
-        }
-        chmod(path, 0o600)
-
-        guard listen(fd, 16) == 0 else {
-            NSLog("[glint] agent listen() failed: \(String(cString: strerror(errno)))")
-            close(fd)
             socketLease = nil
             return
         }
