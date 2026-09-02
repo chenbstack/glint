@@ -5,10 +5,80 @@ import {
   IOSIMEInputFallback,
   installIOSNativeTouchInput,
   installIOSIMEInputFallback,
+  installTwoFingerTerminalScrolling,
   isIOSInputEnvironment,
   shouldUseNativeTouchInput,
   textareaDelta,
 } from "../Glint/Resources/WebRemote/ime-input.mjs";
+
+function makeTouchScrollHarness(baseY, mouseTrackingMode = "none") {
+  const listeners = new Map();
+  const wheelEvents = [];
+  const scrollCalls = [];
+  const row = { getBoundingClientRect: () => ({ height: 10 }) };
+  const screen = { dispatchEvent: event => wheelEvents.push(event) };
+  const target = {
+    addEventListener(type, listener) { listeners.set(type, listener); },
+    querySelector(selector) {
+      if (selector === ".xterm-screen") return screen;
+      if (selector === ".xterm-rows > div") return row;
+      return null;
+    },
+  };
+  const terminal = {
+    buffer: { active: { baseY } },
+    modes: { mouseTrackingMode },
+    options: { fontSize: 13, lineHeight: 1 },
+    scrollLines(lines) { scrollCalls.push(lines); },
+  };
+  class MockWheelEvent {
+    static DOM_DELTA_LINE = 1;
+    constructor(type, options) {
+      this.type = type;
+      Object.assign(this, options);
+    }
+  }
+  installTwoFingerTerminalScrolling(terminal, target, MockWheelEvent);
+  const dispatchTouch = (type, centerY) => listeners.get(type)({
+    touches: centerY === null ? [] : [
+      { clientX: 100, clientY: centerY },
+      { clientX: 140, clientY: centerY },
+    ],
+    preventDefault() {},
+  });
+  return { dispatchTouch, scrollCalls, wheelEvents };
+}
+
+test("keeps scrolling terminal history across consecutive two-finger moves", () => {
+  const harness = makeTouchScrollHarness(40);
+  harness.dispatchTouch("touchstart", 100);
+  harness.dispatchTouch("touchmove", 110);
+  harness.dispatchTouch("touchmove", 120);
+  harness.dispatchTouch("touchmove", 130);
+
+  assert.deepEqual(harness.scrollCalls, [-1, -1, -1]);
+  assert.deepEqual(harness.wheelEvents, []);
+});
+
+test("forwards two-finger scrolling to full-screen applications without terminal history", () => {
+  const harness = makeTouchScrollHarness(0, "vt200");
+  harness.dispatchTouch("touchstart", 100);
+  harness.dispatchTouch("touchmove", 120);
+
+  assert.deepEqual(harness.scrollCalls, []);
+  assert.equal(harness.wheelEvents.length, 2);
+  assert.equal(harness.wheelEvents[0].deltaY, -1);
+  assert.equal(harness.wheelEvents[0].deltaMode, 1);
+});
+
+test("keeps forwarding wheel events when an application captures the mouse", () => {
+  const harness = makeTouchScrollHarness(40, "vt200");
+  harness.dispatchTouch("touchstart", 100);
+  harness.dispatchTouch("touchmove", 110);
+
+  assert.deepEqual(harness.scrollCalls, []);
+  assert.equal(harness.wheelEvents.length, 1);
+});
 
 function makeTerminal() {
   const listeners = new Map();

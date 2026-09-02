@@ -1,6 +1,10 @@
 import { Terminal } from "/xterm.mjs";
 import { FitAddon } from "/addon-fit.mjs";
-import { installIOSIMEInputFallback, installIOSNativeTouchInput } from "/ime-input.mjs";
+import {
+  installIOSIMEInputFallback,
+  installIOSNativeTouchInput,
+  installTwoFingerTerminalScrolling,
+} from "/ime-input.mjs";
 import {
   hmacSha256,
   hkdfExtractExpand,
@@ -57,6 +61,7 @@ const translations = {
   zh: {
     access_key: "访问密钥",
     access_key_help: "请在 Glint 设置 → Terminal → Web remote control 中单独复制访问密钥。",
+    auto_focus_terminal: "自动聚焦",
     bad_request: "请求格式错误",
     choose_terminal_heading: "从左侧选择一个终端",
     close_new_project: "关闭新建项目",
@@ -107,6 +112,7 @@ const translations = {
   en: {
     access_key: "Access key",
     access_key_help: "Copy the access key from Glint Settings → Terminal → Web remote control.",
+    auto_focus_terminal: "Open keyboard after switching terminal",
     bad_request: "Invalid request",
     choose_terminal_heading: "Choose a terminal from the sidebar",
     close_new_project: "Close new project",
@@ -179,6 +185,7 @@ const elements = {
   authDialog: document.querySelector("#auth-dialog"),
   authError: document.querySelector("#auth-error"),
   authForm: document.querySelector("#auth-form"),
+  autoFocusTerminal: document.querySelector("#auto-focus-terminal"),
   brandFallback: document.querySelector("#brand-fallback"),
   brandIcon: document.querySelector("#brand-icon"),
   createClose: document.querySelector("#create-close"),
@@ -246,83 +253,11 @@ const iosIMEInputFallback = installIOSIMEInputFallback(
   data => sendInputBytes(textEncoder.encode(data))
 );
 installIOSNativeTouchInput(terminal, text => terminal.paste(text));
+installTwoFingerTerminalScrolling(terminal, elements.terminal);
 document.fonts?.load('13px "Glint Nerd Symbols"').then(() => {
   terminal.refresh(0, terminal.rows - 1);
   fitTerminal();
 });
-
-let touchScrollY = null;
-let touchScrollRemainder = 0;
-
-function resetTouchScroll() {
-  touchScrollY = null;
-  touchScrollRemainder = 0;
-}
-
-function touchCenterY(touches) {
-  return (touches[0].clientY + touches[1].clientY) / 2;
-}
-
-function terminalLineHeight() {
-  const row = elements.terminal.querySelector(".xterm-rows > div");
-  const measured = row?.getBoundingClientRect().height;
-  return measured > 0
-    ? measured
-    : terminal.options.fontSize * terminal.options.lineHeight;
-}
-
-function scrollTerminalLinesFromTouch(lines, clientX, clientY) {
-  const screen = elements.terminal.querySelector(".xterm-screen");
-  let handledByTerminal = false;
-  if (screen) {
-    const direction = Math.sign(lines);
-    for (let index = 0; index < Math.abs(lines); index += 1) {
-      const wheelEvent = new WheelEvent("wheel", {
-        bubbles: true,
-        cancelable: true,
-        clientX,
-        clientY,
-        deltaMode: WheelEvent.DOM_DELTA_LINE,
-        deltaY: direction,
-      });
-      if (!screen.dispatchEvent(wheelEvent)) handledByTerminal = true;
-    }
-  }
-  if (!handledByTerminal && terminal.buffer.active.baseY > 0) {
-    terminal.scrollLines(lines);
-  }
-}
-
-elements.terminal.addEventListener("touchstart", event => {
-  if (event.touches.length !== 2) {
-    resetTouchScroll();
-    return;
-  }
-  event.preventDefault();
-  touchScrollY = touchCenterY(event.touches);
-  touchScrollRemainder = 0;
-}, { passive: false });
-
-elements.terminal.addEventListener("touchmove", event => {
-  if (event.touches.length !== 2 || touchScrollY === null) {
-    resetTouchScroll();
-    return;
-  }
-  event.preventDefault();
-  const nextY = touchCenterY(event.touches);
-  touchScrollRemainder += touchScrollY - nextY;
-  touchScrollY = nextY;
-
-  const lineHeight = terminalLineHeight();
-  const lines = Math.trunc(touchScrollRemainder / lineHeight);
-  if (lines === 0) return;
-  const clientX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
-  scrollTerminalLinesFromTouch(lines, clientX, nextY);
-  touchScrollRemainder -= lines * lineHeight;
-}, { passive: false });
-
-elements.terminal.addEventListener("touchend", resetTouchScroll);
-elements.terminal.addEventListener("touchcancel", resetTouchScroll);
 
 let socket;
 let reconnectTimer;
@@ -356,6 +291,12 @@ let appliedThemeSignature = "";
 const mobileSidebarLayout = matchMedia(
   "(max-width: 760px), (max-width: 900px) and (max-height: 520px) and (orientation: landscape)"
 );
+const autoFocusStorageKey = "glint-auto-focus-terminal";
+const storedAutoFocus = localStorage.getItem(autoFocusStorageKey);
+let autoFocusTerminal = storedAutoFocus === null
+  ? !matchMedia("(hover: none) and (pointer: coarse)").matches
+  : storedAutoFocus === "true";
+elements.autoFocusTerminal.checked = autoFocusTerminal;
 
 function loadToken() {
   const fragment = new URLSearchParams(location.hash.slice(1));
@@ -546,7 +487,7 @@ function handleMessage(raw) {
       terminal.write(decodeBase64(message.data), () => {
         controllingPane = message.pane;
         fitTerminal();
-        terminal.focus();
+        if (autoFocusTerminal) terminal.focus();
       });
       elements.emptyState.classList.add("hidden");
       elements.terminal.classList.add("visible");
@@ -887,6 +828,10 @@ elements.authForm.addEventListener("submit", event => {
 
 elements.reconnect.addEventListener("click", connect);
 elements.refresh.addEventListener("click", () => send({ type: "list" }));
+elements.autoFocusTerminal.addEventListener("change", () => {
+  autoFocusTerminal = elements.autoFocusTerminal.checked;
+  localStorage.setItem(autoFocusStorageKey, String(autoFocusTerminal));
+});
 elements.sidebarToggle.addEventListener("click", () => setSidebarOpen(true));
 elements.sidebarClose.addEventListener("click", () => setSidebarOpen(false));
 elements.sidebarBackdrop.addEventListener("click", () => setSidebarOpen(false));
