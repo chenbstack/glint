@@ -153,6 +153,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// fill at the launch-time width; waiting for the width to settle fills to
     /// the final window width. -1 = no probe yet.
     private var lastRestoreProbeCols = -1
+    /// Web Remote pane selection waits here while an offline surface restores
+    /// its archive. Sending the snapshot before this completes permanently
+    /// loses the history from the browser's first frame.
+    private var pendingWebRemoteSnapshotWaiters: [(WebRemoteTerminalSnapshot?) -> Void] = []
 
     /// Nil while this pane is the active first responder; otherwise the point
     /// from which the configurable idle timeout is measured.
@@ -474,6 +478,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // pane, so echoing full-width history here would wrap every line and a
         // later resize doesn't reliably reflow it back. We stash the bytes and
         // echo once the surface has its real pane width (see syncSurfaceSize).
+        // These probes belong to this surface generation. Carrying them across
+        // an idle-offline recreation can suppress the new generation's fallback.
+        restoreFallbackArmed = false
+        lastRestoreProbeCols = -1
         pendingRestoreData = restoreData
         requiredRestoreCols = restoreData.map { Self.maxDisplayWidth(of: $0) } ?? 0
 
@@ -507,6 +515,30 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // it must never go through text_input or the shell would execute it.
         payload.withCString { ghostty_surface_process_output(s, $0, UInt(strlen($0))) }
         markScrollbackDirty()
+        finishPendingWebRemoteSnapshots()
+    }
+
+    private func armRestoreFallbackIfNeeded() {
+        guard !restoreFallbackArmed else { return }
+        restoreFallbackArmed = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self, let s = self.surface, let data = self.pendingRestoreData
+            else { return }
+            self.pendingRestoreData = nil
+            self.restoreScrollback(into: s, data: data)
+        }
+    }
+
+    private func finishPendingWebRemoteSnapshots() {
+        guard !pendingWebRemoteSnapshotWaiters.isEmpty else { return }
+        let waiters = pendingWebRemoteSnapshotWaiters
+        pendingWebRemoteSnapshotWaiters.removeAll()
+        // Let Ghostty publish the just-processed output to its render-grid
+        // snapshot before reading it back for the browser.
+        DispatchQueue.main.async { [weak self] in
+            let snapshot = self?.webRemoteSnapshot()
+            waiters.forEach { $0(snapshot) }
+        }
     }
 
     /// Snapshot the pane's current scrollback to disk as colored text (ANSI SGR).
@@ -1479,12 +1511,13 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         let scale = window?.backingScaleFactor ?? 2.0
         let pixelWidth = floor(pointsSize.width * scale)
         let pixelHeight = floor(pointsSize.height * scale)
-        guard pixelWidth > 0, pixelHeight > 0 else { return }
+        let hasLocalSize = pixelWidth > 0 && pixelHeight > 0
+        guard hasLocalSize || webRemoteGridSize != nil else { return }
 
-        var targetWidth = UInt32(pixelWidth)
-        var targetHeight = UInt32(pixelHeight)
+        let current = ghostty_surface_size(s)
+        var targetWidth = hasLocalSize ? UInt32(pixelWidth) : current.width_px
+        var targetHeight = hasLocalSize ? UInt32(pixelHeight) : current.height_px
         if let remoteSize = webRemoteGridSize {
-            let current = ghostty_surface_size(s)
             let cellWidth = Int(current.cell_width_px)
             let cellHeight = Int(current.cell_height_px)
             if cellWidth > 0, cellHeight > 0 {
@@ -1500,6 +1533,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
                 targetHeight = UInt32(remoteSize.rows * cellHeight + verticalRemainder)
             }
         }
+        guard targetWidth > 0, targetHeight > 0 else { return }
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -1530,15 +1564,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
                 restoreScrollback(into: s, data: data)
             } else if cols > 0 {
                 lastRestoreProbeCols = cols
-                if !restoreFallbackArmed {
-                    restoreFallbackArmed = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-                        guard let self, let s = self.surface, let data = self.pendingRestoreData
-                        else { return }
-                        self.pendingRestoreData = nil
-                        self.restoreScrollback(into: s, data: data)
-                    }
-                }
+                armRestoreFallbackIfNeeded()
             }
         }
 
@@ -2339,6 +2365,29 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         guard let pointer = json.ptr, json.len > 0 else { return nil }
         let grid = Data(bytes: pointer, count: Int(json.len))
         return Self.webRemoteSnapshot(fromRenderGrid: grid, maxLines: maxLines)
+    }
+
+    /// Prepare an offline/recreated surface at the browser's stable grid size,
+    /// then include any archived scrollback in the very first snapshot. Waiting
+    /// for the normal delayed width fallback would send an empty snapshot first
+    /// and make correctness depend on post-selection output replay.
+    func webRemoteSnapshot(
+        size: WebRemoteTerminalSize,
+        completion: @escaping (WebRemoteTerminalSnapshot?) -> Void
+    ) {
+        guard ensureLiveForWebRemoteControl() else {
+            completion(nil)
+            return
+        }
+        let waitsForRestore = pendingRestoreData != nil
+        if waitsForRestore { pendingWebRemoteSnapshotWaiters.append(completion) }
+        setWebRemoteGridSize(size)
+        if pendingRestoreData != nil {
+            armRestoreFallbackIfNeeded()
+            return
+        }
+        if waitsForRestore { return }
+        DispatchQueue.main.async { [weak self] in completion(self?.webRemoteSnapshot()) }
     }
 
     fileprivate func forwardWebRemoteOutput(
