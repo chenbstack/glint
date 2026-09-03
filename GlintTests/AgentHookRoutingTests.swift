@@ -3,105 +3,67 @@ import XCTest
 @testable import Glint
 
 final class AgentHookRoutingTests: XCTestCase {
-    func testCanonicalLeaseIsReleasedWhileExecDescendantRemainsAlive() throws {
+    func testLegacyCanonicalRebindCannotStrandActiveBridge() throws {
         let root = URL(fileURLWithPath: "/tmp/gb-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        var owner: AgentBridge.SocketLease? = AgentBridge.acquireSocketLease(
-            in: root,
-            processID: 101
+        let activePath = AgentBridge.processSocketPath(in: root, processID: 101)
+        let activeFD = AgentBridge.createListeningSocket(at: activePath)
+        XCTAssertGreaterThanOrEqual(activeFD, 0)
+        guard activeFD >= 0 else { return }
+        defer { close(activeFD) }
+
+        // Simulate a legacy/same-bundle Glint that still unlinks and rebinds the
+        // old stable name while this process remains alive.
+        let canonical = root.appendingPathComponent("agent-debug.sock").path
+        unlink(canonical)
+        let replacementFD = AgentBridge.createListeningSocket(at: canonical)
+        XCTAssertGreaterThanOrEqual(replacementFD, 0)
+        guard replacementFD >= 0 else { return }
+        defer { close(replacementFD) }
+
+        let clientFD = try connectUnixSocket(at: activePath)
+        defer { close(clientFD) }
+        let flags = fcntl(activeFD, F_GETFL)
+        XCTAssertGreaterThanOrEqual(flags, 0)
+        XCTAssertEqual(fcntl(activeFD, F_SETFL, flags | O_NONBLOCK), 0)
+        let acceptedFD = accept(activeFD, nil, nil)
+        if acceptedFD >= 0 { close(acceptedFD) }
+        XCTAssertGreaterThanOrEqual(
+            acceptedFD,
+            0,
+            "rebinding the legacy canonical path must not strand the active bridge"
         )
-        let canonical = try XCTUnwrap(owner?.path)
-        var listenerFD = AgentBridge.createListeningSocket(at: canonical)
+    }
+
+    func testListeningSocketIsCloseOnExec() throws {
+        let root = URL(fileURLWithPath: "/tmp/gb-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let path = AgentBridge.processSocketPath(in: root, processID: 101)
+        let listenerFD = AgentBridge.createListeningSocket(at: path)
         XCTAssertGreaterThanOrEqual(listenerFD, 0)
         guard listenerFD >= 0 else { return }
-        defer { if listenerFD >= 0 { close(listenerFD) } }
+        defer { close(listenerFD) }
 
-        let executable = strdup("/bin/sleep")!
-        let arg0 = strdup("sleep")!
-        let arg1 = strdup("5")!
-        let argv = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: 3)
-        argv.initialize(repeating: nil, count: 3)
-        argv[0] = arg0
-        argv[1] = arg1
-        defer {
-            free(executable)
-            free(arg0)
-            free(arg1)
-            argv.deallocate()
-        }
-
-        var child: pid_t = 0
-        let spawnRC = posix_spawn(
-            &child,
-            executable,
-            nil,
-            nil,
-            argv,
-            nil
-        )
-        XCTAssertEqual(spawnRC, 0)
-        XCTAssertGreaterThan(child, 0)
-        guard spawnRC == 0, child > 0 else { return }
-        defer {
-            kill(child, SIGTERM)
-            waitpid(child, nil, 0)
-        }
-
-        // posix_spawn returns after exec; the descendant remains alive in sleep.
-        XCTAssertEqual(kill(child, 0), 0, "the exec descendant should still be alive")
-
-        close(listenerFD)
-        listenerFD = -1
-        owner = nil
-        let replacement = AgentBridge.acquireSocketLease(in: root, processID: 202)
-        XCTAssertEqual(replacement.path, canonical,
-                       "an exec descendant must not keep the canonical lease alive")
+        let descriptorFlags = fcntl(listenerFD, F_GETFD)
+        XCTAssertGreaterThanOrEqual(descriptorFlags, 0)
+        XCTAssertNotEqual(descriptorFlags & FD_CLOEXEC, 0)
     }
 
-    func testSecondSameFlavorBridgeUsesIndependentSocketPath() throws {
+    func testEachBridgeUsesProcessScopedSocketPath() throws {
         let root = URL(fileURLWithPath: "/tmp/gb-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        var first: AgentBridge.SocketLease? = AgentBridge.acquireSocketLease(
-            in: root,
-            processID: 101
-        )
-        let second = AgentBridge.acquireSocketLease(in: root, processID: 202)
+        let first = AgentBridge.processSocketPath(in: root, processID: 101)
+        let second = AgentBridge.processSocketPath(in: root, processID: 202)
 
-        XCTAssertNotEqual(first?.path, second.path,
-                          "a second Glint process must not unlink the first process' agent socket")
-        XCTAssertTrue(second.path.hasSuffix("-202.sock"))
-
-        let canonical = first?.path
-        first = nil
-        let replacement = AgentBridge.acquireSocketLease(in: root, processID: 303)
-        XCTAssertEqual(replacement.path, canonical,
-                       "the stable socket name should be reusable after its owner exits")
-    }
-
-    func testReachableLegacySocketIsNotClaimedDuringUpgrade() throws {
-        let root = URL(fileURLWithPath: "/tmp/gb-\(UUID().uuidString)", isDirectory: true)
-        let socket = root.appendingPathComponent("agent-debug.sock")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let listener = Process()
-        listener.executableURL = URL(fileURLWithPath: "/usr/bin/nc")
-        listener.arguments = ["-lkU", socket.path]
-        try listener.run()
-        defer { if listener.isRunning { listener.terminate() } }
-        let deadline = Date().addingTimeInterval(1)
-        while !FileManager.default.fileExists(atPath: socket.path), Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
-        }
-        XCTAssertTrue(FileManager.default.fileExists(atPath: socket.path))
-
-        let lease = AgentBridge.acquireSocketLease(in: root, processID: 404)
-        XCTAssertNotEqual(lease.path, socket.path)
-        XCTAssertTrue(lease.path.hasSuffix("-404.sock"))
+        XCTAssertNotEqual(first, second)
+        XCTAssertTrue(first.hasSuffix("-101.sock"))
+        XCTAssertTrue(second.hasSuffix("-202.sock"))
     }
 
     func testAttentionRankDoesNotLetThinkingHideCompletedSibling() {
@@ -315,6 +277,34 @@ final class AgentHookRoutingTests: XCTestCase {
             "agent": "claude",
             "session": "claude-sess-1",
         ])
+    }
+
+    private func connectUnixSocket(at path: String) throws -> Int32 {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        guard fd >= 0 else { return fd }
+
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        path.withCString { source in
+            withUnsafeMutableBytes(of: &address.sun_path) { destination in
+                _ = strlcpy(
+                    destination.baseAddress!.assumingMemoryBound(to: CChar.self),
+                    source,
+                    destination.count
+                )
+            }
+        }
+        let result = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        if result != 0 {
+            close(fd)
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+        return fd
     }
 
     /// Shared helper: spin up a Unix-domain listener, run the reporter once,

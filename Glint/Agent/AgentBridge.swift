@@ -1,7 +1,7 @@
 import Foundation
 import Darwin
 
-/// Listens on a per-user Unix domain socket. CLI agents (Claude Code,
+/// Listens on a per-process Unix domain socket. CLI agents (Claude Code,
 /// Codex, …) post one JSON line per hook event:
 ///
 ///     {"pane":"<workspace-uuid>:<pane-seq>","hook":"UserPromptSubmit"}
@@ -18,70 +18,20 @@ final class AgentBridge {
     private(set) var socketPath: String = ""
     private var listenFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
-    private var socketLease: SocketLease?
     private let queue = DispatchQueue(label: "glint.agent.bridge", qos: .utility)
 
     private init() {}
 
-    final class SocketLease {
-        let path: String
-        private let lockFD: Int32
-
-        fileprivate init(path: String, lockFD: Int32 = -1) {
-            self.path = path
-            self.lockFD = lockFD
-        }
-
-        deinit {
-            if lockFD >= 0 { close(lockFD) }
-        }
-    }
-
-    /// The first process of each build flavor keeps the stable socket name;
-    /// another same-flavor process gets a PID-scoped fallback instead of
-    /// unlinking the first process' live endpoint.
-    static func acquireSocketLease(in runDir: URL, processID: Int32 = getpid()) -> SocketLease {
+    /// Every Glint process owns a distinct path. A shared stable name cannot be
+    /// made safe across legacy/test builds: any process that unlinks and rebinds
+    /// it strands the original listener even while that owner remains alive.
+    static func processSocketPath(in runDir: URL, processID: Int32 = getpid()) -> String {
         #if DEBUG
         let stem = "agent-debug"
         #else
         let stem = "agent"
         #endif
-        let canonical = runDir.appendingPathComponent("\(stem).sock").path
-        let fallback = runDir.appendingPathComponent("\(stem)-\(processID).sock").path
-        let lockPath = runDir.appendingPathComponent("\(stem).lock").path
-        let fd = open(lockPath, O_CREAT | O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR)
-        guard fd >= 0 else { return SocketLease(path: fallback) }
-        chmod(lockPath, 0o600)
-        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
-            close(fd)
-            return SocketLease(path: fallback)
-        }
-        // Older Glint builds do not hold the lock. Keep their reachable
-        // canonical socket intact during the upgrade transition too.
-        if socketIsReachable(canonical) {
-            close(fd)
-            return SocketLease(path: fallback)
-        }
-        return SocketLease(path: canonical, lockFD: fd)
-    }
-
-    private static func socketIsReachable(_ path: String) -> Bool {
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return false }
-        defer { close(fd) }
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        path.withCString { src in
-            withUnsafeMutableBytes(of: &addr.sun_path) { dst in
-                _ = strlcpy(dst.baseAddress!.assumingMemoryBound(to: CChar.self), src, dst.count)
-            }
-        }
-        return withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        } == 0
+        return runDir.appendingPathComponent("\(stem)-\(processID).sock").path
     }
 
     static func createListeningSocket(at path: String) -> Int32 {
@@ -135,10 +85,8 @@ final class AgentBridge {
     /// a small race window in a world-readable directory. A 0700 parent
     /// closes both holes — nobody else can reach the socket at all.
     ///
-    /// Debug builds use a separate socket namespace from production. Within
-    /// one flavor, a file lock keeps the first process on the stable name and
-    /// moves any later process to a PID-scoped fallback instead of letting its
-    /// `unlink()` strand the first process' listener.
+    /// Debug builds use a separate socket namespace from production, and every
+    /// process includes its PID so no other Glint instance can unlink its path.
     /// The path is baked into each pane's `$GLINT_AGENT_SOCK` at creation,
     /// so panes consistently report back to the Glint that launched them.
     func start() {
@@ -162,19 +110,14 @@ final class AgentBridge {
         }
         chmod(runDir.path, 0o700)
 
-        let lease = Self.acquireSocketLease(in: runDir)
-        let path = lease.path
-        socketLease = lease
+        let path = Self.processSocketPath(in: runDir)
         socketPath = path
 
         // Reap any stale socket from a previous run.
         unlink(path)
 
         let fd = Self.createListeningSocket(at: path)
-        guard fd >= 0 else {
-            socketLease = nil
-            return
-        }
+        guard fd >= 0 else { return }
 
         listenFD = fd
         let src = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
