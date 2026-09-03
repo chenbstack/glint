@@ -1,7 +1,7 @@
 import Foundation
 import Darwin
 
-/// Listens on a per-user Unix domain socket. CLI agents (Claude Code,
+/// Listens on a per-process Unix domain socket. CLI agents (Claude Code,
 /// Codex, …) post one JSON line per hook event:
 ///
 ///     {"pane":"<workspace-uuid>:<pane-seq>","hook":"UserPromptSubmit"}
@@ -22,56 +22,29 @@ final class AgentBridge {
 
     private init() {}
 
-    /// Bind + listen. Path is short on purpose (sun_path is 104 chars on Darwin).
-    ///
-    /// The socket lives under `~/.glint/run/` (0700) rather than `/tmp`:
-    /// a world-writable /tmp lets any local user pre-create ("squat") our
-    /// predictable path, and the chmod-after-bind below would otherwise be
-    /// a small race window in a world-readable directory. A 0700 parent
-    /// closes both holes — nobody else can reach the socket at all.
-    ///
-    /// Debug builds use a separate socket filename so a running dev Glint
-    /// and a running production Glint don't fight over the same path.
-    /// Without this split, whichever process started last `unlink()`s the
-    /// other's bound entry and steals every incoming hook event — the other
-    /// Glint's sidebar would freeze on whatever status the pane was in when
-    /// the steal happened (e.g. "thinking" with no Stop to clear it).
-    /// The path is baked into each pane's `$GLINT_AGENT_SOCK` at creation,
-    /// so panes consistently report back to the Glint that launched them.
-    func start() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let runDir = home
-            .appendingPathComponent(".glint", isDirectory: true)
-            .appendingPathComponent("run", isDirectory: true)
-        do {
-            // 0700 applies to every directory this call creates (including
-            // ~/.glint if it doesn't exist yet); pre-existing dirs keep
-            // their mode, so re-assert it on `run` below.
-            try FileManager.default.createDirectory(
-                at: runDir,
-                withIntermediateDirectories: true,
-                attributes: [.posixPermissions: 0o700]
-            )
-        } catch {
-            NSLog("[glint] agent run dir create failed: \(error)")
-            return
-        }
-        chmod(runDir.path, 0o700)
-
+    /// Every Glint process owns a distinct path. A shared stable name cannot be
+    /// made safe across legacy/test builds: any process that unlinks and rebinds
+    /// it strands the original listener even while that owner remains alive.
+    static func processSocketPath(in runDir: URL, processID: Int32 = getpid()) -> String {
         #if DEBUG
-        let path = runDir.appendingPathComponent("agent-debug.sock").path
+        let stem = "agent-debug"
         #else
-        let path = runDir.appendingPathComponent("agent.sock").path
+        let stem = "agent"
         #endif
-        socketPath = path
+        return runDir.appendingPathComponent("\(stem)-\(processID).sock").path
+    }
 
-        // Reap any stale socket from a previous run.
-        unlink(path)
-
+    static func createListeningSocket(at path: String) -> Int32 {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else {
             NSLog("[glint] agent socket() failed: \(String(cString: strerror(errno)))")
-            return
+            return -1
+        }
+        guard fcntl(fd, F_SETFD, FD_CLOEXEC) == 0 else {
+            let error = errno
+            close(fd)
+            NSLog("[glint] agent socket close-on-exec failed: \(String(cString: strerror(error)))")
+            return -1
         }
 
         var addr = sockaddr_un()
@@ -92,15 +65,59 @@ final class AgentBridge {
         guard bindRC == 0 else {
             NSLog("[glint] agent bind(\(path)) failed: \(String(cString: strerror(errno)))")
             close(fd)
-            return
+            return -1
         }
         chmod(path, 0o600)
 
         guard listen(fd, 16) == 0 else {
             NSLog("[glint] agent listen() failed: \(String(cString: strerror(errno)))")
             close(fd)
+            return -1
+        }
+        return fd
+    }
+
+    /// Bind + listen. Path is short on purpose (sun_path is 104 chars on Darwin).
+    ///
+    /// The socket lives under `~/.glint/run/` (0700) rather than `/tmp`:
+    /// a world-writable /tmp lets any local user pre-create ("squat") our
+    /// predictable path, and the chmod-after-bind below would otherwise be
+    /// a small race window in a world-readable directory. A 0700 parent
+    /// closes both holes — nobody else can reach the socket at all.
+    ///
+    /// Debug builds use a separate socket namespace from production, and every
+    /// process includes its PID so no other Glint instance can unlink its path.
+    /// The path is baked into each pane's `$GLINT_AGENT_SOCK` at creation,
+    /// so panes consistently report back to the Glint that launched them.
+    func start() {
+        guard listenFD < 0 else { return }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let runDir = home
+            .appendingPathComponent(".glint", isDirectory: true)
+            .appendingPathComponent("run", isDirectory: true)
+        do {
+            // 0700 applies to every directory this call creates (including
+            // ~/.glint if it doesn't exist yet); pre-existing dirs keep
+            // their mode, so re-assert it on `run` below.
+            try FileManager.default.createDirectory(
+                at: runDir,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+        } catch {
+            NSLog("[glint] agent run dir create failed: \(error)")
             return
         }
+        chmod(runDir.path, 0o700)
+
+        let path = Self.processSocketPath(in: runDir)
+        socketPath = path
+
+        // Reap any stale socket from a previous run.
+        unlink(path)
+
+        let fd = Self.createListeningSocket(at: path)
+        guard fd >= 0 else { return }
 
         listenFD = fd
         let src = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)

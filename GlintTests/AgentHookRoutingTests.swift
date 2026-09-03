@@ -1,7 +1,71 @@
+import Darwin
 import XCTest
 @testable import Glint
 
 final class AgentHookRoutingTests: XCTestCase {
+    func testLegacyCanonicalRebindCannotStrandActiveBridge() throws {
+        let root = URL(fileURLWithPath: "/tmp/gb-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let activePath = AgentBridge.processSocketPath(in: root, processID: 101)
+        let activeFD = AgentBridge.createListeningSocket(at: activePath)
+        XCTAssertGreaterThanOrEqual(activeFD, 0)
+        guard activeFD >= 0 else { return }
+        defer { close(activeFD) }
+
+        // Simulate a legacy/same-bundle Glint that still unlinks and rebinds the
+        // old stable name while this process remains alive.
+        let canonical = root.appendingPathComponent("agent-debug.sock").path
+        unlink(canonical)
+        let replacementFD = AgentBridge.createListeningSocket(at: canonical)
+        XCTAssertGreaterThanOrEqual(replacementFD, 0)
+        guard replacementFD >= 0 else { return }
+        defer { close(replacementFD) }
+
+        let clientFD = try connectUnixSocket(at: activePath)
+        defer { close(clientFD) }
+        let flags = fcntl(activeFD, F_GETFL)
+        XCTAssertGreaterThanOrEqual(flags, 0)
+        XCTAssertEqual(fcntl(activeFD, F_SETFL, flags | O_NONBLOCK), 0)
+        let acceptedFD = accept(activeFD, nil, nil)
+        if acceptedFD >= 0 { close(acceptedFD) }
+        XCTAssertGreaterThanOrEqual(
+            acceptedFD,
+            0,
+            "rebinding the legacy canonical path must not strand the active bridge"
+        )
+    }
+
+    func testListeningSocketIsCloseOnExec() throws {
+        let root = URL(fileURLWithPath: "/tmp/gb-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let path = AgentBridge.processSocketPath(in: root, processID: 101)
+        let listenerFD = AgentBridge.createListeningSocket(at: path)
+        XCTAssertGreaterThanOrEqual(listenerFD, 0)
+        guard listenerFD >= 0 else { return }
+        defer { close(listenerFD) }
+
+        let descriptorFlags = fcntl(listenerFD, F_GETFD)
+        XCTAssertGreaterThanOrEqual(descriptorFlags, 0)
+        XCTAssertNotEqual(descriptorFlags & FD_CLOEXEC, 0)
+    }
+
+    func testEachBridgeUsesProcessScopedSocketPath() throws {
+        let root = URL(fileURLWithPath: "/tmp/gb-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let first = AgentBridge.processSocketPath(in: root, processID: 101)
+        let second = AgentBridge.processSocketPath(in: root, processID: 202)
+
+        XCTAssertNotEqual(first, second)
+        XCTAssertTrue(first.hasSuffix("-101.sock"))
+        XCTAssertTrue(second.hasSuffix("-202.sock"))
+    }
+
     func testAttentionRankDoesNotLetThinkingHideCompletedSibling() {
         XCTAssertEqual(
             PaneAgentStatus.bestAttentionRank(in: [.thinking, .justCompleted]),
@@ -213,6 +277,34 @@ final class AgentHookRoutingTests: XCTestCase {
             "agent": "claude",
             "session": "claude-sess-1",
         ])
+    }
+
+    private func connectUnixSocket(at path: String) throws -> Int32 {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        guard fd >= 0 else { return fd }
+
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        path.withCString { source in
+            withUnsafeMutableBytes(of: &address.sun_path) { destination in
+                _ = strlcpy(
+                    destination.baseAddress!.assumingMemoryBound(to: CChar.self),
+                    source,
+                    destination.count
+                )
+            }
+        }
+        let result = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        if result != 0 {
+            close(fd)
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+        return fd
     }
 
     /// Shared helper: spin up a Unix-domain listener, run the reporter once,
