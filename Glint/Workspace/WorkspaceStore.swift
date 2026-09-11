@@ -1174,8 +1174,7 @@ final class WorkspaceStore: ObservableObject {
     }
 
     /// Bind targets currently available on this Mac, for the "Listen on" menu.
-    /// Snapshotted at init; call `refreshWebRemoteInterfaces()` to rescan after
-    /// networks change (e.g. joining a different Wi-Fi).
+    /// Refreshed on server status changes and when opening network settings.
     @Published private(set) var webRemoteInterfaceOptions: [WebRemoteInterface] = WebRemoteAddressResolver.interfaces()
 
     func refreshWebRemoteInterfaces() {
@@ -1833,6 +1832,7 @@ final class WorkspaceStore: ObservableObject {
         else { ControlBridge.shared.reapStale() }
         WebRemoteServer.shared.setStatusHandler { [weak self] status in
             self?.webRemoteStatus = status
+            self?.refreshWebRemoteInterfaces()
         }
         WebRemoteServer.shared.setListenInterface(webRemoteListenInterface)
         if webRemoteEnabled { WebRemoteServer.shared.start() }

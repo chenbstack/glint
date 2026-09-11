@@ -3,17 +3,18 @@ import Network
 import XCTest
 @testable import Glint
 
-/// End-to-end tests that drive `WebRemoteServer.shared` over real sockets on the
+/// End-to-end tests that drive `WebRemoteServer` over real sockets on the
 /// loopback interface. They cover the HTTP asset layer (including the allowlist
 /// and HEAD handling) and the WebSocket authentication flow (including the
 /// exponential backoff that throttles online token guessing).
 ///
-/// These tests bind the project's persisted HTTP/WebSocket port pair on
-/// 127.0.0.1, so they will conflict with a concurrently running Glint whose web
-/// remote is enabled. The access token is served from an in-memory store, so
-/// the run never reads or writes the user's Keychain. The server is started fresh in `setUp` and stopped in
-/// `tearDown`; test methods run serially within the class.
+/// Each test uses a private defaults domain and an available loopback port pair,
+/// plus in-memory credentials, leaving running Glint sessions and Keychain alone.
 final class WebRemoteServerIntegrationTests: XCTestCase {
+    private var server: WebRemoteServer!
+    private var testDefaults: UserDefaults!
+    private var defaultsName: String!
+    private let interfaceAddress = TestInterfaceAddress()
     private var urlSession: URLSession!
     private var readyToken: String?
     private var httpOrigin: String?
@@ -21,13 +22,20 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
+        defaultsName = "app.glint.WebRemoteTests.\(UUID().uuidString)"
+        testDefaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
+        testDefaults.set(Int(try availableHTTPPort()), forKey: "glint.webRemoteHTTPPort")
+        interfaceAddress.set(nil)
+        server = WebRemoteServer(defaults: testDefaults, interfaceRetryInterval: 0.2) { [interfaceAddress] key in
+            key == "test-interface" ? interfaceAddress.get() : WebRemoteListenTarget.bindAddress(for: key)
+        }
         urlSession = URLSession(configuration: .ephemeral)
         readyToken = nil
         httpOrigin = nil
         webSocketURL = nil
 
         let ready = expectation(description: "WebRemoteServer reports .ready")
-        WebRemoteServer.shared.setStatusHandler { [weak self] status in
+        server.setStatusHandler { [weak self] status in
             guard case let .ready(urls) = status,
                   let url = urls.first,
                   let token = WebRemoteAccessURL.token(from: url),
@@ -41,12 +49,12 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
             ready.fulfill()
         }
         // Bind to loopback only — never touch a real NIC from tests.
-        WebRemoteServer.shared.setListenInterface(WebRemoteListenTarget.loopback)
+        server.setListenInterface(WebRemoteListenTarget.loopback)
         // Keep the access token in memory. Against the real Keychain this
         // prompts for the login password (the test binary is not the signed
         // identity the item's ACL trusts) and `start()` then times out.
-        WebRemoteServer.shared.setSecretStorage(WebRemoteEphemeralSecretStorage())
-        WebRemoteServer.shared.start()
+        server.setSecretStorage(WebRemoteEphemeralSecretStorage())
+        server.start()
         try await fulfillment(of: [ready], timeout: 10)
         XCTAssertNotNil(readyToken, "Server should expose an access token in its ready URL")
         XCTAssertNotNil(httpOrigin)
@@ -54,11 +62,15 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        WebRemoteServer.shared.stop()
+        server.setStatusHandler { _ in }
+        server.stop()
         // stop() is asynchronous on the server queue; let NWListener cancel.
         try? await Task.sleep(nanoseconds: 400_000_000)
         urlSession.invalidateAndCancel()
         urlSession = nil
+        server = nil
+        testDefaults.removePersistentDomain(forName: defaultsName)
+        testDefaults = nil
         try await super.tearDown()
     }
 
@@ -309,23 +321,191 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         )
     }
 
-    func testVanishedSelectedInterfaceFailsLoudly() async throws {
-        // A user-chosen NIC that no longer exists must surface `.failed` — never
-        // silently fall back to a 0.0.0.0 wildcard bind (that would widen
-        // exposure, the opposite of picking a NIC).
-        WebRemoteServer.shared.stop()
-        try? await Task.sleep(nanoseconds: 400_000_000)
-
-        let failed = expectation(description: "vanished interface reports .failed")
-        WebRemoteServer.shared.setStatusHandler { status in
-            if case .failed = status { failed.fulfill() }
+    func testVanishedSelectedInterfaceWaitsWithoutWildcardBind() async throws {
+        let waiting = expectation(description: "vanished interface reports waiting")
+        let listening = expectation(description: "missing NIC must not fall back to wildcard")
+        listening.isInverted = true
+        server.setStatusHandler { status in
+            if case .waitingForInterface(name: "glint-definitely-not-an-interface") = status {
+                waiting.fulfill()
+            }
+            if case .ready = status { listening.fulfill() }
+            if case .failed = status { XCTFail("A missing NIC should wait for recovery") }
         }
-        WebRemoteServer.shared.setListenInterface("glint-definitely-not-an-interface")
-        WebRemoteServer.shared.start()
-        try await fulfillment(of: [failed], timeout: 10)
+        server.setListenInterface("glint-definitely-not-an-interface")
+        server.start()
+        await fulfillment(of: [waiting], timeout: 3)
+        await fulfillment(of: [listening], timeout: 0.7)
+        do {
+            _ = try await request("/")
+            XCTFail("No HTTP listener should be bound while the selected NIC is missing")
+        } catch is URLError { }
+    }
+
+    func testUnavailableInterfaceRecoversWhenAddressReturns() async throws {
+        try await assertUnavailableInterfaceRecovers(sendPathUpdate: true)
+    }
+
+    func testUnavailableInterfaceRecoversWithoutPathUpdate() async throws {
+        try await assertUnavailableInterfaceRecovers(sendPathUpdate: false)
+    }
+
+    private func assertUnavailableInterfaceRecovers(sendPathUpdate: Bool) async throws {
+        let waiting = expectation(description: "selected interface unavailable")
+        let recovered = expectation(description: "selected interface recovers automatically")
+        server.setStatusHandler { status in
+            if case .waitingForInterface = status { waiting.fulfill() }
+            if case .failed = status { XCTFail("A temporarily missing address must remain recoverable") }
+            if case .ready = status { recovered.fulfill() }
+        }
+        server.setListenInterface("test-interface")
+        server.start()
+        await fulfillment(of: [waiting], timeout: 3)
+        interfaceAddress.set("127.0.0.1")
+        if sendPathUpdate { server.refreshListenAddress() }
+        await fulfillment(of: [recovered], timeout: 3)
+        let (_, response) = try await request("/")
+        XCTAssertEqual(response.statusCode, 200)
+        let socket = makeWebSocket()
+        defer { socket.cancel(with: .goingAway, reason: nil) }
+        _ = try await receiveAuthChallenge(socket)
+    }
+
+    func testRunningInterfaceRecoversAfterSustainedAddressLoss() async throws {
+        try await startNamedInterface()
+        let waiting = expectation(description: "lost address enters waiting")
+        let recovered = expectation(description: "running interface recovers")
+        server.setStatusHandler { status in
+            if case .waitingForInterface = status { waiting.fulfill() }
+            if case .ready = status { recovered.fulfill() }
+            if case .failed = status { XCTFail("Network loss must not disable recovery") }
+        }
+        interfaceAddress.set(nil)
+        server.refreshListenAddress()
+        await fulfillment(of: [waiting], timeout: 3)
+        interfaceAddress.set("127.0.0.1")
+        await fulfillment(of: [recovered], timeout: 3)
+        let (_, response) = try await request("/")
+        XCTAssertEqual(response.statusCode, 200)
+    }
+
+    func testStopWhileWaitingCancelsRecovery() async throws {
+        let waiting = expectation(description: "waiting before stop")
+        server.setStatusHandler { if case .waitingForInterface = $0 { waiting.fulfill() } }
+        server.setListenInterface("test-interface")
+        server.start()
+        await fulfillment(of: [waiting], timeout: 3)
+
+        let stopped = expectation(description: "explicitly stopped")
+        server.setStatusHandler { if case .stopped = $0 { stopped.fulfill() } }
+        server.stop()
+        await fulfillment(of: [stopped], timeout: 3)
+        let restarted = expectation(description: "stopped server must not recover")
+        restarted.isInverted = true
+        server.setStatusHandler { _ in restarted.fulfill() }
+        interfaceAddress.set("127.0.0.1")
+        server.refreshListenAddress()
+        await fulfillment(of: [restarted], timeout: 0.8)
+    }
+
+    func testSwitchToLoopbackCancelsPendingInterfaceRestart() async throws {
+        try await startNamedInterface()
+        interfaceAddress.set(nil)
+        server.refreshListenAddress()
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        let ready = expectation(description: "new loopback selection ready")
+        server.setStatusHandler { if case .ready = $0 { ready.fulfill() } }
+        server.setListenInterface(WebRemoteListenTarget.loopback)
+        server.start()
+        await fulfillment(of: [ready], timeout: 3)
+        let restarted = expectation(description: "old path callback must not restart new selection")
+        restarted.isInverted = true
+        server.setStatusHandler { _ in restarted.fulfill() }
+        interfaceAddress.set("127.0.0.1")
+        server.refreshListenAddress()
+        await fulfillment(of: [restarted], timeout: 0.8)
+        let (_, response) = try await request("/")
+        XCTAssertEqual(response.statusCode, 200)
+    }
+
+    func testPortConflictDoesNotBecomeInterfaceRecovery() async throws {
+        interfaceAddress.set("127.0.0.1")
+        let conflictingServer = WebRemoteServer(defaults: testDefaults) { [interfaceAddress] key in
+            key == "test-interface" ? interfaceAddress.get() : WebRemoteListenTarget.bindAddress(for: key)
+        }
+        conflictingServer.setSecretStorage(WebRemoteEphemeralSecretStorage())
+        defer {
+            conflictingServer.setStatusHandler { _ in }
+            conflictingServer.stop()
+        }
+        let conflict = expectation(description: "occupied port remains an explicit conflict")
+        conflictingServer.setStatusHandler { status in
+            if case .portConflict = status { conflict.fulfill() }
+            if case .waitingForInterface = status { XCTFail("A port conflict cannot recover by waiting for the NIC") }
+            if case .ready = status { XCTFail("The test server already occupies these ports") }
+        }
+        conflictingServer.setListenInterface("test-interface")
+        conflictingServer.start()
+        await fulfillment(of: [conflict], timeout: 3)
+    }
+
+    private func startNamedInterface() async throws {
+        interfaceAddress.set("127.0.0.1")
+        let ready = expectation(description: "named interface ready")
+        server.setStatusHandler { if case .ready = $0 { ready.fulfill() } }
+        server.setListenInterface("test-interface")
+        server.start()
+        await fulfillment(of: [ready], timeout: 3)
+    }
+
+    func testBriefAddressLossDoesNotRestartHealthyListeners() async throws {
+        try await startNamedInterface()
+
+        let restarted = expectation(description: "healthy listener should survive a brief address loss")
+        restarted.isInverted = true
+        server.setStatusHandler { if case .starting = $0 { restarted.fulfill() } }
+        interfaceAddress.set(nil)
+        server.refreshListenAddress()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        interfaceAddress.set("127.0.0.1")
+        server.refreshListenAddress()
+        await fulfillment(of: [restarted], timeout: 0.8)
+        let (_, response) = try await request("/")
+        XCTAssertEqual(response.statusCode, 200)
     }
 
     // MARK: - Helpers
+
+    /// Reserve both sockets together before choosing the pair. NWListener binds
+    /// them after these probes close; no persisted production ports are reused.
+    private func availableHTTPPort() throws -> UInt16 {
+        for _ in 0..<100 {
+            let port = UInt16.random(in: 49152...65533)
+            let http = socket(AF_INET, SOCK_STREAM, 0)
+            let webSocket = socket(AF_INET, SOCK_STREAM, 0)
+            guard http >= 0, webSocket >= 0 else {
+                if http >= 0 { close(http) }
+                if webSocket >= 0 { close(webSocket) }
+                throw POSIXError(.EMFILE)
+            }
+            defer { close(http); close(webSocket) }
+            func bindLoopback(_ fd: Int32, _ port: UInt16) -> Bool {
+                var address = sockaddr_in()
+                address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+                address.sin_family = sa_family_t(AF_INET)
+                address.sin_port = port.bigEndian
+                address.sin_addr.s_addr = inet_addr("127.0.0.1")
+                return withUnsafePointer(to: &address) {
+                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                        Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
+                    }
+                }
+            }
+            if bindLoopback(http, port), bindLoopback(webSocket, port + 1) { return port }
+        }
+        throw POSIXError(.EADDRINUSE)
+    }
 
     private func request(_ path: String, method: String = "GET") async throws -> (Data, HTTPURLResponse) {
         let origin = try XCTUnwrap(httpOrigin)
@@ -406,5 +586,22 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         let body = data.subdata(in: WebRemoteCrypto.nonceLength ..< data.count)
         let plaintext = try XCTUnwrap(WebRemoteCrypto.openFrame(nonce: nonce, body: body, key: key))
         return try XCTUnwrap(JSONSerialization.jsonObject(with: plaintext) as? [String: Any])
+    }
+}
+
+private final class TestInterfaceAddress: @unchecked Sendable {
+    private let lock = NSLock()
+    private var address: String?
+
+    func get() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return address
+    }
+
+    func set(_ value: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        address = value
     }
 }
