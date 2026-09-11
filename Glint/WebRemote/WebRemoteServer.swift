@@ -8,6 +8,7 @@ private let webRemoteLogger = Logger(subsystem: "app.glint", category: "WebRemot
 enum WebRemoteStatus: Equatable {
     case stopped
     case starting
+    case waitingForInterface(name: String)
     case ready(urls: [String])
     case portConflict(port: UInt16)
     case failed(message: String)
@@ -237,17 +238,30 @@ final class WebRemoteServer: @unchecked Sendable {
     /// Raw 32-byte key material decoded from `token`; empty until the server
     /// starts with a valid token. Drives the challenge-response handshake.
     private var tokenKey = Data()
-    private var ports = WebRemotePortStore.loadOrCreate()
+    private let defaults: UserDefaults
+    private let resolveBindAddress: (String) -> String?
+    private let interfaceRetryInterval: TimeInterval
+    private var ports: WebRemotePorts
     private var listenInterface = WebRemoteListenTarget.loopback
     private var lastBoundAddress: String?
     private var pathMonitor: NWPathMonitor?
     private var pathRestartScheduled = false
+    private var interfaceRetryTimer: DispatchSourceTimer?
     private var terminalSizeRevision: UInt64 = 0
     private var assetCache: [String: Data] = [:]
     private var statusHandler: ((WebRemoteStatus) -> Void)?
     private var secretStorage: WebRemoteSecretStorage = WebRemoteKeychainStorage.shared
 
-    private init() {}
+    init(
+        defaults: UserDefaults = .standard,
+        interfaceRetryInterval: TimeInterval = 5,
+        resolveBindAddress: @escaping (String) -> String? = WebRemoteListenTarget.bindAddress
+    ) {
+        self.defaults = defaults
+        self.interfaceRetryInterval = interfaceRetryInterval
+        self.resolveBindAddress = resolveBindAddress
+        ports = WebRemotePortStore.loadOrCreate(defaults: defaults)
+    }
 
     /// Swap the access-token backing store. Staged like `setListenInterface`:
     /// it takes effect on the next `start()`.
@@ -294,6 +308,13 @@ final class WebRemoteServer: @unchecked Sendable {
     func setListenInterface(_ key: String) {
         queue.async { [weak self] in
             self?.listenInterface = key
+        }
+    }
+
+    func refreshListenAddress() {
+        queue.async { [weak self] in
+            guard let self, let runID = self.runID else { return }
+            self.handlePathUpdate(runID: runID)
         }
     }
 
@@ -380,19 +401,17 @@ final class WebRemoteServer: @unchecked Sendable {
         emit(.starting)
         token = WebRemoteAccessKeyStore.loadOrCreate(storage: secretStorage)
         tokenKey = WebRemoteCrypto.tokenKey(from: token) ?? Data()
-        ports = WebRemotePortStore.loadOrCreate()
+        ports = WebRemotePortStore.loadOrCreate(defaults: defaults)
         let currentRun = UUID()
         runID = currentRun
 
         do {
             let isExplicitWildcard = listenInterface == WebRemoteListenTarget.any
-            let bindAddress = WebRemoteListenTarget.bindAddress(for: listenInterface)
-            // A user-chosen NIC that currently has no IPv4 must fail loudly.
-            // bindAddress returns nil both for "explicit All interfaces" and
-            // for "selected NIC vanished"; conflating them would silently widen
-            // exposure to 0.0.0.0 — the opposite of picking a NIC.
+            let bindAddress = resolveBindAddress(listenInterface)
+            // A selected NIC may temporarily lose IPv4 during DHCP or wake.
+            // Keep waiting for that NIC; nil must never become a wildcard bind.
             guard isExplicitWildcard || bindAddress != nil else {
-                failLocked("Selected interface is no longer available.")
+                waitForInterfaceLocked()
                 return
             }
             lastBoundAddress = bindAddress
@@ -439,22 +458,66 @@ final class WebRemoteServer: @unchecked Sendable {
             webSocket.start(queue: queue)
             startPathMonitorLocked(currentRun)
         } catch {
-            failLocked(error.localizedDescription)
+            if shouldWaitForInterface(after: error) {
+                waitForInterfaceLocked()
+            } else {
+                failLocked(error.localizedDescription)
+            }
         }
+    }
+
+    private var usesNamedInterface: Bool {
+        listenInterface != WebRemoteListenTarget.loopback
+            && listenInterface != WebRemoteListenTarget.any
+    }
+
+    private func shouldWaitForInterface(after error: Error) -> Bool {
+        guard usesNamedInterface else { return false }
+        if case let .posix(code) = error as? NWError {
+            if code == .EADDRINUSE { return false }
+            if code == .EADDRNOTAVAIL || code == .ENETDOWN || code == .ENETUNREACH { return true }
+        }
+        return resolveBindAddress(listenInterface) == nil
+    }
+
+    private func waitForInterfaceLocked() {
+        stopLocked(emitStatus: false)
+        let currentRun = UUID()
+        runID = currentRun
+        // Remember this snapshot so the monitor's initial callback does not
+        // repeatedly retry an address that still cannot be bound.
+        lastBoundAddress = resolveBindAddress(listenInterface)
+        emit(.waitingForInterface(name: listenInterface))
+        startPathMonitorLocked(currentRun)
+
+        // Path updates need not accompany every IPv4 assignment. Poll only
+        // while waiting, with a modest cadence and leeway; ready/stopped
+        // servers have no retry timer.
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(
+            deadline: .now() + interfaceRetryInterval,
+            repeating: interfaceRetryInterval,
+            leeway: .milliseconds(250)
+        )
+        timer.setEventHandler { [weak self] in
+            guard let self, self.runID == currentRun,
+                  self.resolveBindAddress(self.listenInterface) != nil
+            else { return }
+            self.startLocked()
+        }
+        interfaceRetryTimer = timer
+        timer.resume()
     }
 
     /// Watch for the bound NIC's IPv4 changing while the server runs (DHCP
     /// renewal, Wi-Fi switch, sleep/wake). loopback and explicit-wildcard are
     /// address-stable / address-agnostic and skip the monitor. On a real
     /// change we coalesce into a single rebind (stop+start re-resolves the
-    /// current IPv4 and refreshes the access URLs); a vanished NIC rebinds and
-    /// then fails loudly via the guard in `startLocked`.
+    /// current IPv4 and refreshes the access URLs). Keep watching while a NIC
+    /// is unavailable so its return can recover without toggling the server.
     private func startPathMonitorLocked(_ runID: UUID) {
         pathMonitor?.cancel()
-        guard listenInterface != WebRemoteListenTarget.loopback,
-              listenInterface != WebRemoteListenTarget.any,
-              lastBoundAddress != nil
-        else {
+        guard usesNamedInterface else {
             pathMonitor = nil
             return
         }
@@ -467,16 +530,18 @@ final class WebRemoteServer: @unchecked Sendable {
     }
 
     private func handlePathUpdate(runID: UUID) {
-        guard runID == self.runID, !pathRestartScheduled else { return }
-        let current = WebRemoteAddressResolver.currentIPv4(forInterface: listenInterface)
+        guard runID == self.runID, usesNamedInterface, !pathRestartScheduled else { return }
+        let current = resolveBindAddress(listenInterface)
         guard current != lastBoundAddress else { return }
         // NWPathMonitor can fire a burst of updates on a topology change; wait
         // for things to settle, then rebind once.
         pathRestartScheduled = true
         queue.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, self.pathRestartScheduled else { return }
+            guard let self, self.runID == runID, self.pathRestartScheduled else { return }
             self.pathRestartScheduled = false
-            guard self.runID == runID else { return }
+            // The address may already have returned during the debounce.
+            // Preserve healthy listeners and their browser sessions in that case.
+            guard self.resolveBindAddress(self.listenInterface) != self.lastBoundAddress else { return }
             webRemoteLogger.info("Web remote interface address changed; rebinding")
             self.startLocked()
         }
@@ -496,8 +561,14 @@ final class WebRemoteServer: @unchecked Sendable {
                 let port = kind == .http ? self.ports.http : self.ports.webSocket
                 if case .posix(.EADDRINUSE) = error {
                     self.failLocked(status: .portConflict(port: port))
+                } else if self.shouldWaitForInterface(after: error) {
+                    self.waitForInterfaceLocked()
                 } else {
                     self.failLocked(error.localizedDescription)
+                }
+            case let .waiting(error):
+                if self.shouldWaitForInterface(after: error) {
+                    self.waitForInterfaceLocked()
                 }
             default:
                 break
@@ -507,7 +578,7 @@ final class WebRemoteServer: @unchecked Sendable {
 
     private func resetCredentialsLocked() {
         WebRemoteAccessKeyStore.reset(storage: secretStorage)
-        WebRemotePortStore.reset()
+        WebRemotePortStore.reset(defaults: defaults)
         startLocked()
     }
 
@@ -520,11 +591,9 @@ final class WebRemoteServer: @unchecked Sendable {
             let addresses = WebRemoteAddressResolver.localIPv4Addresses()
             hosts = addresses.isEmpty ? ["127.0.0.1"] : addresses
         default:
-            // Named interface: show its current IPv4. If the interface has gone
-            // away, fall back to loopback for display — the bind itself will
-            // fail and surface `.failed`.
-            let address = WebRemoteAddressResolver.currentIPv4(forInterface: listenInterface)
-            hosts = [address ?? "127.0.0.1"]
+            // Advertise the address actually bound, not a newer resolver
+            // snapshot that the listeners have not moved to yet.
+            hosts = lastBoundAddress.map { [$0] } ?? []
         }
         return hosts.map { "http://\($0):\(ports.http)/#token=\(token)" }
     }
@@ -545,6 +614,8 @@ final class WebRemoteServer: @unchecked Sendable {
         pathMonitor?.cancel()
         pathMonitor = nil
         pathRestartScheduled = false
+        interfaceRetryTimer?.cancel()
+        interfaceRetryTimer = nil
         lastBoundAddress = nil
         updateSubscribedPanesLocked()
         releaseTerminalSizes(controlledPanes)
@@ -559,24 +630,7 @@ final class WebRemoteServer: @unchecked Sendable {
     }
 
     private func failLocked(status: WebRemoteStatus) {
-        let controlledPanes = controlledPanesLocked()
-        runID = nil
-        httpListener?.cancel()
-        webSocketListener?.cancel()
-        httpListener = nil
-        webSocketListener = nil
-        clients.values.forEach { $0.cancel() }
-        clients.removeAll()
-        authThrottle.removeAll()
-        readyListeners.removeAll()
-        token = ""
-        tokenKey = Data()
-        pathMonitor?.cancel()
-        pathMonitor = nil
-        pathRestartScheduled = false
-        lastBoundAddress = nil
-        updateSubscribedPanesLocked()
-        releaseTerminalSizes(controlledPanes)
+        stopLocked(emitStatus: false)
         webRemoteLogger.error("Web remote failed: \(String(describing: status), privacy: .public)")
         emit(status)
     }
