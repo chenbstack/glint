@@ -306,8 +306,16 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
             // back. Resolve that ambiguity after the current commit: the new
             // host will be attached if it survived, or still detached if the
             // older host genuinely needs to recover it.
+            // Deferral is also a pending claim: the candidate may mount
+            // after this callback, or be reused before it runs. Preserve the
+            // mount recovery and invalidate callbacks superseded by reuse.
+            armPendingRecovery(surface, host: container, visible: isPaneVisible)
+            let epoch = surface.pendingRecoveryEpoch
             DispatchQueue.main.async {
-                guard container.window != nil, isPaneVisible() else { return }
+                guard surface.pendingRecoveryEpoch == epoch,
+                      surface.pendingRecoveryHost === container,
+                      container.pendingRecoverySurface === surface,
+                      container.window != nil, isPaneVisible() else { return }
                 performAttach(surface, to: container,
                               isPaneVisible: isPaneVisible, pass: .postCommitDeferred)
             }
