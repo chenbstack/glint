@@ -76,6 +76,25 @@ const translations = {
     disconnected: "连接已断开",
     enter_access_key: "输入访问密钥",
     existing_directory_hint: "目录必须已经存在；不会自动 git init 或 clone。",
+    files: "文件",
+    open_current_folder: "查看当前目录文件",
+    files_up: "上一级",
+    files_refresh: "刷新文件",
+    files_close: "返回终端",
+    files_empty: "此目录没有文件",
+    files_choose: "选择文件以预览",
+    files_loading: "正在读取…",
+    html_preview: "页面预览",
+    html_source: "源码",
+    html_preview_notice: "静态预览：脚本和外部资源不会加载",
+    image_too_large: "图片过大，无法生成预览",
+    image_unavailable: "无法解码此图片",
+    files_limited: "仅显示前 200 项",
+    files_unavailable: "当前终端没有可访问的本地目录",
+    invalid_file_path: "文件路径无效或超出项目目录",
+    file_unavailable: "文件或目录无法读取",
+    file_too_large: "文件超过 128 KB，无法预览",
+    file_not_text: "仅支持预览 UTF-8 文本文件",
     invalid_project_path: "目录不存在，或不是这台 Mac 上可访问的文件夹。",
     loading_terminal: "正在载入终端",
     last_terminal: "每个 Workspace 至少需要保留一个终端",
@@ -127,6 +146,25 @@ const translations = {
     disconnected: "Disconnected",
     enter_access_key: "Enter access key",
     existing_directory_hint: "The directory must already exist; Glint will not run git init or clone.",
+    files: "Files",
+    open_current_folder: "Browse the current terminal folder",
+    files_up: "Parent folder",
+    files_refresh: "Refresh files",
+    files_close: "Back to terminal",
+    files_empty: "This folder is empty",
+    files_choose: "Select a file to preview",
+    files_loading: "Loading…",
+    html_preview: "Preview",
+    html_source: "Source",
+    html_preview_notice: "Static preview: scripts and external resources are disabled",
+    image_too_large: "This image is too large to preview",
+    image_unavailable: "Unable to decode this image",
+    files_limited: "Showing the first 200 items",
+    files_unavailable: "This terminal has no accessible local directory",
+    invalid_file_path: "File path is invalid or outside the workspace",
+    file_unavailable: "File or folder cannot be read",
+    file_too_large: "Files over 128 KB cannot be previewed",
+    file_not_text: "Only UTF-8 text files can be previewed",
     invalid_project_path: "The directory does not exist or is not accessible on this Mac.",
     loading_terminal: "Loading terminal",
     last_terminal: "Each workspace must keep at least one terminal",
@@ -194,6 +232,20 @@ const elements = {
   createMessage: document.querySelector("#create-message"),
   createProject: document.querySelector("#create-project"),
   emptyState: document.querySelector("#empty-state"),
+  filesPanel: document.querySelector("#files-panel"),
+  filesUp: document.querySelector("#files-up"),
+  filesLocation: document.querySelector("#files-location"),
+  filesRefresh: document.querySelector("#files-refresh"),
+  filesClose: document.querySelector("#files-close"),
+  filesList: document.querySelector("#files-list"),
+  filesPreviewName: document.querySelector("#files-preview-name"),
+  filesContent: document.querySelector("#files-content"),
+  filesImage: document.querySelector("#files-image"),
+  filesImageViewport: document.querySelector("#files-image-viewport"),
+  filesHTML: document.querySelector("#files-html"),
+  filesSourceToggle: document.querySelector("#files-source-toggle"),
+  filesMessage: document.querySelector("#files-message"),
+  openFiles: document.querySelector("#open-files"),
   projectPath: document.querySelector("#project-path"),
   reconnect: document.querySelector("#reconnect"),
   refresh: document.querySelector("#refresh"),
@@ -288,6 +340,13 @@ let resizeTimer;
 let lastSentTerminalSize = "";
 let appliedBrandSignature = "";
 let appliedThemeSignature = "";
+let fileWorkspace = "";
+let filePane = "";
+let fileRoot = "";
+let fileDirectory = "";
+let filePath = "";
+let htmlSource = "";
+let htmlSourceShown = false;
 const mobileSidebarLayout = matchMedia(
   "(max-width: 760px), (max-width: 900px) and (max-height: 520px) and (orientation: landscape)"
 );
@@ -323,6 +382,7 @@ function connect() {
   lastServerMessageAt = Date.now();
   authenticated = false;
   controllingPane = "";
+  updateFilesButton();
   resetSession();
   setStatus("connecting", t("connecting"));
   socket = new WebSocket(websocketURL());
@@ -349,6 +409,7 @@ function connect() {
     if (socket !== currentSocket) return;
     authenticated = false;
     controllingPane = "";
+    updateFilesButton();
     setStatus("error", t("disconnected"));
     reconnectTimer = setTimeout(connect, reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 1.8, 8000);
@@ -468,6 +529,7 @@ function handleMessage(raw) {
       break;
     case "authenticated":
       authenticated = true;
+      updateFilesButton();
       setStatus("connected", t("connected"));
       if (elements.authDialog.open) elements.authDialog.close();
       elements.authError.textContent = "";
@@ -478,6 +540,55 @@ function handleMessage(raw) {
       applyTheme(message.theme);
       renderState(message);
       chooseInitialPane(message);
+      updateFilesButton();
+      if (filePane && !message.workspaces.some(item =>
+        item.id === fileWorkspace && item.panes?.some(pane => pane.id === filePane))) {
+        closeFiles();
+      }
+      break;
+    case "fileList":
+      if (message.workspace === fileWorkspace && message.pane === filePane && message.path === fileDirectory) {
+        fileRoot = message.root || "";
+        updateFileLocation();
+        renderFiles(message.entries || [], message.limit);
+      }
+      break;
+    case "fileContent":
+      if (message.workspace === fileWorkspace && message.pane === filePane && message.path === filePath) {
+        if (message.format === "html") {
+          htmlSource = message.content;
+          htmlSourceShown = false;
+          elements.filesHTML.srcdoc = sandboxedHTML(message.content);
+          elements.filesHTML.hidden = false;
+          elements.filesContent.hidden = true;
+          elements.filesSourceToggle.hidden = false;
+          elements.filesSourceToggle.textContent = t("html_source");
+          elements.filesMessage.textContent = t("html_preview_notice");
+        } else {
+          elements.filesContent.textContent = message.content;
+          elements.filesMessage.textContent = "";
+        }
+      }
+      break;
+    case "fileImage":
+      if (message.workspace === fileWorkspace && message.pane === filePane && message.path === filePath) {
+        elements.filesImage.src = `data:image/png;base64,${message.data}`;
+        elements.filesImage.alt = elements.filesPreviewName.textContent;
+        imageZoom.reset();
+        elements.filesImageViewport.hidden = false;
+        elements.filesContent.hidden = true;
+        elements.filesMessage.textContent = "";
+      }
+      break;
+    case "fileError":
+      if (message.workspace !== fileWorkspace || message.pane !== filePane) break;
+      if (message.path === filePath && filePath) {
+        elements.filesContent.textContent = "";
+        elements.filesMessage.textContent = fileErrorLabel(message.code);
+      } else if (message.path === fileDirectory) {
+        elements.filesList.replaceChildren();
+        elements.filesMessage.textContent = fileErrorLabel(message.code);
+      }
       break;
     case "snapshot":
       if (message.pane !== selectedPane) return;
@@ -500,6 +611,7 @@ function handleMessage(raw) {
       elements.createDialog.close();
       selectedPane = "";
       controllingPane = "";
+      updateFilesButton();
       sessionStorage.removeItem("glint-selected-pane");
       setSidebarOpen(false);
       setStatus("connected", t("project_opened"));
@@ -520,6 +632,7 @@ function handleMessage(raw) {
     }
     case "terminalClosed":
       if (message.pane === selectedPane) {
+        if (filePane === selectedPane) closeFiles();
         selectedPane = "";
         controllingPane = "";
         clearTimeout(paneRetryTimer);
@@ -529,6 +642,7 @@ function handleMessage(raw) {
         elements.terminal.classList.remove("visible");
         elements.emptyState.classList.remove("hidden");
         elements.activeLabel.textContent = t("select_terminal");
+        updateFilesButton();
       }
       setStatus("connected", t("terminal_closed"));
       break;
@@ -618,6 +732,7 @@ function applyTheme(theme) {
 function handleError(code) {
   if (code === "unauthorized") {
     authenticated = false;
+    updateFilesButton();
     token = "";
     encrypted = false;          // proof failed; we're still in the handshake
     sessionStorage.removeItem("glint-session-token");
@@ -654,6 +769,240 @@ function errorLabel(code) {
     "unknown-command": t("unknown_command"),
   };
   return labels[code] || t("operation_failed", { code });
+}
+
+function fileErrorLabel(code) {
+  return t({
+    "files-unavailable": "files_unavailable",
+    "invalid-file-path": "invalid_file_path",
+    "file-unavailable": "file_unavailable",
+    "file-too-large": "file_too_large",
+    "file-not-text": "file_not_text",
+    "image-too-large": "image_too_large",
+    "image-unavailable": "image_unavailable",
+  }[code] || "file_unavailable");
+}
+
+function sandboxedHTML(html) {
+  const policy = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'; navigate-to 'none'">`;
+  const doctype = /^\s*<!doctype[^>]*>/i.exec(html);
+  return doctype
+    ? `${doctype[0]}${policy}${html.slice(doctype[0].length)}`
+    : `${policy}${html}`;
+}
+
+function installImageZoom(viewport, image) {
+  let scale = 1;
+  let offsetX = 0;
+  let offsetY = 0;
+  let gesture = null;
+  let safariGestureScale = 1;
+  const maxScale = 6;
+  const clamp = (value, lower, upper) => Math.min(upper, Math.max(lower, value));
+  const center = touches => ({
+    x: (touches[0].clientX + touches[1].clientX) / 2,
+    y: (touches[0].clientY + touches[1].clientY) / 2,
+  });
+  const distance = touches => Math.hypot(
+    touches[0].clientX - touches[1].clientX,
+    touches[0].clientY - touches[1].clientY
+  );
+
+  function apply() {
+    const maxX = Math.max(0, (image.offsetWidth * scale - viewport.clientWidth) / 2);
+    const maxY = Math.max(0, (image.offsetHeight * scale - viewport.clientHeight) / 2);
+    offsetX = clamp(offsetX, -maxX, maxX);
+    offsetY = clamp(offsetY, -maxY, maxY);
+    image.style.setProperty("--zoom", scale);
+    image.style.setProperty("--pan-x", `${offsetX}px`);
+    image.style.setProperty("--pan-y", `${offsetY}px`);
+  }
+
+  function pointFromClient(clientX, clientY) {
+    const rect = viewport.getBoundingClientRect();
+    return { x: clientX - rect.left - rect.width / 2,
+             y: clientY - rect.top - rect.height / 2 };
+  }
+
+  function zoomAt(clientX, clientY, nextScale) {
+    const point = pointFromClient(clientX, clientY);
+    const ratio = nextScale / scale;
+    offsetX = point.x - (point.x - offsetX) * ratio;
+    offsetY = point.y - (point.y - offsetY) * ratio;
+    scale = nextScale;
+    apply();
+  }
+
+  function startGesture(touches) {
+    if (touches.length >= 2) {
+      const middle = center(touches);
+      const point = pointFromClient(middle.x, middle.y);
+      gesture = {
+        kind: "pinch", distance: Math.max(1, distance(touches)), startScale: scale,
+        imageX: (point.x - offsetX) / scale,
+        imageY: (point.y - offsetY) / scale,
+      };
+    } else if (touches.length === 1 && scale > 1) {
+      gesture = {
+        kind: "pan", x: touches[0].clientX, y: touches[0].clientY,
+        offsetX, offsetY,
+      };
+    } else {
+      gesture = null;
+    }
+  }
+
+  viewport.addEventListener("touchstart", event => {
+    startGesture(event.touches);
+    if (gesture) event.preventDefault();
+  }, { passive: false });
+  viewport.addEventListener("touchmove", event => {
+    if (event.touches.length >= 2) {
+      if (gesture?.kind !== "pinch") startGesture(event.touches);
+      const middle = center(event.touches);
+      const point = pointFromClient(middle.x, middle.y);
+      scale = clamp(gesture.startScale * distance(event.touches) / gesture.distance, 1, maxScale);
+      offsetX = point.x - gesture.imageX * scale;
+      offsetY = point.y - gesture.imageY * scale;
+      apply();
+      event.preventDefault();
+    } else if (event.touches.length === 1 && gesture?.kind === "pan") {
+      offsetX = gesture.offsetX + event.touches[0].clientX - gesture.x;
+      offsetY = gesture.offsetY + event.touches[0].clientY - gesture.y;
+      apply();
+      event.preventDefault();
+    }
+  }, { passive: false });
+  const finishTouch = event => startGesture(event.touches);
+  viewport.addEventListener("touchend", finishTouch);
+  viewport.addEventListener("touchcancel", finishTouch);
+  viewport.addEventListener("dblclick", () => reset());
+  viewport.addEventListener("wheel", event => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    zoomAt(event.clientX, event.clientY,
+      clamp(scale * Math.exp(-event.deltaY * 0.01), 1, maxScale));
+  }, { passive: false });
+  viewport.addEventListener("gesturestart", event => {
+    event.preventDefault();
+    safariGestureScale = scale;
+  }, { passive: false });
+  viewport.addEventListener("gesturechange", event => {
+    event.preventDefault();
+    if (gesture?.kind === "pinch") return;
+    const rect = viewport.getBoundingClientRect();
+    zoomAt(event.clientX || rect.left + rect.width / 2,
+      event.clientY || rect.top + rect.height / 2,
+      clamp(safariGestureScale * event.scale, 1, maxScale));
+  }, { passive: false });
+  window.addEventListener("resize", apply);
+
+  function reset() {
+    scale = 1;
+    offsetX = 0;
+    offsetY = 0;
+    gesture = null;
+    apply();
+  }
+  return { reset };
+}
+
+const imageZoom = installImageZoom(elements.filesImageViewport, elements.filesImage);
+
+function clearFilePreview() {
+  htmlSource = "";
+  htmlSourceShown = false;
+  elements.filesContent.textContent = "";
+  elements.filesContent.hidden = false;
+  elements.filesImageViewport.hidden = true;
+  elements.filesImage.removeAttribute("src");
+  imageZoom.reset();
+  elements.filesHTML.hidden = true;
+  elements.filesHTML.srcdoc = "";
+  elements.filesSourceToggle.hidden = true;
+}
+
+function updateFilesButton() {
+  elements.openFiles.hidden = !authenticated || !selectedPane;
+}
+
+function updateFileLocation() {
+  elements.filesLocation.textContent = fileRoot
+    ? `${fileRoot}${fileDirectory ? `/${fileDirectory}` : ""}`
+    : (fileDirectory ? `/${fileDirectory}` : "/");
+}
+
+function openFiles() {
+  if (!authenticated || !selectedPane) return;
+  const workspace = lastState?.workspaces.find(item =>
+    item.panes?.some(pane => pane.id === selectedPane));
+  if (!workspace) return;
+  fileWorkspace = workspace.id;
+  filePane = selectedPane;
+  fileRoot = workspace.panes.find(pane => pane.id === selectedPane)?.cwd || "";
+  fileDirectory = "";
+  filePath = "";
+  elements.filesPanel.hidden = false;
+  document.querySelector(".terminal-panel").classList.add("show-files");
+  elements.filesPreviewName.textContent = "";
+  clearFilePreview();
+  elements.filesMessage.textContent = t("files_choose");
+  browseFiles("");
+  if (mobileSidebarLayout.matches) setSidebarOpen(false);
+}
+
+function closeFiles() {
+  fileWorkspace = "";
+  filePane = "";
+  fileRoot = "";
+  filePath = "";
+  clearFilePreview();
+  elements.filesPanel.hidden = true;
+  document.querySelector(".terminal-panel").classList.remove("show-files");
+  fitTerminal();
+}
+
+function browseFiles(path) {
+  fileDirectory = path;
+  filePath = "";
+  updateFileLocation();
+  elements.filesUp.disabled = !path;
+  elements.filesList.replaceChildren();
+  elements.filesPreviewName.textContent = "";
+  clearFilePreview();
+  elements.filesMessage.textContent = t("files_loading");
+  send({ type: "listFiles", workspace: fileWorkspace, pane: filePane, path });
+}
+
+function renderFiles(entries, limit) {
+  elements.filesList.replaceChildren();
+  for (const entry of entries) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "file-entry";
+    button.disabled = entry.kind === "link";
+    button.textContent = `${entry.kind === "directory" ? "▸" : entry.kind === "link" ? "↗" : "▤"}  ${entry.name}`;
+    button.addEventListener("click", () => {
+      const path = fileDirectory ? `${fileDirectory}/${entry.name}` : entry.name;
+      if (entry.kind === "directory") {
+        browseFiles(path);
+      } else {
+        filePath = path;
+        elements.filesPreviewName.textContent = entry.name;
+        clearFilePreview();
+        elements.filesMessage.textContent = t("files_loading");
+        send({ type: "readFile", workspace: fileWorkspace, pane: filePane, path });
+      }
+    });
+    elements.filesList.append(button);
+  }
+  elements.filesMessage.textContent = entries.length ? t("files_choose") : t("files_empty");
+  if (entries.length >= limit) {
+    const note = document.createElement("p");
+    note.className = "files-list-note";
+    note.textContent = t("files_limited");
+    elements.filesList.append(note);
+  }
 }
 
 function chooseInitialPane(state) {
@@ -754,7 +1103,9 @@ function renderState(state) {
 }
 
 function selectPane(pane) {
+  if (filePane) closeFiles();
   selectedPane = pane;
+  updateFilesButton();
   controllingPane = "";
   clearTimeout(paneRetryTimer);
   paneRetryCount = 0;
@@ -828,6 +1179,23 @@ elements.authForm.addEventListener("submit", event => {
 
 elements.reconnect.addEventListener("click", connect);
 elements.refresh.addEventListener("click", () => send({ type: "list" }));
+elements.openFiles.addEventListener("click", openFiles);
+elements.filesUp.addEventListener("click", () => {
+  browseFiles(fileDirectory.split("/").slice(0, -1).join("/"));
+});
+elements.filesRefresh.addEventListener("click", () => browseFiles(fileDirectory));
+elements.filesClose.addEventListener("click", closeFiles);
+elements.filesSourceToggle.addEventListener("click", () => {
+  htmlSourceShown = !htmlSourceShown;
+  elements.filesContent.textContent = htmlSource;
+  elements.filesContent.hidden = !htmlSourceShown;
+  elements.filesHTML.hidden = htmlSourceShown;
+  elements.filesSourceToggle.textContent = t(htmlSourceShown ? "html_preview" : "html_source");
+  elements.filesMessage.textContent = htmlSourceShown ? "" : t("html_preview_notice");
+});
+elements.filesHTML.title = t("html_preview");
+[ ["filesUp", "files_up"], ["filesRefresh", "files_refresh"], ["filesClose", "files_close"] ]
+  .forEach(([element, label]) => elements[element].setAttribute("aria-label", t(label)));
 elements.autoFocusTerminal.addEventListener("change", () => {
   autoFocusTerminal = elements.autoFocusTerminal.checked;
   localStorage.setItem(autoFocusStorageKey, String(autoFocusTerminal));

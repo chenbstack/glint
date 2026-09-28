@@ -2914,6 +2914,19 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
+    /// Resolve the selected terminal's current local cwd, not its workspace
+    /// anchor. SSH panes report a local launch cwd as well, so exclude them.
+    func webRemoteFileRoot(workspace id: UUID, pane: String) -> String? {
+        guard let key = Self.parsePaneKey(pane), key.workspace == id,
+              let workspace = workspaces.first(where: { $0.id == id }),
+              !workspace.source.isRemote,
+              let model = workspace.panes[key.pane], model.remoteTarget == nil,
+              workspace.tabs.contains(where: { $0.root.leaves.contains(key.pane) }),
+              surfaceViews[key]?.remoteReviewContext == nil,
+              let cwd = surfaceViews[key]?.currentCwd() ?? model.workingDirectory else { return nil }
+        return WebRemoteProjectPath.resolveExistingDirectory(cwd)
+    }
+
     func webRemoteThemePayload() -> [String: Any] {
         let theme = Theme.current
         let accentColor = accent

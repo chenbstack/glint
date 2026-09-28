@@ -1,6 +1,7 @@
 import CryptoKit
 import Darwin
 import Foundation
+import ImageIO
 import Security
 import os
 
@@ -154,6 +155,133 @@ enum WebRemoteProjectPath {
               isDirectory.boolValue
         else { return nil }
         return standardized
+    }
+}
+
+/// Read-only, workspace-scoped file access for the browser. Paths on the wire
+/// are relative to the workspace root; links are never followed.
+enum WebRemoteFiles {
+    static let maxPreviewBytes = 128 * 1024
+    static let maxImageBytes = 40 * 1024 * 1024
+    static let maxImagePreviewBytes = 5 * 1024 * 1024
+    static let maxEntries = 200
+    private static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "tif", "tiff", "bmp", "ico", "avif"
+    ]
+
+    static func isImage(_ path: String) -> Bool {
+        imageExtensions.contains((path as NSString).pathExtension.lowercased())
+    }
+
+    static func isHTML(_ path: String) -> Bool {
+        ["html", "htm", "xhtml"].contains((path as NSString).pathExtension.lowercased())
+    }
+
+    static func resolve(root: String, relativePath: String) -> URL? {
+        guard relativePath.utf8.count <= 4096 else { return nil }
+        let components = relativePath.isEmpty ? [] : relativePath.split(separator: "/", omittingEmptySubsequences: false)
+        guard components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("\0") }) else {
+            return nil
+        }
+        let rootURL = URL(fileURLWithPath: root, isDirectory: true).resolvingSymlinksInPath()
+        var target = rootURL
+        for component in components {
+            target.appendPathComponent(String(component))
+            guard let values = try? target.resourceValues(forKeys: [.isSymbolicLinkKey]),
+                  values.isSymbolicLink != true else { return nil }
+        }
+        let resolved = target.resolvingSymlinksInPath().standardizedFileURL.path
+        let base = rootURL.standardizedFileURL.path
+        guard resolved == base || resolved.hasPrefix(base == "/" ? "/" : base + "/") else { return nil }
+        return target
+    }
+
+    static func list(root: String, path: String) -> Result<[[String: Any]], ErrorCode> {
+        guard let url = resolve(root: root, relativePath: path) else { return .failure(.invalidPath) }
+        guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
+            return .failure(.unavailable)
+        }
+        do {
+            let children = try FileManager.default.contentsOfDirectory(
+                at: url, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+                options: []
+            )
+            let sorted = children.sorted {
+                let left = (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+                let right = (try? $1.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+                return left == right
+                    ? $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+                    : left
+            }
+            return .success(sorted.prefix(maxEntries).map { child in
+                let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                return [
+                    "name": child.lastPathComponent,
+                    "kind": values?.isSymbolicLink == true ? "link"
+                        : (values?.isDirectory == true ? "directory"
+                            : (isImage(child.lastPathComponent) ? "image" : "file")),
+                ]
+            })
+        } catch { return .failure(.unavailable) }
+    }
+
+    static func read(root: String, path: String) -> Result<String, ErrorCode> {
+        guard !path.isEmpty, let url = resolve(root: root, relativePath: path) else {
+            return .failure(.invalidPath)
+        }
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              values.isRegularFile == true else { return .failure(.unavailable) }
+        guard let size = values.fileSize, size <= maxPreviewBytes else { return .failure(.tooLarge) }
+        guard let data = try? Data(contentsOf: url), data.count <= maxPreviewBytes else {
+            return .failure(.unavailable)
+        }
+        guard !data.contains(where: { $0 < 32 && $0 != 9 && $0 != 10 && $0 != 13 }),
+              let text = String(data: data, encoding: .utf8) else {
+            return .failure(.notText)
+        }
+        return .success(text)
+    }
+
+    /// ImageIO decodes only the first frame and bounds the image sent over the
+    /// encrypted socket. The browser receives PNG pixels, never source bytes.
+    static func readImage(root: String, path: String) -> Result<Data, ErrorCode> {
+        guard !path.isEmpty, isImage(path),
+              let url = resolve(root: root, relativePath: path) else {
+            return .failure(.invalidPath)
+        }
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              values.isRegularFile == true else { return .failure(.unavailable) }
+        guard let size = values.fileSize, size <= maxImageBytes else { return .failure(.imageTooLarge) }
+
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions),
+              CGImageSourceGetCount(source) > 0 else { return .failure(.imageUnavailable) }
+        let thumbnailOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: 1024,
+        ] as CFDictionary
+        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions) else {
+            return .failure(.imageUnavailable)
+        }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            output, "public.png" as CFString, 1, nil
+        ) else { return .failure(.imageUnavailable) }
+        CGImageDestinationAddImage(destination, thumbnail, nil)
+        guard CGImageDestinationFinalize(destination) else { return .failure(.imageUnavailable) }
+        let data = output as Data
+        guard data.count <= maxImagePreviewBytes else { return .failure(.imageTooLarge) }
+        return .success(data)
+    }
+
+    enum ErrorCode: String, Error {
+        case invalidPath = "invalid-file-path"
+        case unavailable = "file-unavailable"
+        case tooLarge = "file-too-large"
+        case notText = "file-not-text"
+        case imageTooLarge = "image-too-large"
+        case imageUnavailable = "image-unavailable"
     }
 }
 

@@ -59,12 +59,37 @@
               aria-label="关闭项目与终端" data-i18n-aria="close_sidebar"></button>
 
       <main class="terminal-panel">
+        <button id="open-files" class="terminal-files-button" type="button"
+                aria-label="查看当前目录文件" data-i18n-aria="open_current_folder" hidden>▤</button>
         <div id="empty-state" class="empty-state">
           <div class="empty-icon">›_</div>
           <h1 data-i18n="choose_terminal_heading">从左侧选择一个终端</h1>
           <p data-i18n="sync_description">画面和输入会在浏览器与这台 Mac 上的 Glint 会话之间实时同步。</p>
         </div>
         <div id="terminal" aria-label="远程终端" data-i18n-aria="remote_terminal"></div>
+        <section id="files-panel" class="files-panel" aria-label="文件" data-i18n-aria="files" hidden>
+          <div class="files-toolbar">
+            <button id="files-up" class="icon-button" type="button" aria-label="上一级">↑</button>
+            <span id="files-location" class="files-location"></span>
+            <button id="files-refresh" class="icon-button" type="button" aria-label="刷新文件">↻</button>
+            <button id="files-close" class="icon-button" type="button" aria-label="返回终端">×</button>
+          </div>
+          <div class="files-body">
+            <div id="files-list" class="files-list"></div>
+            <div class="files-preview">
+              <div class="files-preview-header">
+                <div id="files-preview-name" class="files-preview-name"></div>
+                <button id="files-source-toggle" class="ghost-button" type="button" hidden></button>
+              </div>
+              <pre id="files-content"></pre>
+              <div id="files-image-viewport" class="files-image-viewport" hidden>
+                <img id="files-image" alt="">
+              </div>
+              <iframe id="files-html" title="HTML 预览" sandbox="" referrerpolicy="no-referrer" hidden></iframe>
+              <p id="files-message" class="files-message"></p>
+            </div>
+          </div>
+        </section>
         <div class="quick-keys" aria-label="快捷键" data-i18n-aria="quick_keys">
           <button type="button" data-input="1b">Esc</button>
           <button type="button" data-input="09">Tab</button>
