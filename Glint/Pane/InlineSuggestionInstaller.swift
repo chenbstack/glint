@@ -147,17 +147,19 @@ enum InlineSuggestionInstaller {
         let content = """
         # Glint inline suggestions — sourced via the fenced block in ~/.zshrc.
         # Skip if the user already has zsh-autosuggestions loaded by their own
-        # config (oh-my-zsh / prezto users): we respect their setup.
-        if [[ -z ${ZSH_AUTOSUGGEST_VERSION-} ]]; then
+        # config (oh-my-zsh / prezto users): we respect their setup. Probe the
+        # _zsh_autosuggest_start hook the plugin defines when sourced — not
+        # ZSH_AUTOSUGGEST_VERSION, which zsh-autosuggestions never sets, so
+        # the old guard here could never fire.
+        if (( ! $+functions[_zsh_autosuggest_start] )); then
             ZSH_AUTOSUGGEST_STRATEGY=(history)
             : ${ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE:='fg=8'}
             : ${ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE:=200}
+            # No manual bindkey needed: the plugin's default
+            # ZSH_AUTOSUGGEST_ACCEPT_WIDGETS already binds → (forward-char)
+            # and End (end-of-line) to accept the suggestion.
             if [[ -r "$HOME/.config/glint/zsh-autosuggestions.zsh" ]]; then
                 source "$HOME/.config/glint/zsh-autosuggestions.zsh"
-                # → and End accept the full suggestion. Tab stays as zsh's
-                # native completion (don't repurpose it).
-                bindkey '^[[C' autosuggest-accept 2>/dev/null
-                bindkey '^E'   autosuggest-accept 2>/dev/null
             fi
         fi
         """
