@@ -2924,6 +2924,10 @@ final class WorkspaceStore: ObservableObject {
               workspace.tabs.contains(where: { $0.root.leaves.contains(key.pane) }),
               surfaceViews[key]?.remoteReviewContext == nil,
               let cwd = surfaceViews[key]?.currentCwd() ?? model.workingDirectory else { return nil }
+        // SSH does not always publish a remote cwd/title (notably one-shot
+        // commands). Reject its actual PTY process before exposing local cwd.
+        let process = surfaceViews[key]?.foregroundProcessName() ?? paneProcesses[key]
+        guard process?.lowercased() != "ssh" else { return nil }
         return WebRemoteProjectPath.resolveExistingDirectory(cwd)
     }
 

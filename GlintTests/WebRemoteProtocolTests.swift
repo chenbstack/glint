@@ -523,6 +523,26 @@ final class WebRemoteProtocolTests: XCTestCase {
         } else { XCTFail("Large content must be rejected") }
     }
 
+    @MainActor
+    func testWebRemoteFileRootRejectsSSHWithoutRemoteTitleMetadata() throws {
+        let project = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: project) }
+        var workspace = Workspace.fresh(name: "SSH", accentHex: "5E5CE6", symbol: "S")
+        let pane = try XCTUnwrap(workspace.selectedTab?.focusedPane)
+        workspace.panes[pane]?.workingDirectory = project.path
+        // Both ssh host and ssh host command may have no remote cwd/title.
+        XCTAssertNil(workspace.panes[pane]?.remoteTarget)
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [workspace]
+        let key = WorkspaceStore.WorkspacePaneKey(workspace: workspace.id, pane: pane)
+        let handle = "\(workspace.id.uuidString):\(pane.value)"
+        store.paneProcesses[key] = "ssh"
+        XCTAssertNil(store.webRemoteFileRoot(workspace: workspace.id, pane: handle))
+        store.paneProcesses[key] = "zsh"
+        XCTAssertEqual(store.webRemoteFileRoot(workspace: workspace.id, pane: handle), project.path)
+    }
+
     func testWebRemoteImagePreviewUsesWorkspacePathAndReturnsPNG() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
