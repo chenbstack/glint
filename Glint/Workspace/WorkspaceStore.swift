@@ -2081,11 +2081,13 @@ final class WorkspaceStore: ObservableObject {
         NSLog("[glint] pane process changed: ws=\(key.workspace.uuidString.prefix(8)) pane=\(key.pane.value) -> \(name)")
     }
 
-    private func reconcileAgentState(key: WorkspacePaneKey, processName: String) {
+    func reconcileAgentState(key: WorkspacePaneKey, processName: String) {
         guard var state = paneAgentState[key] else { return }
         guard let runningKind = Self.agentKind(named: processName) else {
-            if state.status == .idle, Self.isBenignShellProcessName(processName) {
+            if Self.isBenignShellProcessName(processName),
+               state.status == .idle || Self.isBusyStatus(state.status) {
                 paneAgentState.removeValue(forKey: key)
+                clearDockBadge(for: key)
             }
             return
         }
@@ -2099,6 +2101,41 @@ final class WorkspaceStore: ObservableObject {
     }
 
     // MARK: agent hook events
+
+    /// Codex's shared app-server can keep the pane environment of the client
+    /// that first started it. Verify against attached CLIs before allowing an
+    /// event to mutate status or persisted resume IDs. A known session wins;
+    /// otherwise only a unique active pane with the event's cwd is safe.
+    private func codexHookTarget(addressedKey: WorkspacePaneKey,
+                                 session: String?, cwd: String?) -> WorkspacePaneKey? {
+        var attached: [(key: WorkspacePaneKey, pane: Pane, cwd: String?)] = []
+        for workspace in workspaces {
+            for pane in workspace.panes.values {
+                let key = WorkspacePaneKey(workspace: workspace.id, pane: pane.id)
+                let view = surfaceViews[key]
+                let process = view?.foregroundProcessName() ?? paneProcesses[key]
+                guard process.flatMap(Self.agentKind(named:)) == .codex else { continue }
+                attached.append((key, pane, view?.currentCwd() ?? pane.workingDirectory))
+            }
+        }
+        if let session, Self.isValidSessionId(session) {
+            let matches = attached.filter { $0.pane.sessionIds[PaneAgentKind.codex.rawValue] == session }
+            if !matches.isEmpty { return matches.count == 1 ? matches[0].key : nil }
+        }
+        if let cwd, !cwd.isEmpty {
+            // Never treat a missing/relative cwd as the current directory.
+            guard cwd.hasPrefix("/") else { return nil }
+            let eventPath = URL(fileURLWithPath: cwd).standardizedFileURL.resolvingSymlinksInPath().path
+            let matches = attached.filter {
+                guard let path = $0.cwd, path.hasPrefix("/"), $0.pane.remoteTarget == nil else { return false }
+                return URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path == eventPath
+            }
+            return matches.count == 1 ? matches[0].key : nil
+        }
+        // Compatibility with older reporters: accept the supplied address
+        // only while a Codex CLI is actually attached there.
+        return attached.first(where: { $0.key == addressedKey })?.key
+    }
 
     static func permissionRequestStatus(
         kind: PaneAgentKind,
@@ -2120,9 +2157,21 @@ final class WorkspaceStore: ObservableObject {
         guard let info,
               let paneStr = info["pane"] as? String,
               let hook = info["hook"] as? String,
-              let key = Self.parsePaneKey(paneStr) else { return }
+              let addressedKey = Self.parsePaneKey(paneStr) else { return }
 
         let explicitKind = (info["agent"] as? String).flatMap(Self.agentKind(named:))
+        let key: WorkspacePaneKey
+        if explicitKind == .codex {
+            guard let target = codexHookTarget(
+                addressedKey: addressedKey,
+                session: info["session"] as? String,
+                cwd: info["cwd"] as? String
+            ) else { return }
+            key = target
+        } else {
+            key = addressedKey
+        }
+        guard paneExists(key) else { return }
         let foregroundKind = surfaceViews[key]?.foregroundProcessName()
             .flatMap(Self.agentKind(named:))
         let polledKind = paneProcesses[key].flatMap(Self.agentKind(named:))

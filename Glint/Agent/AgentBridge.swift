@@ -171,12 +171,14 @@ final class AgentBridge {
         let sessionB64: String?
         let transcriptB64: String?
         let turnB64: String?
+        let cwdB64: String?
 
         private enum CodingKeys: String, CodingKey {
             case pane, hook, agent
             case sessionB64 = "session_b64"
             case transcriptB64 = "transcript_b64"
             case turnB64 = "turn_b64"
+            case cwdB64 = "cwd_b64"
         }
     }
 
@@ -186,6 +188,12 @@ final class AgentBridge {
             return nil
         }
         var result = ["pane": env.pane, "hook": env.hook]
+        if let encoded = env.cwdB64,
+           let data = Data(base64Encoded: encoded),
+           let value = String(data: data, encoding: .utf8),
+           !value.isEmpty {
+            result["cwd"] = value
+        }
         if let agent = env.agent, !agent.isEmpty { result["agent"] = agent }
         if let encoded = env.sessionB64,
            let data = Data(base64Encoded: encoded),
