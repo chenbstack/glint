@@ -1699,6 +1699,8 @@ private struct WorkspaceSwitcher: View {
             .fixedSize()
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("current-workspace")
+        .accessibilityLabel(Text(verbatim: currentName))
         .onHover { hover = $0 }
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             WorkspaceSwitcherPopover { isOpen = false }
