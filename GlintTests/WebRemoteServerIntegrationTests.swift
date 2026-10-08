@@ -247,6 +247,71 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         Data(repeating: 0, count: WebRemoteCrypto.challengeLength).base64EncodedString()
     }
 
+    @MainActor
+    func testEncryptedFileRequestsRejectCwdChangesAndReadRefreshedRoot() async throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let first = base.appendingPathComponent("A")
+        let second = base.appendingPathComponent("B")
+        try fm.createDirectory(at: first, withIntermediateDirectories: true)
+        try fm.createDirectory(at: second, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: base) }
+        try Data("contents A".utf8).write(to: first.appendingPathComponent("same.txt"))
+        try Data("contents B".utf8).write(to: second.appendingPathComponent("same.txt"))
+        try fm.createSymbolicLink(at: second.appendingPathComponent("link.txt"),
+                                 withDestinationURL: first.appendingPathComponent("same.txt"))
+        var workspace = Workspace.fresh(name: "File test", accentHex: "5E5CE6", symbol: "F")
+        let pane = try XCTUnwrap(workspace.selectedTab?.focusedPane)
+        workspace.panes[pane]?.workingDirectory = first.path
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [workspace]
+        let handle = "\(workspace.id.uuidString):\(pane.value)"
+        let tokenKey = try XCTUnwrap(WebRemoteCrypto.tokenKey(from: XCTUnwrap(readyToken)))
+        let task = makeWebSocket()
+        defer { task.cancel(with: .goingAway, reason: nil) }
+        let challenge = try await receiveAuthChallenge(task)
+        let proof = WebRemoteCrypto.proof(tokenKey: tokenKey, challenge: challenge)
+        try await send(task, ["type": "authenticate", "proof": proof.base64EncodedString()])
+        let keys = WebRemoteCrypto.sessionKeys(tokenKey: tokenKey, challenge: challenge)
+        let authenticated = try await receiveEncryptedJSON(task, key: keys.s2c)
+        XCTAssertEqual(authenticated["type"] as? String, "authenticated")
+        var counter: UInt64 = 0
+        func request(_ type: String, root: String, path: String) async throws -> [String: Any] {
+            let requestID = String(counter)
+            let payload: [String: Any] = [
+                "type": type, "workspace": workspace.id.uuidString, "pane": handle,
+                "root": root, "path": path, "request": requestID,
+            ]
+            let data = try JSONSerialization.data(withJSONObject: payload)
+            let frame = try XCTUnwrap(WebRemoteCrypto.sealFrame(plaintext: data, key: keys.c2s, counter: counter))
+            counter += 1
+            try await task.send(.data(frame))
+            for _ in 0..<10 {
+                let reply = try await receiveEncryptedJSON(task, key: keys.s2c)
+                if reply["request"] as? String == requestID { return reply }
+            }
+            throw URLError(.badServerResponse)
+        }
+        let listing = try await request("listFiles", root: "", path: "")
+        let originalRoot = try XCTUnwrap(listing["root"] as? String)
+        XCTAssertEqual(listing["type"] as? String, "fileList")
+        let original = try await request("readFile", root: originalRoot, path: "same.txt")
+        XCTAssertEqual(original["content"] as? String, "contents A")
+        store.workspaces[0].panes[pane]?.workingDirectory = second.path
+        let stale = try await request("readFile", root: originalRoot, path: "same.txt")
+        XCTAssertEqual(stale["code"] as? String, "file-root-changed")
+        XCTAssertNil(stale["content"])
+        let refreshed = try await request("listFiles", root: "", path: "")
+        let refreshedRoot = try XCTUnwrap(refreshed["root"] as? String)
+        XCTAssertNotEqual(refreshedRoot, originalRoot)
+        let current = try await request("readFile", root: refreshedRoot, path: "same.txt")
+        XCTAssertEqual(current["content"] as? String, "contents B")
+        let link = try await request("readFile", root: refreshedRoot, path: "link.txt")
+        XCTAssertEqual(link["type"] as? String, "fileError")
+        XCTAssertNil(link["content"])
+        withExtendedLifetime(store) {}
+    }
+
     // MARK: - Pure-function behaviour
 
     func testAuthBackoffCurveIsMonotonicAndCapped() {

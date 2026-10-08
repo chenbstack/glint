@@ -501,9 +501,9 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertEqual(entries.first?["name"] as? String, "main.swift")
         XCTAssertEqual(entries.first?["kind"] as? String, "file")
         XCTAssertEqual(try WebRemoteFiles.read(root: root.path, path: "src/main.swift").get(), "hello\n")
-        XCTAssertNil(WebRemoteFiles.resolve(root: root.path, relativePath: "../outside"))
-        XCTAssertNil(WebRemoteFiles.resolve(root: root.path, relativePath: "/etc/passwd"))
-        XCTAssertNil(WebRemoteFiles.resolve(root: root.path, relativePath: "src/../main.swift"))
+        XCTAssertThrowsError(try WebRemoteFiles.read(root: root.path, path: "../outside").get())
+        XCTAssertThrowsError(try WebRemoteFiles.read(root: root.path, path: "/etc/passwd").get())
+        XCTAssertThrowsError(try WebRemoteFiles.read(root: root.path, path: "src/../main.swift").get())
     }
 
     func testWebRemoteFilesRejectLinksBinaryAndOversize() throws {
@@ -513,7 +513,7 @@ final class WebRemoteProtocolTests: XCTestCase {
         try FileManager.default.createSymbolicLink(
             at: root.appendingPathComponent("outside"), withDestinationURL: URL(fileURLWithPath: "/etc")
         )
-        XCTAssertNil(WebRemoteFiles.resolve(root: root.path, relativePath: "outside/passwd"))
+        XCTAssertThrowsError(try WebRemoteFiles.read(root: root.path, path: "outside/passwd").get())
         try Data([0, 1, 2]).write(to: root.appendingPathComponent("binary"))
         try Data(repeating: 65, count: WebRemoteFiles.maxPreviewBytes + 1)
             .write(to: root.appendingPathComponent("large"))
@@ -521,6 +521,97 @@ final class WebRemoteProtocolTests: XCTestCase {
         } else { XCTFail("Binary content must be rejected") }
         if case .failure(.tooLarge) = WebRemoteFiles.read(root: root.path, path: "large") {
         } else { XCTFail("Large content must be rejected") }
+    }
+
+    func testFileDirectoryStaysAnchoredWhenRootIsReplaced() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = base.appendingPathComponent("root")
+        let outside = base.appendingPathComponent("outside")
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        try fm.createDirectory(at: outside, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: base) }
+        try Data("inside".utf8).write(to: root.appendingPathComponent("inside.txt"))
+        try Data("outside".utf8).write(to: outside.appendingPathComponent("outside.txt"))
+        let directory = try WebRemoteFiles.Directory(root: root.path)
+        try fm.moveItem(at: root, to: base.appendingPathComponent("moved"))
+        try fm.createSymbolicLink(at: root, withDestinationURL: outside)
+        for _ in 0..<2 {
+            XCTAssertEqual(try directory.list(path: "").compactMap { $0["name"] as? String }, ["inside.txt"])
+        }
+        XCTAssertEqual(try directory.read(path: "inside.txt", limit: 128, tooLarge: .tooLarge), Data("inside".utf8))
+        XCTAssertThrowsError(try directory.read(path: "outside.txt", limit: 128, tooLarge: .tooLarge))
+    }
+
+    func testFileReadsAndListingsCannotFollowConcurrentSymlinkSwaps() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = base.appendingPathComponent("root")
+        let item = root.appendingPathComponent("item")
+        let alternate = root.appendingPathComponent("alternate")
+        let outside = base.appendingPathComponent("outside")
+        try fm.createDirectory(at: item, withIntermediateDirectories: true)
+        try fm.createDirectory(at: outside, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: base) }
+        try Data("inside".utf8).write(to: item.appendingPathComponent("test.txt"))
+        try Data("outside".utf8).write(to: outside.appendingPathComponent("test.txt"))
+        try Data().write(to: outside.appendingPathComponent("outside-only.txt"))
+        try fm.createSymbolicLink(at: alternate, withDestinationURL: outside)
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global().async {
+            defer { group.leave() }
+            for _ in 0..<4000 {
+                _ = renameatx_np(AT_FDCWD, item.path, AT_FDCWD, alternate.path, UInt32(RENAME_SWAP))
+            }
+        }
+        defer { group.wait() }
+        for _ in 0..<500 {
+            if case let .success(text) = WebRemoteFiles.read(root: root.path, path: "item/test.txt") {
+                XCTAssertEqual(text, "inside")
+            }
+            if case let .success(entries) = WebRemoteFiles.list(root: root.path, path: "item") {
+                XCTAssertFalse(entries.contains { $0["name"] as? String == "outside-only.txt" })
+            }
+        }
+    }
+
+    func testFileReadersRejectLeafLinksAndSpecialFiles() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+        try Data("inside".utf8).write(to: root.appendingPathComponent("text"))
+        try fm.createSymbolicLink(at: root.appendingPathComponent("link.png"), withDestinationURL: root.appendingPathComponent("text"))
+        XCTAssertThrowsError(try WebRemoteFiles.read(root: root.path, path: "link.png").get())
+        XCTAssertThrowsError(try WebRemoteFiles.readImage(root: root.path, path: "link.png").get())
+        XCTAssertEqual(mkfifo(root.appendingPathComponent("pipe").path, 0o600), 0)
+        XCTAssertThrowsError(try WebRemoteFiles.read(root: root.path, path: "pipe").get())
+        XCTAssertThrowsError(try WebRemoteFiles.read(root: root.path, path: "").get())
+    }
+
+    func testFileRequestsRejectChangedRootsAndRequireCorrelation() throws {
+        var payload: [String: Any] = [
+            "type": "readFile", "workspace": UUID().uuidString, "pane": "pane",
+            "root": "/project-A", "path": "README.md", "request": "17",
+        ]
+        let request = try XCTUnwrap(WebRemoteFileRequest(payload))
+        XCTAssertEqual(try request.validatedRoot(current: "/project-A").get(), "/project-A")
+        XCTAssertThrowsError(try request.validatedRoot(current: "/project-B").get()) {
+            XCTAssertEqual($0 as? WebRemoteFiles.ErrorCode, .rootChanged)
+        }
+        XCTAssertThrowsError(try request.validatedRoot(current: nil).get())
+        XCTAssertEqual(request.error(.rootChanged)["request"] as? String, "17")
+        payload.removeValue(forKey: "request")
+        XCTAssertNil(WebRemoteFileRequest(payload))
+        payload["request"] = "18"
+        payload["root"] = ""
+        XCTAssertNil(WebRemoteFileRequest(payload), "Reads may not discover/rebase the root")
+        payload["type"] = "listFiles"
+        XCTAssertNil(WebRemoteFileRequest(payload), "Subdirectory listings must bind a root too")
+        payload["path"] = ""
+        let discovery = try XCTUnwrap(WebRemoteFileRequest(payload))
+        XCTAssertEqual(try discovery.validatedRoot(current: "/project-B").get(), "/project-B")
     }
 
     @MainActor
@@ -562,7 +653,7 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertTrue(WebRemoteFiles.isHTML("page.HTM"))
         let preview = try WebRemoteFiles.readImage(root: root.path, path: "photo.PNG").get()
         XCTAssertEqual(Array(preview.prefix(8)), [137, 80, 78, 71, 13, 10, 26, 10])
-        XCTAssertNil(WebRemoteFiles.resolve(root: root.path, relativePath: "../photo.PNG"))
+        XCTAssertThrowsError(try WebRemoteFiles.readImage(root: root.path, path: "../photo.PNG").get())
     }
 
     @MainActor

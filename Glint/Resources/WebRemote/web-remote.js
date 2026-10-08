@@ -91,6 +91,7 @@ const translations = {
     image_unavailable: "无法解码此图片",
     files_limited: "仅显示前 200 项",
     files_unavailable: "当前终端没有可访问的本地目录",
+    file_root_changed: "终端目录已变化，正在刷新…",
     invalid_file_path: "文件路径无效或超出项目目录",
     file_unavailable: "文件或目录无法读取",
     file_too_large: "文件超过 128 KB，无法预览",
@@ -161,6 +162,7 @@ const translations = {
     image_unavailable: "Unable to decode this image",
     files_limited: "Showing the first 200 items",
     files_unavailable: "This terminal has no accessible local directory",
+    file_root_changed: "The terminal directory changed. Refreshing…",
     invalid_file_path: "File path is invalid or outside the workspace",
     file_unavailable: "File or folder cannot be read",
     file_too_large: "Files over 128 KB cannot be previewed",
@@ -343,6 +345,10 @@ let appliedThemeSignature = "";
 let fileWorkspace = "";
 let filePane = "";
 let fileRoot = "";
+let filePaneCwd = "";
+let fileRequestSequence = 0;
+let fileListRequest = "";
+let fileContentRequest = "";
 let fileDirectory = "";
 let filePath = "";
 let htmlSource = "";
@@ -541,20 +547,30 @@ function handleMessage(raw) {
       renderState(message);
       chooseInitialPane(message);
       updateFilesButton();
-      if (filePane && !message.workspaces.some(item =>
-        item.id === fileWorkspace && item.panes?.some(pane => pane.id === filePane))) {
-        closeFiles();
+      if (filePane) {
+        const pane = message.workspaces.find(item => item.id === fileWorkspace)
+          ?.panes?.find(pane => pane.id === filePane);
+        if (!pane) {
+          closeFiles();
+        } else if ((pane.cwd || "") !== filePaneCwd) {
+          filePaneCwd = pane.cwd || "";
+          fileRoot = "";
+          browseFiles("");
+        }
       }
       break;
     case "fileList":
-      if (message.workspace === fileWorkspace && message.pane === filePane && message.path === fileDirectory) {
+      if (matchesFileResponse(message, fileListRequest, fileDirectory)
+          && (!fileRoot || message.root === fileRoot)) {
+        fileListRequest = "";
         fileRoot = message.root || "";
         updateFileLocation();
         renderFiles(message.entries || [], message.limit);
       }
       break;
     case "fileContent":
-      if (message.workspace === fileWorkspace && message.pane === filePane && message.path === filePath) {
+      if (matchesFileResponse(message, fileContentRequest, filePath) && message.root === fileRoot) {
+        fileContentRequest = "";
         if (message.format === "html") {
           htmlSource = message.content;
           htmlSourceShown = false;
@@ -571,7 +587,8 @@ function handleMessage(raw) {
       }
       break;
     case "fileImage":
-      if (message.workspace === fileWorkspace && message.pane === filePane && message.path === filePath) {
+      if (matchesFileResponse(message, fileContentRequest, filePath) && message.root === fileRoot) {
+        fileContentRequest = "";
         elements.filesImage.src = `data:image/png;base64,${message.data}`;
         elements.filesImage.alt = elements.filesPreviewName.textContent;
         imageZoom.reset();
@@ -580,16 +597,25 @@ function handleMessage(raw) {
         elements.filesMessage.textContent = "";
       }
       break;
-    case "fileError":
-      if (message.workspace !== fileWorkspace || message.pane !== filePane) break;
-      if (message.path === filePath && filePath) {
-        elements.filesContent.textContent = "";
-        elements.filesMessage.textContent = fileErrorLabel(message.code);
-      } else if (message.path === fileDirectory) {
-        elements.filesList.replaceChildren();
-        elements.filesMessage.textContent = fileErrorLabel(message.code);
+    case "fileError": {
+      const reading = matchesFileResponse(message, fileContentRequest, filePath);
+      const listing = matchesFileResponse(message, fileListRequest, fileDirectory);
+      if (!reading && !listing) break;
+      if (message.code === "file-root-changed") {
+        fileRoot = "";
+        browseFiles("");
+        break;
       }
+      if (reading) {
+        fileContentRequest = "";
+        clearFilePreview();
+      } else {
+        fileListRequest = "";
+        elements.filesList.replaceChildren();
+      }
+      elements.filesMessage.textContent = fileErrorLabel(message.code);
       break;
+    }
     case "snapshot":
       if (message.pane !== selectedPane) return;
       clearTimeout(paneRetryTimer);
@@ -774,6 +800,7 @@ function errorLabel(code) {
 function fileErrorLabel(code) {
   return t({
     "files-unavailable": "files_unavailable",
+    "file-root-changed": "file_root_changed",
     "invalid-file-path": "invalid_file_path",
     "file-unavailable": "file_unavailable",
     "file-too-large": "file_too_large",
@@ -922,6 +949,11 @@ function clearFilePreview() {
   elements.filesSourceToggle.hidden = true;
 }
 
+function matchesFileResponse(message, request, path) {
+  return !!request && message.request === request && message.workspace === fileWorkspace
+    && message.pane === filePane && message.path === path;
+}
+
 function updateFilesButton() {
   elements.openFiles.hidden = !authenticated || !selectedPane;
 }
@@ -939,7 +971,8 @@ function openFiles() {
   if (!workspace) return;
   fileWorkspace = workspace.id;
   filePane = selectedPane;
-  fileRoot = workspace.panes.find(pane => pane.id === selectedPane)?.cwd || "";
+  filePaneCwd = workspace.panes.find(pane => pane.id === selectedPane)?.cwd || "";
+  fileRoot = "";
   fileDirectory = "";
   filePath = "";
   elements.filesPanel.hidden = false;
@@ -955,6 +988,9 @@ function closeFiles() {
   fileWorkspace = "";
   filePane = "";
   fileRoot = "";
+  filePaneCwd = "";
+  fileListRequest = "";
+  fileContentRequest = "";
   filePath = "";
   clearFilePreview();
   elements.filesPanel.hidden = true;
@@ -965,13 +1001,15 @@ function closeFiles() {
 function browseFiles(path) {
   fileDirectory = path;
   filePath = "";
+  fileContentRequest = "";
+  fileListRequest = String(++fileRequestSequence);
   updateFileLocation();
   elements.filesUp.disabled = !path;
   elements.filesList.replaceChildren();
   elements.filesPreviewName.textContent = "";
   clearFilePreview();
   elements.filesMessage.textContent = t("files_loading");
-  send({ type: "listFiles", workspace: fileWorkspace, pane: filePane, path });
+  send({ type: "listFiles", workspace: fileWorkspace, pane: filePane, path, root: fileRoot, request: fileListRequest });
 }
 
 function renderFiles(entries, limit) {
@@ -991,7 +1029,8 @@ function renderFiles(entries, limit) {
         elements.filesPreviewName.textContent = entry.name;
         clearFilePreview();
         elements.filesMessage.textContent = t("files_loading");
-        send({ type: "readFile", workspace: fileWorkspace, pane: filePane, path });
+        fileContentRequest = String(++fileRequestSequence);
+        send({ type: "readFile", workspace: fileWorkspace, pane: filePane, path, root: fileRoot, request: fileContentRequest });
       }
     });
     elements.filesList.append(button);

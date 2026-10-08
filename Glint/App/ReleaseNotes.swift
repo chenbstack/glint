@@ -52,6 +52,25 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.28-beta.6",
+            en: [
+                "Browse the current terminal folder from Web Remote and preview text, images, and static HTML. Image previews support pinch zoom and dragging.",
+                "File previews stay within the selected folder even while files are being replaced. Changing the terminal directory refreshes the browser, and late responses can no longer show content from the wrong folder.",
+                "Web Remote automatically resumes listening when the selected network interface recovers after a Wi-Fi change or sleep, without widening access to other interfaces.",
+                "Shared Codex daemon events now update the matching terminal instead of leaving another pane stuck thinking or overwriting its resume session.",
+                "Managed shell configuration blocks no longer swallow the next line into a comment, and inline suggestions respect an existing zsh-autosuggestions setup.",
+                "Switching workspaces more reliably restores split terminals. Accessibility tools can identify the current workspace and selected sidebar card in both sidebar layouts."
+            ],
+            zh: [
+                "网页远程端支持浏览当前终端目录，预览文本、图片和静态 HTML；图片支持双指缩放和拖动。",
+                "文件在并发替换时也不会绕过所选目录的访问限制。终端切换目录后，网页会刷新文件列表，迟到的响应不再显示其他目录的内容。",
+                "Wi-Fi 切换或睡眠唤醒后，所选网卡恢复可用时，网页远程服务会自动恢复监听，不会扩大到其他网卡。",
+                "共享 Codex daemon 的事件会更新对应终端，不再让其他窗格卡在思考中或覆盖其会话恢复信息。",
+                "托管 shell 配置块不再把下一行粘成注释，命令提示也会尊重已有的 zsh-autosuggestions 配置。",
+                "切换工作区时，分屏终端的恢复更加可靠；侧栏展开和折叠时，辅助功能工具都能识别当前工作区和选中的侧栏卡片。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.28-beta.4",
             en: [
                 "Panes no longer get stranded when the layout changes. Two problems that came back in beta.2 and beta.3: after switching workspaces, a pane could keep showing the previous workspace's terminal until you relaunched Glint, and after closing or splitting panes, one side could stop resizing when you dragged the divider. Terminals are now handed between containers explicitly instead of racing for them.",
