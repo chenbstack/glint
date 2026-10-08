@@ -817,7 +817,8 @@ private struct WorkspaceCard: View {
         // name (verbatim — user data); value = the same status line the
         // card renders visually, with the elapsed time spelled out.
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(active ? [.isButton, .isSelected] : [.isButton])
+        .accessibilityIdentifier("workspace-\(ws.id.uuidString)")
         .accessibilityLabel(Text(verbatim: ws.displayName))
         .accessibilityValue(Text(verbatim: archived
                                  ? String(localized: "Archived")

@@ -405,20 +405,15 @@ struct ToolbarHeader: View {
                 GlintBrandMark()
                     .padding(.trailing, 10)
 
-                // With the sidebar collapsed the workspace switcher joins
-                // the leading capsule (Photos-style cluster) instead of
-                // floating as its own island; a hairline seam separates it
-                // from the brand.
-                if store.sidebarCollapsed {
-                    if floating {
-                        Rectangle()
-                            .fill(Theme.overlay(0.10))
-                            .frame(width: 1, height: 16)
-                    }
-                    WorkspaceSwitcher()
-                        .padding(.leading, floating ? 0 : 6)
-                        .transition(.opacity.combined(with: .move(edge: .leading)))
+                // Keep the current workspace available in both sidebar
+                // layouts, including its stable accessibility identity.
+                if floating {
+                    Rectangle()
+                        .fill(Theme.overlay(0.10))
+                        .frame(width: 1, height: 16)
                 }
+                WorkspaceSwitcher()
+                    .padding(.leading, floating ? 0 : 6)
             }
             .liquidGlass(enabled: floating, cornerRadius: 19, tint: Theme.glassTint)
             .arrowPointer()
@@ -1699,6 +1694,9 @@ private struct WorkspaceSwitcher: View {
             .fixedSize()
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("current-workspace")
+        .accessibilityLabel(Text(verbatim: currentName))
+        .accessibilityValue(Text(verbatim: currentName))
         .onHover { hover = $0 }
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             WorkspaceSwitcherPopover { isOpen = false }
