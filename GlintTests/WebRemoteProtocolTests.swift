@@ -1,3 +1,4 @@
+import AppKit
 import CryptoKit
 import XCTest
 @testable import Glint
@@ -488,6 +489,112 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertNil(WebRemoteProjectPath.resolveExistingDirectory(file.path))
         XCTAssertNil(WebRemoteProjectPath.resolveExistingDirectory(root.appendingPathComponent("missing").path))
         XCTAssertNil(WebRemoteProjectPath.resolveExistingDirectory("relative/path"))
+    }
+
+    func testWebRemoteFilesListsAndReadsOnlyWorkspaceText() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let folder = root.appendingPathComponent("src")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("hello\n".utf8).write(to: folder.appendingPathComponent("main.swift"))
+        let entries = try WebRemoteFiles.list(root: root.path, path: "src").get()
+        XCTAssertEqual(entries.first?["name"] as? String, "main.swift")
+        XCTAssertEqual(entries.first?["kind"] as? String, "file")
+        XCTAssertEqual(try WebRemoteFiles.read(root: root.path, path: "src/main.swift").get(), "hello\n")
+        XCTAssertNil(WebRemoteFiles.resolve(root: root.path, relativePath: "../outside"))
+        XCTAssertNil(WebRemoteFiles.resolve(root: root.path, relativePath: "/etc/passwd"))
+        XCTAssertNil(WebRemoteFiles.resolve(root: root.path, relativePath: "src/../main.swift"))
+    }
+
+    func testWebRemoteFilesRejectLinksBinaryAndOversize() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createSymbolicLink(
+            at: root.appendingPathComponent("outside"), withDestinationURL: URL(fileURLWithPath: "/etc")
+        )
+        XCTAssertNil(WebRemoteFiles.resolve(root: root.path, relativePath: "outside/passwd"))
+        try Data([0, 1, 2]).write(to: root.appendingPathComponent("binary"))
+        try Data(repeating: 65, count: WebRemoteFiles.maxPreviewBytes + 1)
+            .write(to: root.appendingPathComponent("large"))
+        if case .failure(.notText) = WebRemoteFiles.read(root: root.path, path: "binary") {
+        } else { XCTFail("Binary content must be rejected") }
+        if case .failure(.tooLarge) = WebRemoteFiles.read(root: root.path, path: "large") {
+        } else { XCTFail("Large content must be rejected") }
+    }
+
+    @MainActor
+    func testWebRemoteFileRootRejectsSSHWithoutRemoteTitleMetadata() throws {
+        let project = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: project) }
+        var workspace = Workspace.fresh(name: "SSH", accentHex: "5E5CE6", symbol: "S")
+        let pane = try XCTUnwrap(workspace.selectedTab?.focusedPane)
+        workspace.panes[pane]?.workingDirectory = project.path
+        // Both ssh host and ssh host command may have no remote cwd/title.
+        XCTAssertNil(workspace.panes[pane]?.remoteTarget)
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [workspace]
+        let key = WorkspaceStore.WorkspacePaneKey(workspace: workspace.id, pane: pane)
+        let handle = "\(workspace.id.uuidString):\(pane.value)"
+        store.paneProcesses[key] = "ssh"
+        XCTAssertNil(store.webRemoteFileRoot(workspace: workspace.id, pane: handle))
+        store.paneProcesses[key] = "zsh"
+        XCTAssertEqual(store.webRemoteFileRoot(workspace: workspace.id, pane: handle), project.path)
+    }
+
+    func testWebRemoteImagePreviewUsesWorkspacePathAndReturnsPNG() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 8,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+            isPlanar: false, colorSpaceName: .deviceRGB,
+            bytesPerRow: 0, bitsPerPixel: 0
+        ))
+        bitmap.setColor(.red, atX: 0, y: 0)
+        let source = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        try source.write(to: root.appendingPathComponent("photo.PNG"))
+
+        XCTAssertTrue(WebRemoteFiles.isImage("photo.PNG"))
+        XCTAssertFalse(WebRemoteFiles.isImage("page.html"))
+        XCTAssertTrue(WebRemoteFiles.isHTML("page.HTM"))
+        let preview = try WebRemoteFiles.readImage(root: root.path, path: "photo.PNG").get()
+        XCTAssertEqual(Array(preview.prefix(8)), [137, 80, 78, 71, 13, 10, 26, 10])
+        XCTAssertNil(WebRemoteFiles.resolve(root: root.path, relativePath: "../photo.PNG"))
+    }
+
+    @MainActor
+    func testWebRemoteFileRootUsesRequestedTerminalCwd() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let project = root.appendingPathComponent("project")
+        let other = root.appendingPathComponent("other")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var workspace = Workspace.fresh(name: "Files", accentHex: "5E5CE6", symbol: "F")
+        let first = try XCTUnwrap(workspace.selectedTab?.focusedPane)
+        workspace.panes[first]?.workingDirectory = project.path
+        workspace.source.repoRoot = project.path
+        let second = PaneID(value: 1)
+        workspace.panes[second] = Pane(id: second, title: "zsh", workingDirectory: other.path)
+        workspace.tabs.append(WorkspaceTab(
+            id: TabID(value: 1), name: nil, root: .leaf(second), focusedPane: second
+        ))
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [workspace]
+
+        XCTAssertEqual(store.webRemoteFileRoot(
+            workspace: workspace.id, pane: "\(workspace.id.uuidString):1"
+        ), other.path)
+        XCTAssertNil(store.webRemoteFileRoot(workspace: UUID(), pane: "\(workspace.id.uuidString):1"))
+        XCTAssertNil(store.webRemoteFileRoot(workspace: workspace.id, pane: "\(workspace.id.uuidString):2"))
+        store.workspaces[0].panes[second]?.remoteTarget = "example.com"
+        XCTAssertNil(store.webRemoteFileRoot(
+            workspace: workspace.id, pane: "\(workspace.id.uuidString):1"
+        ))
     }
 
     @MainActor

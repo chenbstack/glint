@@ -293,6 +293,21 @@ input:focus {
   grid-template-rows: minmax(0, 1fr) auto;
   background: var(--terminal-bg);
 }
+.terminal-files-button {
+  position: absolute;
+  z-index: 3;
+  top: 11px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--panel-2);
+  font-size: 16px;
+}
+.terminal-files-button:hover { color: var(--accent); }
+.terminal-files-button[hidden], .terminal-panel.show-files .terminal-files-button { display: none; }
 
 #terminal {
   min-width: 0;
@@ -304,6 +319,125 @@ input:focus {
   touch-action: manipulation;
 }
 #terminal.visible { display: block; }
+.terminal-panel.show-files #terminal,
+.terminal-panel.show-files .empty-state,
+.terminal-panel.show-files .quick-keys { display: none; }
+.files-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--panel-2);
+}
+.files-panel[hidden] { display: none; }
+.files-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.files-toolbar .icon-button:disabled { opacity: .35; cursor: default; }
+.files-location {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font: 11px ui-monospace, monospace;
+}
+.files-body {
+  display: grid;
+  grid-template-columns: minmax(180px, 32%) minmax(0, 1fr);
+  min-height: 0;
+  flex: 1;
+}
+.files-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  border-right: 1px solid var(--line);
+}
+.file-entry {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px;
+  color: var(--text);
+  background: transparent;
+  font: 11px ui-monospace, monospace;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-entry:hover:not(:disabled) { background: var(--overlay); }
+.file-entry:disabled { color: var(--faint); cursor: default; }
+.files-list-note { padding: 0 7px; color: var(--faint); font-size: 10px; }
+.files-preview { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
+.files-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  border-bottom: 1px solid var(--line);
+}
+.files-preview-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px 14px;
+  color: var(--muted);
+  font: 11px ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.files-preview-header .ghost-button { margin-right: 10px; font-size: 10px; }
+#files-content {
+  min-height: 0;
+  overflow: auto;
+  flex: 1;
+  margin: 0;
+  padding: 14px;
+  color: var(--text);
+  font: 12px/1.5 ui-monospace, "SFMono-Regular", Menlo, monospace;
+  tab-size: 4;
+}
+#files-content[hidden], #files-image-viewport[hidden], #files-html[hidden],
+#files-source-toggle[hidden] { display: none; }
+.files-image-viewport {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: contain;
+  background: var(--terminal-bg);
+}
+#files-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: 100%;
+  max-height: 100%;
+  transform: translate(-50%, -50%) translate(var(--pan-x, 0px), var(--pan-y, 0px)) scale(var(--zoom, 1));
+  transform-origin: center;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+#files-html {
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  border: 0;
+  background: #fff;
+}
+.files-message { margin: 0; padding: 8px 14px; color: var(--muted); font-size: 11px; }
 #terminal .xterm { height: 100%; }
 #terminal .xterm-viewport { scrollbar-color: color-mix(in srgb, var(--text) 16%, transparent) transparent; }
 
@@ -446,6 +580,7 @@ dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(8px); }
   .workspace-pane-list { overflow: visible; }
   #workspace-list { white-space: normal; overflow: auto; }
   .terminal-panel { height: 100%; }
+  .files-body { grid-template-columns: minmax(110px, 40%) minmax(0, 1fr); }
   #terminal { padding-top: 7px; }
 }
 
