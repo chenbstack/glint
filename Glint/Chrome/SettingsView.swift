@@ -1147,11 +1147,20 @@ private struct TerminalPane: View {
                             ForEach(store.webRemoteInterfaceOptions) { iface in
                                 Text(verbatim: "\(iface.name) (\(iface.address))").tag(iface.name)
                             }
+                            if store.webRemoteListenInterface != WebRemoteListenTarget.loopback,
+                               store.webRemoteListenInterface != WebRemoteListenTarget.any,
+                               !store.webRemoteInterfaceOptions.contains(where: { $0.name == store.webRemoteListenInterface }) {
+                                Text(verbatim: store.webRemoteListenInterface)
+                                    .tag(store.webRemoteListenInterface)
+                            }
                             Text("All interfaces (less secure)").tag(WebRemoteListenTarget.any)
                         }
                         .pickerStyle(.menu)
                         .labelsHidden()
-                        Button(action: { store.refreshWebRemoteInterfaces() }) {
+                        Button(action: {
+                            store.refreshWebRemoteInterfaces()
+                            WebRemoteServer.shared.refreshListenAddress()
+                        }) {
                             Image(systemName: "arrow.clockwise")
                         }
                         .buttonStyle(.borderless)
@@ -1238,6 +1247,7 @@ private struct TerminalPane: View {
             Text("Connected browsers will be disconnected. A new key and ports will be generated, so old links will stop working.")
         }
         .onAppear {
+            store.refreshWebRemoteInterfaces()
             presentWebRemoteAlert(for: store.webRemoteStatus)
         }
         .onChange(of: store.webRemoteStatus) { _, status in
@@ -1286,6 +1296,11 @@ private struct TerminalPane: View {
             return String(localized: "Off — no network ports are bound.")
         case .starting:
             return String(localized: "Starting the local web server…")
+        case let .waitingForInterface(name):
+            return String(
+                format: String(localized: "Waiting for %@ to become available. Reconnects automatically."),
+                name
+            )
         case .ready:
             return String(localized: "Ready — copy a session link to another browser.")
         case let .portConflict(port):
@@ -1336,7 +1351,7 @@ private struct TerminalPane: View {
             if let iface = store.webRemoteInterfaceOptions.first(where: { $0.name == store.webRemoteListenInterface }) {
                 return iface.address
             }
-            return String(localized: "Selected interface is no longer available. Pick another or use All interfaces.")
+            return String(localized: "Selected interface is temporarily unavailable. Reconnects automatically when it returns, or choose another interface.")
         }
     }
 
