@@ -399,6 +399,7 @@ enum AgentHookInstaller {
     SESSION=""
     TRANSCRIPT=""
     TURN=""
+    EVENT_CWD=""
     if TMP=$(/usr/bin/mktemp "${TMPDIR:-/tmp}/glint-hook.XXXXXX"); then
       trap '/bin/rm -f "$TMP"' EXIT HUP INT TERM
       cat >"$TMP"
@@ -429,6 +430,11 @@ enum AgentHookInstaller {
         TRANSCRIPT=$(/usr/bin/plutil -extract transcript_path raw -o - "$TMP" 2>/dev/null || true)
         TURN=$(/usr/bin/plutil -extract turn_id raw -o - "$TMP" 2>/dev/null || true)
       fi
+      # A shared Codex daemon can inherit a different client's pane env.
+      # Preserve the event's own cwd so Glint can verify its destination.
+      if [ "$AGENT" = "codex" ]; then
+        EVENT_CWD=$(/usr/bin/plutil -extract cwd raw -o - "$TMP" 2>/dev/null || true)
+      fi
       # Antigravity (agy) has no UserPromptSubmit event; the turn's first
       # PreInvocation plays that role — remap it so the turn timer starts
       # with the turn instead of the first tool call. Verified against the
@@ -452,11 +458,15 @@ enum AgentHookInstaller {
     fi
 
     APPROVAL_META=""
+    if [ -n "$EVENT_CWD" ]; then
+      CWD_B64=$(printf '%s' "$EVENT_CWD" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
+      APPROVAL_META=$(printf ',"cwd_b64":"%s"' "$CWD_B64")
+    fi
     if [ -n "$TRANSCRIPT" ] && [ -n "$TURN" ]; then
       TRANSCRIPT_B64=$(printf '%s' "$TRANSCRIPT" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
       TURN_B64=$(printf '%s' "$TURN" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
-      APPROVAL_META=$(printf ',"transcript_b64":"%s","turn_b64":"%s"' \\
-        "$TRANSCRIPT_B64" "$TURN_B64")
+      APPROVAL_META=$(printf '%s,"transcript_b64":"%s","turn_b64":"%s"' \\
+        "$APPROVAL_META" "$TRANSCRIPT_B64" "$TURN_B64")
     fi
 
     if [ -n "$SESSION" ]; then

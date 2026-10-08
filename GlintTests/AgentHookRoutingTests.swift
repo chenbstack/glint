@@ -3,6 +3,126 @@ import XCTest
 @testable import Glint
 
 final class AgentHookRoutingTests: XCTestCase {
+    @MainActor
+    private func codexRoutingFixture() throws -> (WorkspaceStore, WorkspaceStore.WorkspacePaneKey, WorkspaceStore.WorkspacePaneKey) {
+        var c1 = Workspace.fresh(name: "C1Slim", accentHex: "5E5CE6", symbol: "C")
+        var glint = Workspace.fresh(name: "Glint", accentHex: "5E5CE6", symbol: "G")
+        let c1Pane = try XCTUnwrap(c1.selectedTab?.focusedPane)
+        let glintPane = try XCTUnwrap(glint.selectedTab?.focusedPane)
+        c1.panes[c1Pane]?.workingDirectory = "/tmp/C1Slim"
+        glint.panes[glintPane]?.workingDirectory = "/tmp/glint"
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [c1, glint]
+        let c1Key = WorkspaceStore.WorkspacePaneKey(workspace: c1.id, pane: c1Pane)
+        let glintKey = WorkspaceStore.WorkspacePaneKey(workspace: glint.id, pane: glintPane)
+        store.paneProcesses[c1Key] = "zsh"
+        store.paneProcesses[glintKey] = "codex"
+        return (store, c1Key, glintKey)
+    }
+
+    @MainActor
+    func testCodexDaemonHookRoutesToUniqueActivePaneByEventCwd() throws {
+        let (store, c1, glint) = try codexRoutingFixture()
+        for hook in ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"] {
+            let decoded = try XCTUnwrap(runReporter(
+                hook: hook, agent: "codex",
+                pane: "\(c1.workspace.uuidString):\(c1.pane.value)",
+                stdinJSON: #"{"session_id":"glint-session","cwd":"/tmp/glint"}"#,
+                extraEnv: nil, expectSocketTraffic: true
+            ))
+            store.handleAgentEvent(decoded)
+            XCTAssertNil(store.paneAgentState[c1])
+            XCTAssertNotNil(store.paneAgentState[glint])
+            XCTAssertNil(store.workspaces[0].panes[c1.pane]?.sessionIds["codex"])
+            XCTAssertEqual(store.workspaces[1].panes[glint.pane]?.sessionIds["codex"], "glint-session")
+        }
+        XCTAssertFalse(WorkspaceStore.isBusyStatus(try XCTUnwrap(store.paneAgentState[glint]).status))
+    }
+
+    @MainActor
+    func testCodexSessionBindingSurvivesToolWorkingDirectoryChange() throws {
+        let (store, c1, glint) = try codexRoutingFixture()
+        store.workspaces[1].panes[glint.pane]?.sessionIds = ["codex": "glint-session"]
+        store.handleAgentEvent([
+            "pane": "\(c1.workspace.uuidString):\(c1.pane.value)",
+            "agent": "codex", "hook": "PreToolUse", "session": "glint-session", "cwd": "/tmp/elsewhere",
+        ])
+        XCTAssertNil(store.paneAgentState[c1])
+        XCTAssertEqual(store.paneAgentState[glint]?.status, .tool)
+    }
+
+    @MainActor
+    func testCodexSameCwdAmbiguityDoesNotGuessFromDaemonPaneEnvironment() throws {
+        let (store, c1, glint) = try codexRoutingFixture()
+        store.paneProcesses[c1] = "codex"
+        store.workspaces[0].panes[c1.pane]?.workingDirectory = "/tmp/glint"
+        store.handleAgentEvent([
+            "pane": "\(c1.workspace.uuidString):\(c1.pane.value)",
+            "agent": "codex", "hook": "UserPromptSubmit", "session": "new-session", "cwd": "/tmp/glint",
+        ])
+        XCTAssertNil(store.paneAgentState[c1])
+        XCTAssertNil(store.paneAgentState[glint])
+        store.workspaces[1].panes[glint.pane]?.sessionIds = ["codex": "new-session"]
+        store.handleAgentEvent([
+            "pane": "\(c1.workspace.uuidString):\(c1.pane.value)",
+            "agent": "codex", "hook": "UserPromptSubmit", "session": "new-session", "cwd": "/tmp/glint",
+        ])
+        XCTAssertNil(store.paneAgentState[c1])
+        XCTAssertEqual(store.paneAgentState[glint]?.status, .thinking)
+    }
+
+    @MainActor
+    func testLegacyCodexHookStillWorksInAttachedPane() throws {
+        let (store, _, glint) = try codexRoutingFixture()
+        store.handleAgentEvent([
+            "pane": "\(glint.workspace.uuidString):\(glint.pane.value)",
+            "agent": "codex", "hook": "UserPromptSubmit", "session": "glint-session",
+        ])
+        XCTAssertEqual(store.paneAgentState[glint]?.status, .thinking)
+    }
+
+    @MainActor
+    func testReturningToShellClearsBusyStateButKeepsCompletionAttention() throws {
+        let (store, c1, _) = try codexRoutingFixture()
+        for status in [PaneAgentStatus.idle, .thinking, .tool, .compacting, .needsPermission] {
+            store.paneAgentState[c1] = PaneAgentState(kind: .codex, status: status, detail: nil, updatedAt: Date())
+            store.reconcileAgentState(key: c1, processName: "zsh")
+            XCTAssertNil(store.paneAgentState[c1], "\(status) must not outlive its CLI")
+        }
+        for status in [PaneAgentStatus.justCompleted, .failed, .needsReply] {
+            store.paneAgentState[c1] = PaneAgentState(kind: .codex, status: status, detail: nil, updatedAt: Date())
+            store.reconcileAgentState(key: c1, processName: "zsh")
+            XCTAssertEqual(store.paneAgentState[c1]?.status, status)
+        }
+        store.paneAgentState[c1] = PaneAgentState(kind: .codex, status: .thinking, detail: nil, updatedAt: Date())
+        store.reconcileAgentState(key: c1, processName: "python3")
+        XCTAssertEqual(store.paneAgentState[c1]?.status, .thinking)
+    }
+
+    @MainActor
+    func testDetachedCodexHooksDoNotMarkShellPaneThinkingOrReplaceSession() throws {
+        var workspace = Workspace.fresh(name: "C1Slim", accentHex: "5E5CE6", symbol: "C")
+        let pane = try XCTUnwrap(workspace.selectedTab?.focusedPane)
+        workspace.panes[pane]?.workingDirectory = "/tmp/C1Slim"
+        workspace.panes[pane]?.sessionIds = ["codex": "c1-session"]
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [workspace]
+        let key = WorkspaceStore.WorkspacePaneKey(workspace: workspace.id, pane: pane)
+        store.paneProcesses[key] = "zsh"
+
+        // A shared Codex daemon keeps the environment of the terminal that
+        // started it, even when another client starts a different session.
+        for hook in ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"] {
+            store.handleAgentEvent([
+                "pane": "\(workspace.id.uuidString):\(pane.value)",
+                "agent": "codex", "hook": hook, "session": "glint-session",
+            ])
+            XCTAssertNil(store.paneAgentState[key], "\(hook) must not target a detached shell pane")
+            XCTAssertEqual(store.workspaces[0].panes[pane]?.sessionIds["codex"], "c1-session")
+            XCTAssertNil(store.agentSummary(for: store.workspaces[0]))
+        }
+    }
+
     func testLegacyCanonicalRebindCannotStrandActiveBridge() throws {
         let root = URL(fileURLWithPath: "/tmp/gb-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -122,8 +242,6 @@ final class AgentHookRoutingTests: XCTestCase {
         XCTAssertTrue(body.contains("NeedsReply"))
         XCTAssertFalse(body.contains("agent-debug.sock"),
                        "broadcast fallback should be gone after the direct-route revert")
-        XCTAssertFalse(body.contains("cwd_b64"),
-                       "cwd metadata is no longer needed once routing is pane-based")
 
         let temp = FileManager.default.temporaryDirectory
             .appendingPathComponent("glint-reporter-\(UUID().uuidString)")
@@ -194,6 +312,7 @@ final class AgentHookRoutingTests: XCTestCase {
             "session": "session-123",
             "turn": "turn-123",
             "transcript": "/tmp/codex.jsonl",
+            "cwd": "/tmp/repo",
         ])
     }
 
