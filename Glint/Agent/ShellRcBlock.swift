@@ -11,25 +11,36 @@ enum ShellRcBlock {
     /// Insert or replace a fenced block delimited by `begin` and `end`. The
     /// returned text contains exactly one such block.
     ///
-    /// - Empty input → just `block + "\n"`.
+    /// - Empty input → just `block` (ending in one newline).
     /// - Existing block (located by line-anchored sentinel match) → replaced
     ///   in place; surrounding content untouched.
     /// - No existing block → appended with one blank line above so we don't
     ///   smash into a user's last line.
+    ///
+    /// `block` is normalized to end in exactly one newline. The callers'
+    /// blocks are Swift multiline literals, which end at the closing
+    /// delimiter WITHOUT one, and pasting such a block over a located range
+    /// used to glue whatever followed the block onto the end sentinel
+    /// (#124) — silently commenting it out, and re-gluing it on every
+    /// launch. Normalizing here also heals an already-glued file the next
+    /// time the block is rewritten.
     static func upsert(in text: String,
                        begin: String,
                        end: String,
                        block: String) -> String {
+        var block = block
+        while block.hasSuffix("\n") { block.removeLast() }
+        block += "\n"
         if let range = locate(in: text, begin: begin, end: end) {
             var out = text
             out.replaceSubrange(range, with: block)
             return out
         }
-        if text.isEmpty { return block + "\n" }
+        if text.isEmpty { return block }
         var out = text
         if !out.hasSuffix("\n") { out += "\n" }      // newline before block
         if !out.hasSuffix("\n\n") { out += "\n" }    // one blank line above block
-        out += block + "\n"
+        out += block
         return out
     }
 

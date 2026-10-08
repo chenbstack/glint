@@ -52,12 +52,44 @@ final class ShellRcBlockTests: XCTestCase {
     }
 
     func testUpsertReplacesBlockInPlace() {
-        // `upsert` consumes the newline after `end`, so the replacement block
-        // must carry its own trailing newline (the real managed block does).
+        // Replacement must leave surrounding lines intact; `upsert` normalizes
+        // the block's trailing newline itself (see the #124 tests below).
         let old = "pre\n\(begin)\nold body\n\(end)\npost\n"
         let new = "\(begin)\nnew body\n\(end)\n"
         let result = ShellRcBlock.upsert(in: old, begin: begin, end: end, block: new)
         XCTAssertEqual(result, "pre\n\(begin)\nnew body\n\(end)\npost\n")
+    }
+
+    /// #124: the real managed blocks are Swift multiline literals, which end
+    /// at the closing delimiter WITHOUT a trailing newline. Replacing a block
+    /// with such a literal used to glue the line after the block onto the end
+    /// sentinel, silently commenting it out — and re-gluing it on every
+    /// launch, so a manual fix didn't survive an app restart.
+    func testUpsertReplaceCarriesTrailingNewline() {
+        let old = "pre\n\(begin)\nold body\n\(end)\npost\n"
+        let new = "\(begin)\nnew body\n\(end)"          // no trailing newline
+        let result = ShellRcBlock.upsert(in: old, begin: begin, end: end, block: new)
+        XCTAssertEqual(result, "pre\n\(begin)\nnew body\n\(end)\npost\n")
+    }
+
+    /// A file already damaged by the #124 glue heals on the next launch: the
+    /// line stuck to the end sentinel lands back on its own line. (The real
+    /// damaged file ends with a newline — the glued line swallowed the one
+    /// after the sentinel, not the file's own.)
+    func testUpsertHealsLineGluedAfterEndSentinel() {
+        let glued = "pre\n\(begin)\nold body\n\(end)source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh\n"
+        let new = "\(begin)\nnew body\n\(end)"
+        let result = ShellRcBlock.upsert(in: glued, begin: begin, end: end, block: new)
+        XCTAssertEqual(result, "pre\n\(begin)\nnew body\n\(end)\nsource /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh\n")
+    }
+
+    /// Launch-to-launch idempotency: re-upserting the same block must not
+    /// change the file (no write, no trailing-blank-line creep).
+    func testUpsertIsIdempotent() {
+        let block = "\(begin)\nx\n\(end)"
+        let first = ShellRcBlock.upsert(in: "user config\n", begin: begin, end: end, block: block)
+        let second = ShellRcBlock.upsert(in: first, begin: begin, end: end, block: block)
+        XCTAssertEqual(second, first)
     }
 
     func testUpsertAppendsWhenAbsent() {
