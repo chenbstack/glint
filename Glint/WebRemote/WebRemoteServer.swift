@@ -922,18 +922,11 @@ final class WebRemoteServer: @unchecked Sendable {
                 clientID: clientID
             )
         case "listFiles", "readFile":
-            guard let value = object["workspace"] as? String,
-                  value.count <= 36,
-                  let workspaceID = UUID(uuidString: value),
-                  let pane = object["pane"] as? String,
-                  pane.count <= 128,
-                  let path = object["path"] as? String,
-                  path.utf8.count <= 4096 else {
+            guard let request = WebRemoteFileRequest(object) else {
                 sendError("bad-request", to: clientID)
                 return
             }
-            accessFiles(workspace: workspaceID, pane: pane, path: path,
-                        read: type == "readFile", clientID: clientID)
+            accessFiles(request, clientID: clientID)
         default:
             sendError("unknown-command", to: clientID)
         }
@@ -1104,59 +1097,57 @@ final class WebRemoteServer: @unchecked Sendable {
         }
     }
 
-    private func accessFiles(workspace: UUID, pane: String, path: String,
-                             read: Bool, clientID: UUID) {
+    private func accessFiles(_ request: WebRemoteFileRequest, clientID: UUID) {
         DispatchQueue.main.async { [weak self] in
             guard let self, let store = WorkspaceStore.current else { return }
-            guard let root = store.webRemoteFileRoot(workspace: workspace, pane: pane) else {
-                self.queue.async { [weak self] in
-                    self?.sendJSON(["type": "fileError", "workspace": workspace.uuidString,
-                                    "pane": pane, "path": path,
-                                    "code": "files-unavailable"], to: clientID)
-                }
+            let currentRoot = store.webRemoteFileRoot(workspace: request.workspace, pane: request.pane)
+            guard case let .success(root) = request.validatedRoot(current: currentRoot) else {
+                let error: WebRemoteFiles.ErrorCode = currentRoot == nil ? .rootUnavailable : .rootChanged
+                self.queue.async { [weak self] in self?.sendJSON(request.error(error), to: clientID) }
                 return
             }
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                let response: [String: Any]
-                if read {
-                    if WebRemoteFiles.isImage(path) {
-                        switch WebRemoteFiles.readImage(root: root, path: path) {
+                var response: [String: Any] = [
+                    "workspace": request.workspace.uuidString, "pane": request.pane,
+                    "path": request.path, "root": root, "request": request.requestID,
+                ]
+                if request.read {
+                    if WebRemoteFiles.isImage(request.path) {
+                        switch WebRemoteFiles.readImage(root: root, path: request.path) {
                         case let .success(png):
-                            response = ["type": "fileImage", "workspace": workspace.uuidString,
-                                        "pane": pane,
-                                        "path": path, "data": png.base64EncodedString()]
-                        case let .failure(error):
-                            response = ["type": "fileError", "workspace": workspace.uuidString,
-                                        "pane": pane,
-                                        "path": path, "code": error.rawValue]
+                            response["type"] = "fileImage"
+                            response["data"] = png.base64EncodedString()
+                        case let .failure(error): response = request.error(error)
                         }
                     } else {
-                        switch WebRemoteFiles.read(root: root, path: path) {
+                        switch WebRemoteFiles.read(root: root, path: request.path) {
                         case let .success(content):
-                            response = ["type": "fileContent", "workspace": workspace.uuidString,
-                                        "pane": pane,
-                                        "path": path, "content": content,
-                                        "format": WebRemoteFiles.isHTML(path) ? "html" : "text"]
-                        case let .failure(error):
-                            response = ["type": "fileError", "workspace": workspace.uuidString,
-                                        "pane": pane,
-                                        "path": path, "code": error.rawValue]
+                            response["type"] = "fileContent"
+                            response["content"] = content
+                            response["format"] = WebRemoteFiles.isHTML(request.path) ? "html" : "text"
+                        case let .failure(error): response = request.error(error)
                         }
                     }
                 } else {
-                    switch WebRemoteFiles.list(root: root, path: path) {
+                    switch WebRemoteFiles.list(root: root, path: request.path) {
                     case let .success(entries):
-                        response = ["type": "fileList", "workspace": workspace.uuidString,
-                                    "pane": pane, "root": root,
-                                    "path": path, "entries": entries,
-                                    "limit": WebRemoteFiles.maxEntries]
-                    case let .failure(error):
-                        response = ["type": "fileError", "workspace": workspace.uuidString,
-                                    "pane": pane,
-                                    "path": path, "code": error.rawValue]
+                        response["type"] = "fileList"
+                        response["entries"] = entries
+                        response["limit"] = WebRemoteFiles.maxEntries
+                    case let .failure(error): response = request.error(error)
                     }
                 }
-                self?.queue.async { [weak self] in self?.sendJSON(response, to: clientID) }
+                // I/O can outlive a cd, pane removal, or transition to SSH.
+                // Revalidate before handing the result back to the browser.
+                let completedResponse = response
+                DispatchQueue.main.async { [weak self] in
+                    let latest = WorkspaceStore.current?.webRemoteFileRoot(
+                        workspace: request.workspace, pane: request.pane
+                    )
+                    let checkedResponse = latest == root ? completedResponse
+                        : request.error(latest == nil ? .rootUnavailable : .rootChanged)
+                    self?.queue.async { [weak self] in self?.sendJSON(checkedResponse, to: clientID) }
+                }
             }
         }
     }
