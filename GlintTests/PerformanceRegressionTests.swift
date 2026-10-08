@@ -520,6 +520,43 @@ final class PerformanceRegressionTests: XCTestCase {
         XCTAssertNil(surfaceA.pendingRecoveryHost)
     }
 
+    func testDeferredCandidateRecoversOnLateMountWithoutAnotherUpdate() async {
+        let stage = PaneHostStage()
+        let incoming = GhosttySurfaceView(frame: .zero)
+        let outgoing = GhosttySurfaceView(frame: .zero)
+        stage.attach(outgoing, to: stage.older, visible: true)
+        stage.attach(incoming, to: stage.newer, visible: true)
+        stage.older.removeFromSuperview()
+        stage.newer.removeFromSuperview()
+
+        // Both hosts are between commits. The one-shot deferred pass runs
+        // before the destination mounts, so it cannot attach yet.
+        stage.attach(incoming, to: stage.older, visible: true)
+        await drainMainQueue(turns: pastBackstopBudget)
+        stage.window.contentView?.addSubview(stage.older)
+        await drainMainQueue(turns: pastBackstopBudget)
+
+        XCTAssertTrue(incoming.superview === stage.older)
+        XCTAssertTrue(incoming.paneHostView === stage.older)
+        XCTAssertFalse(outgoing.superview === stage.older)
+        XCTAssertNil(incoming.pendingRecoveryHost)
+    }
+
+    func testDeferredClaimCannotEvictReplacementInReusedCandidate() async {
+        let stage = PaneHostStage()
+        let incoming = GhosttySurfaceView(frame: .zero)
+        let replacement = GhosttySurfaceView(frame: .zero)
+        stage.attach(incoming, to: stage.newer, visible: true)
+        stage.newer.removeFromSuperview()
+        stage.attach(incoming, to: stage.older, visible: true)
+        stage.attach(replacement, to: stage.older, visible: true)
+        await drainMainQueue(turns: pastBackstopBudget)
+
+        XCTAssertTrue(replacement.superview === stage.older)
+        XCTAssertTrue(stage.older.expectedSurface === replacement)
+        XCTAssertFalse(incoming.superview === stage.older)
+    }
+
     /// P1 from the #109 review: the invalidation re-drive must never pin the
     /// surface into a candidate that has not mounted. A candidate still
     /// mid-commit claims when its own representable mounts (the recording is
