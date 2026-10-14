@@ -832,6 +832,42 @@ final class PerformanceRegressionTests: XCTestCase {
         XCTAssertFalse(SplitDragHandleView().mouseDownCanMoveWindow)
     }
 
+    func testSidebarWidthLeavesRoomForTerminalWhenWindowShrinks() {
+        let preferred: CGFloat = 480
+        let narrow = SidebarWidthPolicy.width(preferred: preferred, windowWidth: 980)
+        XCTAssertEqual(narrow, 380)
+        XCTAssertEqual(980 - narrow, 600)
+        XCTAssertEqual(SidebarWidthPolicy.width(preferred: preferred, windowWidth: 1_400), 480,
+                       "temporary window constraints must not overwrite the preferred width")
+    }
+
+    func testSidebarWidthHandlesInvalidPreferencesAndSmallWindows() {
+        XCTAssertEqual(SidebarWidthPolicy.width(preferred: .nan, windowWidth: 1_400), 244)
+        XCTAssertEqual(SidebarWidthPolicy.width(preferred: -10, windowWidth: 1_400), 220)
+        XCTAssertEqual(SidebarWidthPolicy.width(preferred: 10_000, windowWidth: 1_400), 480)
+        XCTAssertEqual(SidebarWidthPolicy.width(preferred: 244, windowWidth: 700), 100)
+        XCTAssertEqual(SidebarWidthPolicy.width(preferred: 244, windowWidth: 500), 0)
+    }
+
+    func testSidebarOverlayScrollbarDoesNotConsumeContentWidthOrChangeOtherScrollViews() {
+        let sidebar = NSScrollView(frame: NSRect(x: 0, y: 0, width: 244, height: 300))
+        sidebar.hasVerticalScroller = true
+        sidebar.scrollerStyle = .legacy
+        let document = NSView(frame: NSRect(x: 0, y: 0, width: 244, height: 1_000))
+        sidebar.documentView = document
+        let other = NSScrollView()
+        other.scrollerStyle = .legacy
+        let probe = SidebarOverlayScrollerView()
+        document.addSubview(probe)
+        probe.configureEnclosingScrollView()
+        sidebar.tile()
+
+        XCTAssertEqual(sidebar.scrollerStyle, .overlay)
+        XCTAssertEqual(sidebar.contentSize.width, sidebar.bounds.width)
+        XCTAssertEqual(other.scrollerStyle, .legacy)
+        XCTAssertNil(probe.hitTest(.zero), "the probe must not intercept scrolling or row clicks")
+    }
+
     func testPaneVisibilityRequiresSelectedWorkspaceAndSelectedTab() {
         let wsID = UUID()
         let onSelectedTab = PaneID(value: 1)

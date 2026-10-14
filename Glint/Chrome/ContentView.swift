@@ -1,8 +1,26 @@
 import SwiftUI
 import AppKit
 
+enum SidebarWidthPolicy {
+    static let defaultWidth: CGFloat = 244
+    static let minimumWidth: CGFloat = 220
+    static let maximumWidth: CGFloat = 480
+    static let minimumTerminalWidth: CGFloat = 600
+
+    static func width(preferred: CGFloat, windowWidth: CGFloat) -> CGFloat {
+        let available = max(0, windowWidth - minimumTerminalWidth)
+        let upper = min(maximumWidth, available)
+        let lower = min(minimumWidth, upper)
+        return min(max(preferred.isFinite ? preferred : defaultWidth, lower), upper)
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject var store: WorkspaceStore
+    @AppStorage("glint.sidebarWidth") private var savedSidebarWidth = Double(SidebarWidthPolicy.defaultWidth)
+    @State private var sidebarDragStart: CGFloat?
+    @State private var sidebarDragWidth: CGFloat?
+    @State private var sidebarEdgeHovered = false
 
     /// Photos-style chrome (glass on): no header band — the terminal runs to
     /// the top of the window and the toolbar floats over it as glass islands.
@@ -25,65 +43,102 @@ struct ContentView: View {
     @State private var fieldDismissMonitor: Any?
 
     var body: some View {
-        HStack(spacing: 0) {
-            if !store.sidebarCollapsed {
-                // 亮 / 暗两套 sidebar 表面:
-                // - 暗色:平铺 bgSidebar(= bgPane)。Tahoe 玻璃 sidebar 在暗底背后
-                //   没东西可折射,会糊成灰板,这里继续走平铺 + 右侧 hairline 切分。
-                // - 亮色:Codex-style frosted sidebar。真实 `.sidebar` vibrancy
-                //   做磨砂;聚焦时薄 lavender-white wash,失焦时更白更平。
-                SidebarView()
-                    .frame(width: 244)
-                    .background(sidebarBackground)
-                    .overlay(alignment: .trailing) {
-                        SidebarEdgeDivider(active: appActive)
-                    }
-                    .transition(.move(edge: .leading).combined(with: .opacity))
-            }
-
-            VStack(spacing: 0) {
-                if !floatingHeader {
-                    ToolbarHeader()
+        GeometryReader { geometry in
+            let sidebarWidth = SidebarWidthPolicy.width(
+                preferred: sidebarDragWidth ?? CGFloat(savedSidebarWidth),
+                windowWidth: geometry.size.width
+            )
+            HStack(spacing: 0) {
+                if !store.sidebarCollapsed {
+                    // 亮 / 暗两套 sidebar 表面:
+                    // - 暗色:平铺 bgSidebar(= bgPane)。Tahoe 玻璃 sidebar 在暗底背后
+                    //   没东西可折射,会糊成灰板,这里继续走平铺 + 右侧 hairline 切分。
+                    // - 亮色:Codex-style frosted sidebar。真实 `.sidebar` vibrancy
+                    //   做磨砂;聚焦时薄 lavender-white wash,失焦时更白更平。
+                    SidebarView()
+                        .frame(width: sidebarWidth)
+                        .background(sidebarBackground)
+                        .overlay(alignment: .trailing) {
+                            SidebarEdgeDivider(active: appActive)
+                            if sidebarEdgeHovered || sidebarDragStart != nil {
+                                Rectangle().fill(Theme.accent.opacity(0.55))
+                                    .frame(width: 1)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                 }
-                PaneTreeView(node: store.currentRoot, workspaceID: store.selectedWorkspaceID)
-                    // Floating mode overlaps the islands with the grid on
-                    // purpose — scrollback passing under the glass is the
-                    // effect. Fresh prompts are kept out from under the
-                    // islands by the padded shell launcher (see
-                    // GhosttyManager.paddedShellLauncherPath), not by
-                    // insetting the layout.
+
+                VStack(spacing: 0) {
+                    if !floatingHeader {
+                        ToolbarHeader()
+                    }
+                    PaneTreeView(node: store.currentRoot, workspaceID: store.selectedWorkspaceID)
+                        // Floating mode overlaps the islands with the grid on
+                        // purpose — scrollback passing under the glass is the
+                        // effect. Fresh prompts are kept out from under the
+                        // islands by the padded shell launcher (see
+                        // GhosttyManager.paddedShellLauncherPath), not by
+                        // insetting the layout.
+                }
+                // Flash-guard ONLY. ghostty's surface paints its own background at
+                // `background-opacity` (= terminalOpacity), so when transparency is
+                // on this layer MUST be fully clear — otherwise it stacks a second
+                // near-opaque fill behind the already-alpha'd surface and the net
+                // result is opaque (0.84 × 0.84 ≈ 0.97). At full opacity we keep
+                // bgPane so a freshly-created pane doesn't flash the desktop before
+                // its first frame lands.
+                .background(store.isTerminalTransparent ? Color.clear : Theme.bgPane)
+                // Floating mode: the terminal owns the full height and the
+                // toolbar's glass islands ride on top of it. The strip itself
+                // is an invisible window-drag handle (see ToolbarHeader).
+                .overlay(alignment: .top) {
+                    if floatingHeader {
+                        ToolbarHeader()
+                            // Semi-transparent theme-color scrim behind the
+                            // floating islands. The fork scrolls real (sometimes
+                            // stale, dark-themed) scrollback up into the strip
+                            // under the header; without a scrim that reads as a
+                            // harsh black band on a light theme. A 0.6 theme-bg
+                            // wash pulls whatever is back there toward the current
+                            // theme while keeping a hint of see-through.
+                            .background(
+                                Theme.bgPane.opacity(0.6)
+                                    .ignoresSafeArea(edges: .top)
+                            )
+                    }
+                }
             }
-            // Flash-guard ONLY. ghostty's surface paints its own background at
-            // `background-opacity` (= terminalOpacity), so when transparency is
-            // on this layer MUST be fully clear — otherwise it stacks a second
-            // near-opaque fill behind the already-alpha'd surface and the net
-            // result is opaque (0.84 × 0.84 ≈ 0.97). At full opacity we keep
-            // bgPane so a freshly-created pane doesn't flash the desktop before
-            // its first frame lands.
-            .background(store.isTerminalTransparent ? Color.clear : Theme.bgPane)
-            // Floating mode: the terminal owns the full height and the
-            // toolbar's glass islands ride on top of it. The strip itself
-            // is an invisible window-drag handle (see ToolbarHeader).
-            .overlay(alignment: .top) {
-                if floatingHeader {
-                    ToolbarHeader()
-                        // Semi-transparent theme-color scrim behind the
-                        // floating islands. The fork scrolls real (sometimes
-                        // stale, dark-themed) scrollback up into the strip
-                        // under the header; without a scrim that reads as a
-                        // harsh black band on a light theme. A 0.6 theme-bg
-                        // wash pulls whatever is back there toward the current
-                        // theme while keeping a hint of see-through.
-                        .background(
-                            Theme.bgPane.opacity(0.6)
-                                .ignoresSafeArea(edges: .top)
-                        )
+            .overlay(alignment: .leading) {
+                if !store.sidebarCollapsed {
+                    // Keep the handle on the terminal side of the seam: the
+                    // sidebar's overlay scroller retains its own hit area.
+                    SplitDragHandle(
+                        isHorizontal: true,
+                        onTranslation: { translation in
+                            if sidebarDragStart == nil { sidebarDragStart = sidebarWidth }
+                            sidebarDragWidth = SidebarWidthPolicy.width(
+                                preferred: (sidebarDragStart ?? sidebarWidth) + translation,
+                                windowWidth: geometry.size.width
+                            )
+                        },
+                        onEnded: finishSidebarResize,
+                        onHover: { sidebarEdgeHovered = $0 }
+                    )
+                    .frame(width: 8, height: geometry.size.height)
+                    .offset(x: sidebarWidth)
                 }
             }
         }
         .ignoresSafeArea()
         .onAppear { installFieldDismissMonitor() }
-        .onDisappear { removeFieldDismissMonitor() }
+        .onDisappear {
+            finishSidebarResize()
+            removeFieldDismissMonitor()
+        }
+        .onChange(of: store.sidebarCollapsed) { _, collapsed in
+            if collapsed { finishSidebarResize() }
+        }
         // Root stays clear so the sidebar and terminal each own their backing
         // layer — that's what lets the two opacity sliders act independently
         // (a single opaque root fill would block the terminal from showing the
@@ -259,6 +314,13 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private func finishSidebarResize() {
+        if let width = sidebarDragWidth { savedSidebarWidth = Double(width) }
+        sidebarDragStart = nil
+        sidebarDragWidth = nil
+        sidebarEdgeHovered = false
     }
 
     /// When focus is in a text field, `window.firstResponder` is the window's

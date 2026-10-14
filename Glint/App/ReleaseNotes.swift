@@ -52,6 +52,17 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.28-beta.8",
+            en: [
+                "Drag the sidebar’s right edge to adjust its width. The resize cursor shows where to drag, and your preferred width is restored after restarting or reopening the sidebar.",
+                "Sidebar scrollbars now float over the content without taking away space from workspace names. Hover over a shortened name to see it in full."
+            ],
+            zh: [
+                "拖动侧边栏右边缘即可调整宽度，悬停时显示左右调整光标；重启或收起再展开后，会恢复你设置的宽度。",
+                "侧边栏滚动条改为悬浮显示，不再挤占工作区名称的宽度；将鼠标悬停在被截断的名称上，可查看完整名称。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.28-beta.6",
             en: [
                 "Browse the current terminal folder from Web Remote and preview text, images, and static HTML. Image previews support pinch zoom and dragging.",

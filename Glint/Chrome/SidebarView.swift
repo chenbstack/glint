@@ -3,6 +3,58 @@ import AppKit
 import ImageIO
 import UniformTypeIdentifiers
 
+private struct SidebarOverlayScroller: NSViewRepresentable {
+    func makeNSView(context: Context) -> SidebarOverlayScrollerView {
+        SidebarOverlayScrollerView()
+    }
+
+    func updateNSView(_ nsView: SidebarOverlayScrollerView, context: Context) {
+        nsView.scheduleConfiguration()
+    }
+}
+
+/// Lives inside the scroll content so it finds only this sidebar's scroll
+/// view. Overlay scrollers use the existing card padding, not a layout gutter.
+final class SidebarOverlayScrollerView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(scheduleConfiguration),
+            name: NSNotification.Name("NSPreferredScrollerStyleDidChangeNotification"),
+            object: nil
+        )
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        scheduleConfiguration()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        scheduleConfiguration()
+    }
+
+    @objc func scheduleConfiguration() {
+        // SwiftUI may still be attaching its hosting hierarchy. Also run
+        // after AppKit applies a change to the system scrollbar preference.
+        DispatchQueue.main.async { [weak self] in
+            self?.configureEnclosingScrollView()
+        }
+    }
+
+    func configureEnclosingScrollView() {
+        guard let scrollView = enclosingScrollView else { return }
+        if scrollView.scrollerStyle != .overlay { scrollView.scrollerStyle = .overlay }
+    }
+}
+
 struct SidebarView: View {
     @EnvironmentObject var store: WorkspaceStore
     /// Intentionally unread: installing the object subscribes this view to
@@ -94,6 +146,8 @@ struct SidebarView: View {
                         .animation(.easeInOut(duration: 0.18), value: store.archiveExpanded)
                     }
                     .padding(.bottom, 12)
+                    .frame(maxWidth: .infinity)
+                    .background(SidebarOverlayScroller())
                 }
                 .scrollContentBackground(.hidden)
 
@@ -725,12 +779,14 @@ private struct WorkspaceCard: View {
                         .italic(!ws.userNamed)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        .help(Text(verbatim: ws.displayName))
                 }
                 secondaryRow(summary: summary, active: active)
             }
-            Spacer(minLength: 4)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             if !multiInfos.isEmpty {
                 AgentStatusCluster(infos: multiInfos)
+                    .fixedSize()
                     .accessibilityHidden(true)
             }
         }

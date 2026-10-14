@@ -17,7 +17,9 @@ enum SplitLayoutPolicy {
 
 final class SplitDragHandleView: NSView {
     var isHorizontal = true {
-        didSet { discardCursorRects() }
+        didSet {
+            if isHorizontal != oldValue { window?.invalidateCursorRects(for: self) }
+        }
     }
     var onTranslation: ((CGFloat) -> Void)?
     var onEnded: (() -> Void)?
@@ -25,14 +27,24 @@ final class SplitDragHandleView: NSView {
 
     private var dragStart: NSPoint?
 
+    private var resizeCursor: NSCursor {
+        isHorizontal ? .resizeLeftRight : .resizeUpDown
+    }
+
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func resetCursorRects() {
         addCursorRect(
             bounds,
-            cursor: isHorizontal ? .resizeLeftRight : .resizeUpDown
+            cursor: resizeCursor
         )
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        // AppKit may refresh the cursor after mouseEntered (for example over
+        // the terminal's overlapping tracking area).
+        resizeCursor.set()
     }
 
     override func updateTrackingAreas() {
@@ -40,14 +52,14 @@ final class SplitDragHandleView: NSView {
         trackingAreas.forEach(removeTrackingArea)
         addTrackingArea(NSTrackingArea(
             rect: .zero,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
             owner: self,
             userInfo: nil
         ))
     }
 
     override func mouseEntered(with event: NSEvent) {
-        (isHorizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).set()
+        resizeCursor.set()
         onHover?(true)
     }
 
@@ -63,6 +75,7 @@ final class SplitDragHandleView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         guard let dragStart else { return }
+        resizeCursor.set()
         let current = event.locationInWindow
         onTranslation?(
             isHorizontal ? current.x - dragStart.x : dragStart.y - current.y
@@ -76,7 +89,7 @@ final class SplitDragHandleView: NSView {
     }
 }
 
-private struct SplitDragHandle: NSViewRepresentable {
+struct SplitDragHandle: NSViewRepresentable {
     let isHorizontal: Bool
     let onTranslation: (CGFloat) -> Void
     let onEnded: () -> Void
