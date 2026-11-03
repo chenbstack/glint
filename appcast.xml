@@ -6,16 +6,27 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.28-beta.8</title>
-      <sparkle:version>202610140532</sparkle:version>
-      <sparkle:shortVersionString>0.1.28-beta.8</sparkle:shortVersionString>
+      <title>Glint 0.1.28-beta.9</title>
+      <sparkle:version>202611030445</sparkle:version>
+      <sparkle:shortVersionString>0.1.28-beta.9</sparkle:shortVersionString>
       <sparkle:channel>beta</sparkle:channel>
-      <pubDate>Wed, 14 Oct 2026 05:34:25 +0000</pubDate>
+      <pubDate>Tue, 03 Nov 2026 04:48:32 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.28-beta.8</h3><ul>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.28-beta.9</h3><ul>
+    <li>feat(control): add gated CLI access and visible control activity</li>
+    <li>fix(control): guard history restore and preserve existing CLI links</li>
+    <li>fix(control): address background access and CLI review findings</li>
+    <li>fix(cli): scan only new response bytes for delimiters</li>
+    <li>fix(localization): remove unused control strings</li>
+    <li>fix(cli): recognize help after global socket options</li>
+    <li>docs(cli): clarify background access after restart</li>
+    <li>release: appcast for v0.1.28-beta.8</li>
+    <li>release: appcast for v0.1.28-beta.7</li>
+    <li>Merge pull request #132 from defia/feat/local-control-cli</li>
+  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.28-beta.8</h3><ul>
     <li><strong>feat(sidebar): resize sidebar and keep workspace names readable</strong><br><span style="color:#666">侧边栏支持拖动调宽并记忆宽度，悬浮滚动条与完整名称提示避免遮挡</span></li>
     <li>release: appcast for v0.1.28-beta.7</li>
-  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.28-beta.7</h3><ul>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.28-beta.7</h3><ul>
     <li>fix: secure web remote and repair Git review and state recovery</li>
     <li>release: appcast for v0.1.28-beta.6</li>
     <li>Merge pull request #130 from S-huNsuke/codex/fix-review-and-recovery</li>
@@ -104,12 +115,114 @@
     <li>release: prepare v0.1.27-beta.1</li>
     <li>chore: add scripts/build-ghosttykit.sh / 补齐 GhosttyKit 本地构建脚本</li>
     <li>release: appcast for v0.1.26</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.27-beta.2</h3><ul>
-    <li>fix(pane): avoid white flash when closing a split (#99)</li>
-    <li>fix: improve Web Remote mobile scrolling and connection recovery (#97)</li>
-    <li>release: prepare v0.1.27-beta.2</li>
-    <li>release: appcast for v0.1.27-beta.1</li>
   </ul></div>]]></description>
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.28-beta.9/Glint-0.1.28-beta.9.dmg" length="21195297" type="application/octet-stream" sparkle:edSignature="W7sjIRDtJu34QktaKARZVy1k1oa3A9/OjboxRPHfuQb0UbKdsWp/3OzemArV0exAqD6Vv3AaRYzW2Hgr82W/Bg==" />
+    </item>
+    <item>
+      <title>Glint 0.1.28-beta.8</title>
+      <sparkle:version>202610140532</sparkle:version>
+      <sparkle:shortVersionString>0.1.28-beta.8</sparkle:shortVersionString>
+      <sparkle:channel>beta</sparkle:channel>
+      <pubDate>Wed, 14 Oct 2026 05:34:25 +0000</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description>&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.28-beta.8&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(sidebar): resize sidebar and keep workspace names readable&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;侧边栏支持拖动调宽并记忆宽度，悬浮滚动条与完整名称提示避免遮挡&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.28-beta.7&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;!--GLINT_HISTORY_BELOW--&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3 style="color:#666;"&gt;历史版本 · Previous releases&lt;/h3&gt;&lt;/div&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.28-beta.7&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;fix: secure web remote and repair Git review and state recovery&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.28-beta.6&lt;/li&gt;
+    &lt;li&gt;Merge pull request #130 from S-huNsuke/codex/fix-review-and-recovery&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.28-beta.6&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;feat(web-remote): preview local terminal files in browser&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(web-remote): secure file previews and refresh changed directories&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复网页文件预览的符号链接竞态越界与切换目录后内容错位，并准备 beta.6 更新说明&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;fix(accessibility): keep current workspace name available in both sidebar layouts&lt;/li&gt;
+    &lt;li&gt;fix(accessibility): expose workspace selection and stable identifiers&lt;/li&gt;
+    &lt;li&gt;fix(web-remote): reject SSH file access without remote title&lt;/li&gt;
+    &lt;li&gt;fix(agent): route shared Codex daemon hooks to attached panes&lt;/li&gt;
+    &lt;li&gt;fix(shell): stop managed rc blocks from gluing the next line (#124)&lt;/li&gt;
+    &lt;li&gt;fix(pane): preserve deferred mount recovery claims&lt;/li&gt;
+    &lt;li&gt;fix(web-remote): recover unavailable listen interfaces&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.28-beta.5&lt;/li&gt;
+    &lt;li&gt;Merge pull request #129 from chenbstack/codex/web-remote-file-safety&lt;/li&gt;
+    &lt;li&gt;Merge pull request #128 from defia/fix/workspace-selection-accessibility&lt;/li&gt;
+    &lt;li&gt;Merge pull request #127 from defia/fix/codex-daemon-pane-routing&lt;/li&gt;
+    &lt;li&gt;Merge pull request #126 from defia/fix/zshrc-block-trailing-newline&lt;/li&gt;
+    &lt;li&gt;Merge pull request #125 from defia/feat/web-remote-file-preview&lt;/li&gt;
+    &lt;li&gt;Merge pull request #123 from defia/fix/pane-deferred-mount-recovery&lt;/li&gt;
+    &lt;li&gt;Merge pull request #122 from defia/fix/web-remote-interface-recovery&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.28-beta.5&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;feat(usage): Grok quota row in the sidebar&lt;/li&gt;
+    &lt;li&gt;feat(agent): Antigravity CLI (agy) as a tracked agent&lt;/li&gt;
+    &lt;li&gt;fix: close web remote snapshot and touch gesture gaps&lt;/li&gt;
+    &lt;li&gt;fix: only treat zero invocation as first agy turn&lt;/li&gt;
+    &lt;li&gt;fix: survive a view service dying under a child window&lt;/li&gt;
+    &lt;li&gt;fix(usage): render Grok team accounts as unknown-percent instead of hiding&lt;/li&gt;
+    &lt;li&gt;fix(agent): final Antigravity mark (rainbow arch, transparent)&lt;/li&gt;
+    &lt;li&gt;fix(agent): offer Antigravity hooks in the first-launch prompt + official mark&lt;/li&gt;
+    &lt;li&gt;fix(web-remote): arbitrate pending selection sizes by request order&lt;/li&gt;
+    &lt;li&gt;fix(agent): isolate every bridge socket by process&lt;/li&gt;
+    &lt;li&gt;fix(web-remote): improve mobile scrolling and focus&lt;/li&gt;
+    &lt;li&gt;fix(agent): close listener across exec&lt;/li&gt;
+    &lt;li&gt;fix(pane): disarm superseded rejected claims&lt;/li&gt;
+    &lt;li&gt;fix(web-remote): preserve grid during pending selection&lt;/li&gt;
+    &lt;li&gt;fix(web-remote): restore offline history before snapshot&lt;/li&gt;
+    &lt;li&gt;fix(agent): keep socket lease out of descendants&lt;/li&gt;
+    &lt;li&gt;fix(agent): prevent socket takeover across Glint instances&lt;/li&gt;
+    &lt;li&gt;fix(pane): retire stale pending claims on reuse&lt;/li&gt;
+    &lt;li&gt;fix(pane): recover pending surface when candidate mounts&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.28-beta.4&lt;/li&gt;
+    &lt;li&gt;Merge pull request #121 from chenbstack/codex/fix-web-remote-review-findings&lt;/li&gt;
+    &lt;li&gt;Merge pull request #120 from chenbstack/codex/fix-agy-invocation&lt;/li&gt;
+    &lt;li&gt;Merge pull request #118 from CtriXin/upstream-pr/child-window-guard&lt;/li&gt;
+    &lt;li&gt;Merge pull request #117 from CtriXin/upstream-pr/grok-usage&lt;/li&gt;
+    &lt;li&gt;Merge pull request #116 from CtriXin/upstream-pr/agy-agent&lt;/li&gt;
+    &lt;li&gt;Merge pull request #114 from defia/fix/web-remote-mobile-scroll-focus&lt;/li&gt;
+    &lt;li&gt;Merge pull request #113 from defia/fix/web-remote-offline-history&lt;/li&gt;
+    &lt;li&gt;Merge pull request #112 from defia/fix/agent-socket-lease&lt;/li&gt;
+    &lt;li&gt;Merge pull request #111 from defia/fix/pane-mount-recovery&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.28-beta.4&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;perf(accessibility): expose viewport contents instead of full scrollback (#110)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;终端无障碍层改为只暴露视口内容,不再暴露整个 scrollback。AXValue 走&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(pane): harden the host-claim landing after review&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;#109 落地后的评审加固。① 解码时修复悬空 selectedTabID —— 新的 attach&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(pane): close host-claim races reopened by the stale-recording recovery (#109)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 #103 引入的恢复通道重新打开 #93/#96 两个旧问题。一次性采样过早&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.28-beta.4&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补 0.1.28-beta.4 的「更新内容」—— beta.2 / beta.3 上复发的窗格搁浅问题&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;test(accessibility): pin the viewport choice the change is named after&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;#110 落地后的评审加固。① 标题里那个改动本身没有任何测试兜底 —— 把 tag&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.28-beta.3&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.28-beta.3&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(accessibility): expose terminal panes as AXTextArea (#108)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;终端窗格现在以 AXTextArea 暴露给辅助功能,系统听写 / 千问等语音输入&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.28-beta.3&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补 0.1.28-beta.3 的「更新内容」——终端支持听写 / 语音输入,以及&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.28-beta.2&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.28-beta.2&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix(web-remote): support iOS Chinese IME input and long-press paste (#107)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复网页远程在 iOS / iPadOS 上的中文输入法输入丢字，以及长按无法调出&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.28-beta.2&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补 0.1.28-beta.2 的「更新内容」——网页远程在 iPhone / iPad 上的中文&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;docs(website): catch the feature cards up to v0.1.27 (#104)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;官网功能介绍追平 v0.1.27:功能卡从 6 张扩到 12 张,补上 Review 窗口、&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.28-beta.1&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.28-beta.1&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;refactor(agent): freeze the sidebar turn timer instead of hiding it&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;侧边栏的回合计时器改为「冻结」而不是「隐藏」——回合结束后停在总耗时，&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(agent): freeze elapsed timer after completion (#102)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;agent 完成后冻结摘要里的计时，不再让已结束的行继续往上走。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(permissions): declare microphone usage so terminal children can prompt (#100)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补上麦克风权限声明，终端里跑的程序才能弹授权框；同时把它和本地网络说明的中文翻译一起加进 InfoPlist 字符串目录。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(pane): recover from a stale surface host recording (#103)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 workspace 切换后 pane 显示上一个工作区终端的问题。surface 记录的&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: prepare v0.1.28-beta.1&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补 0.1.28-beta.1 的「更新内容」——workspace 切换后窗格串台的修复、&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;test(webremote): keep the integration tests off the Keychain&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复跑测试时弹出「Glint 想要使用你储存在钥匙串中的机密信息」的登录密码&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.27&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.27&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;feat: 网页远程终端控制 / Browser-based remote terminal control (#92)&lt;/li&gt;
+    &lt;li&gt;feat: integrate pi as a first-class agent / pi 作为内置 Agent 接入 (#95)&lt;/li&gt;
+    &lt;li&gt;feat(sidebar): middle-click to close workspace / 中键关闭工作区 (#94)&lt;/li&gt;
+    &lt;li&gt;fix(pane): avoid white flash when closing a split (#99)&lt;/li&gt;
+    &lt;li&gt;fix: improve Web Remote mobile scrolling and connection recovery (#97)&lt;/li&gt;
+    &lt;li&gt;fix: stabilize pane resize host ownership and divider dragging / 稳定 pane 尺寸调整的 host 归属与分隔条拖动 (#96)&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.27-beta.2&lt;/li&gt;
+    &lt;li&gt;release: prepare v0.1.27-beta.2&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.27-beta.1&lt;/li&gt;
+    &lt;li&gt;release: prepare v0.1.27-beta.1&lt;/li&gt;
+    &lt;li&gt;chore: add scripts/build-ghosttykit.sh / 补齐 GhosttyKit 本地构建脚本&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.26&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.27-beta.2&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;fix(pane): avoid white flash when closing a split (#99)&lt;/li&gt;
+    &lt;li&gt;fix: improve Web Remote mobile scrolling and connection recovery (#97)&lt;/li&gt;
+    &lt;li&gt;release: prepare v0.1.27-beta.2&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.27-beta.1&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;</description>
       <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.28-beta.8/Glint-0.1.28-beta.8.dmg" length="21140131" type="application/octet-stream" sparkle:edSignature="gVlwlWj551bXgJV0gpXpz++XWDciHLzWMr0Ep4CpdhmNoQ1YL6KIg2QDbjinsB1S0kDt2kQrHBWD0sj0a159AQ==" />
     </item>
     <item>
