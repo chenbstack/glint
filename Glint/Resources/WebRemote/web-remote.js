@@ -118,6 +118,7 @@ const translations = {
     terminal_closed: "终端已关闭",
     terminal_created: "已新建终端",
     terminal_not_ready: "终端尚未准备好",
+    terminal_requires_local_open: "请先在 Glint 中打开此终端，再重试；远程访问不会自动恢复 agent 或执行待启动命令。",
     terminal_ready: "终端已就绪",
     unable_connect: "无法连接",
     unauthorized: "访问密钥无效或已经失效。",
@@ -189,6 +190,7 @@ const translations = {
     terminal_closed: "Terminal closed",
     terminal_created: "Terminal created",
     terminal_not_ready: "Terminal is not ready",
+    terminal_requires_local_open: "Open this terminal in Glint first, then retry. Remote access does not run pending startup or agent restore commands.",
     terminal_ready: "Terminal ready",
     unable_connect: "Unable to connect",
     unauthorized: "The access key is invalid or has expired.",
@@ -836,6 +838,7 @@ function errorLabel(code) {
     "workspace-archived": t("workspace_archived"),
     "last-terminal": t("last_terminal"),
     "terminal-not-ready": t("terminal_not_ready"),
+    "pane-requires-local-open": t("terminal_requires_local_open"),
     "unknown-command": t("unknown_command"),
   };
   return labels[code] || t("operation_failed", { code });

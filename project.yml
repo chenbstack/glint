@@ -24,6 +24,7 @@ targets:
     type: application
     platform: macOS
     sources:
+      - path: Shared
       - path: Glint
         excludes:
           - "**/.DS_Store"
@@ -78,10 +79,38 @@ targets:
         # the prod glint.* defaults across (see GlintApp.init).
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: app.glint.Glint.dev
+    postBuildScripts:
+      - name: Bundle Glint CLI
+        script: |
+          set -eu
+          /bin/mkdir -p "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
+          /bin/cp "$BUILT_PRODUCTS_DIR/glint" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers/glint"
+        inputFiles:
+          - "$(BUILT_PRODUCTS_DIR)/glint"
+        outputFiles:
+          - "$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/glint"
     dependencies:
+      - target: GlintCLI
+        embed: false
+        link: false
       - framework: Vendor/GhosttyKit.xcframework
         embed: false
       - package: Sparkle
+
+  GlintCLI:
+    type: tool
+    productName: glint
+    platform: macOS
+    sources:
+      - path: CLI
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: glint
+        PRODUCT_MODULE_NAME: GlintCLI
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
 
   GlintTests:
     type: bundle.unit-test

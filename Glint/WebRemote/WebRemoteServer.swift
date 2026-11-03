@@ -979,17 +979,6 @@ final class WebRemoteServer: @unchecked Sendable {
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let store = WorkspaceStore.current else { return }
-            if let error = store.controlFocus(pane: pane, activateApp: false) {
-                self.queue.async { [weak self] in
-                    self?.finishSelectionFailure(
-                        error,
-                        pane: pane,
-                        generation: selectionGeneration,
-                        clientID: clientID
-                    )
-                }
-                return
-            }
             store.webRemoteTerminalSnapshot(pane: pane, size: size) { [weak self] result in
                 self?.queue.async { [weak self] in
                     guard let self else { return }

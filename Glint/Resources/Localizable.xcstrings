@@ -1,6 +1,303 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Linked to another Glint": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已链接到另一个 Glint"
+          }
+        }
+      }
+    },
+    "The CLI is linked to another existing Glint installation. It was left unchanged.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLI 已链接到另一份仍然存在的 Glint 安装，未作更改。"
+          }
+        }
+      }
+    },
+    "Needs repair": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要修复"
+          }
+        }
+      }
+    },
+    "The CLI link points to a missing Glint installation. Install again to repair it, or uninstall the link.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLI 链接指向已不存在的 Glint 安装位置。重新安装可修复链接，也可卸载此链接。"
+          }
+        }
+      }
+    },
+    "Local apps can read and send input to this terminal.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地应用可以读取和操作此终端。"
+          }
+        }
+      }
+    },
+    "Local control": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地控制"
+          }
+        }
+      }
+    },
+    "Reads and input keep your local workspace unchanged. Local activity stays marked for 30 seconds; browser control stays marked while connected.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读取和输入不会切换电脑上的工作区。本地操作后标识保留 30 秒，网页控制在连接期间持续显示标识。"
+          }
+        }
+      }
+    },
+    "CLI is already installed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLI 已安装，请勿重复安装。"
+          }
+        }
+      }
+    },
+    "CLI is not installed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLI 尚未安装。"
+          }
+        }
+      }
+    },
+    "CLI link removed from ~/.local/bin/glint.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已移除 ~/.local/bin/glint 命令链接。"
+          }
+        }
+      }
+    },
+    "Command name in use": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "命令名已被占用"
+          }
+        }
+      }
+    },
+    "Installed at ~/.local/bin/glint. Uninstall removes only the command link.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已安装到 ~/.local/bin/glint。卸载只移除命令链接。"
+          }
+        }
+      }
+    },
+    "Another command already uses ~/.local/bin/glint.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/.local/bin/glint 已被其他命令占用。"
+          }
+        }
+      }
+    },
+    "Agent instructions": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent 使用说明"
+          }
+        }
+      }
+    },
+    "Copies CLI commands for an agent. No token is copied.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制供 Agent 使用的 CLI 命令说明，不包含令牌。"
+          }
+        }
+      }
+    },
+    "The bundled CLI is missing. Reinstall Glint.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到随附的 CLI，请重新安装 Glint。"
+          }
+        }
+      }
+    },
+    "The destination already contains another command. It was left unchanged.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目标位置已有其他命令，未对其进行修改。"
+          }
+        }
+      }
+    },
+    "Command-line access": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "命令行访问"
+          }
+        }
+      }
+    },
+    "Installs ~/.local/bin/glint. Installation does not enable external control.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装到 ~/.local/bin/glint。安装不会开启外部控制。"
+          }
+        }
+      }
+    },
+    "Install CLI": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装 CLI"
+          }
+        }
+      }
+    },
+    "Copy Agent instructions": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制 Agent 使用说明"
+          }
+        }
+      }
+    },
+    "Glint CLI": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint CLI"
+          }
+        }
+      }
+    },
+    "Installed at %@. Add ~/.local/bin to PATH if needed. External control remains governed by the switch above.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已安装到 %@。必要时将 ~/.local/bin 加入 PATH。外部控制仍由上方开关决定。"
+          }
+        }
+      }
+    },
+    "Use the following Glint CLI to control terminals on this Mac. Start with --help and panes list to identify the target pane, then read its contents before sending input. Replace PANE with the full handle from the list.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请通过以下 Glint CLI 操作本机终端。先运行 --help 和 panes list，确认目标窗格，再读取内容后输入。将 PANE 替换为列表返回的完整窗格标识。"
+          }
+        }
+      }
+    },
+    "After input, read the terminal again to verify the result. Ordinary reads and input preserve local workspace selection. Use pane focus PANE only when explicitly asked to switch local focus. External control must be enabled in Glint Settings; if access is unavailable, report that instead of bypassing the switch. The CLI reads its token locally; never print or copy the token.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入后再次读取终端，验证操作结果。普通读取与输入保持本地工作区选择不变。只有明确要求切换本地焦点时，才使用 pane focus PANE。必须在 Glint 设置中开启外部控制；不可用时请报告原因，不要绕过开关。CLI 在本机读取令牌，不要输出或复制令牌。"
+          }
+        }
+      }
+    },
+    "Remote control active": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在被远程控制"
+          }
+        }
+      }
+    },
+    "Exposes a local socket under ~/.glint/run/ so other apps on this Mac can focus panes, read terminal contents and inject text/keys. Reading and input require the 0600 token file. Ordinary reads and input do not switch workspaces. Off by default; toggling takes effect immediately.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 ~/.glint/run/ 下开放本地 socket，让本机其他应用聚焦窗格、读取终端内容并输入文字或按键。读取和输入需要权限为 0600 的 token 文件。普通读取与输入不会切换工作区。默认关闭，切换立即生效。"
+          }
+        }
+      }
+    },
     "\"%@\" is not executable.": {
       "extractionState": "manual",
       "localizations": {
@@ -1304,17 +1601,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "已连接的浏览器将断开。系统会生成新密钥和端口，旧链接将失效。"
-          }
-        }
-      }
-    },
-    "Controlled from web": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在通过网页控制"
           }
         }
       }

@@ -116,6 +116,74 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         XCTAssertNotNil(http.value(forHTTPHeaderField: "Content-Length"))
     }
 
+    @MainActor
+    func testBrowserSelectionReadsBackgroundTerminalWithoutSwitchingLocalWorkspace() async throws {
+        let local = Workspace.fresh(name: "Local", accentHex: "5E5CE6", symbol: "L")
+        let remote = Workspace.fresh(name: "Remote", accentHex: "5E5CE6", symbol: "R")
+        let unvisited = Workspace.fresh(name: "Unvisited", accentHex: "5E5CE6", symbol: "U")
+        let pane = try XCTUnwrap(remote.selectedTab?.focusedPane)
+        let handle = "\(remote.id.uuidString):\(pane.value)"
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [local, remote, unvisited]
+        store.selectedWorkspaceID = local.id
+        let view = store.surfaceView(workspaceID: remote.id, paneID: pane, cwd: "/tmp")
+        XCTAssertTrue(view.ensureLiveForWebRemoteControl())
+        let tokenKey = try XCTUnwrap(WebRemoteCrypto.tokenKey(from: XCTUnwrap(readyToken)))
+        let task = makeWebSocket()
+        defer { task.cancel(with: .goingAway, reason: nil) }
+        let challenge = try await receiveAuthChallenge(task)
+        let proof = WebRemoteCrypto.proof(tokenKey: tokenKey, challenge: challenge)
+        try await send(task, ["type": "authenticate", "proof": proof.base64EncodedString()])
+        let keys = WebRemoteCrypto.sessionKeys(tokenKey: tokenKey, challenge: challenge)
+        let authenticated = try await receiveEncryptedJSON(task, key: keys.s2c)
+        XCTAssertEqual(authenticated["type"] as? String, "authenticated")
+        let state = try await receiveEncryptedJSON(task, key: keys.s2c)
+        XCTAssertEqual(state["type"] as? String, "state")
+        let select = try JSONSerialization.data(withJSONObject: [
+            "type": "select", "pane": handle, "columns": 80, "rows": 24
+        ])
+        let frame = try XCTUnwrap(WebRemoteCrypto.sealFrame(plaintext: select, key: keys.c2s, counter: 0))
+        try await task.send(.data(frame))
+        let snapshot = try await receiveEncryptedJSON(task, key: keys.s2c)
+        XCTAssertEqual(snapshot["type"] as? String, "snapshot")
+        XCTAssertEqual(snapshot["pane"] as? String, handle)
+        XCTAssertNotNil(snapshot["data"] as? String)
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+        XCTAssertEqual(store.workspaces[1].selectedTabID, remote.selectedTabID)
+        XCTAssertTrue(store.isWorkspaceRemotelyControlled(remote.id))
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [.web])
+
+        // Switch the browser to a workspace never mounted on the desktop.
+        let unvisitedPane = try XCTUnwrap(unvisited.selectedTab?.focusedPane)
+        let secondHandle = "\(unvisited.id.uuidString):\(unvisitedPane.value)"
+        let secondSelect = try JSONSerialization.data(withJSONObject: [
+            "type": "select", "pane": secondHandle, "columns": 80, "rows": 24
+        ])
+        let secondFrame = try XCTUnwrap(WebRemoteCrypto.sealFrame(plaintext: secondSelect, key: keys.c2s, counter: 1))
+        try await task.send(.data(secondFrame))
+        var secondSnapshot: [String: Any] = [:]
+        for _ in 0..<20 {
+            let message = try await receiveEncryptedJSON(task, key: keys.s2c)
+            if message["type"] as? String == "snapshot", message["pane"] as? String == secondHandle {
+                secondSnapshot = message
+                break
+            }
+        }
+        XCTAssertEqual(secondSnapshot["type"] as? String, "snapshot")
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+        XCTAssertEqual(store.workspaces[0].selectedTabID, local.selectedTabID)
+        XCTAssertEqual(store.workspaces[1].selectedTabID, remote.selectedTabID)
+        XCTAssertEqual(store.workspaces[2].selectedTabID, unvisited.selectedTabID)
+        XCTAssertEqual(store.workspaceControlSources(unvisited.id), [.web])
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [])
+        task.cancel(with: .goingAway, reason: nil)
+        for _ in 0..<50 {
+            if store.workspaceControlSources(unvisited.id).isEmpty { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(store.workspaceControlSources(unvisited.id), [])
+    }
+
     // MARK: - WebSocket authentication (challenge-response + AES-GCM)
 
     func testWebSocketRejectsWrongProofThenAcceptsCorrectProof() async throws {
@@ -546,7 +614,10 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
     /// them after these probes close; no persisted production ports are reused.
     private func availableHTTPPort() throws -> UInt16 {
         for _ in 0..<100 {
-            let port = UInt16.random(in: 49152...65533)
+            // Stay outside macOS's 49152–65535 ephemeral client range: an
+            // outgoing URLSession connection can claim a just-probed port
+            // before NWListener binds it, producing unrelated EADDRINUSE.
+            let port = UInt16.random(in: 20_000...40_000)
             let http = socket(AF_INET, SOCK_STREAM, 0)
             let webSocket = socket(AF_INET, SOCK_STREAM, 0)
             guard http >= 0, webSocket >= 0 else {

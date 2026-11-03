@@ -5,16 +5,17 @@ import Security
 /// Inbound control channel — the reverse of `AgentBridge`. Where the agent
 /// socket only *receives* hook events to drive sidebar state, this one
 /// *receives commands* and drives panes: focus a pane, inject text/keys,
-/// list panes. It speaks line-delimited JSON, one request → one response
+/// list panes, read terminal text. It speaks line-delimited JSON, one request → one response
 /// (vs. `agent.sock`'s fire-and-forget).
 ///
 ///     >> {"cmd":"focus","pane":"<uuid>:<seq>"}            << {"ok":true}
 ///     >> {"cmd":"send-text","pane":"…","text":"yes","enter":true,"token":"…"}
 ///     >> {"cmd":"send-key","pane":"…","keys":["down","enter"],"token":"…"}
+///     >> {"cmd":"read-text","pane":"…","scrollback":true,"maxLines":1000,"token":"…"}
 ///     >> {"cmd":"list"}   << {"ok":true,"panes":[{"pane":…,"title":…,"cwd":…,"agent":…}]}
 ///
 /// Auth is **stateless**: each command carries an optional `token`; the
-/// server validates per-line. State-changing commands (`send-*`) require a
+/// server validates per-line. Terminal read/write commands (`read-text`, `send-*`) require a
 /// matching token; `focus`/`list` are allowed without one. The token is
 /// regenerated every launch into a 0600 file under `~/.glint/run/` — being
 /// able to read it ≈ already being able to read the user's private files.
@@ -33,14 +34,21 @@ final class ControlBridge {
     /// the externalControlEnabled toggle / app launch).
     private(set) var isRunning = false
 
-    private init() {}
+    private let runDirectory: URL
+    private let isEnabled: @MainActor () -> Bool
+    private var sessionID = UUID()
+
+    init(runDirectory: URL? = nil,
+         isEnabled: @escaping @MainActor () -> Bool = { WorkspaceStore.current?.externalControlEnabled ?? false }) {
+        self.runDirectory = runDirectory ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".glint/run", isDirectory: true)
+        self.isEnabled = isEnabled
+    }
 
     /// Canonical socket + token paths. Debug builds use separate filenames so
     /// a dev Glint and a prod Glint don't collide on the same path.
-    private static func socketPaths() -> (socket: String, token: String) {
-        let runDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".glint", isDirectory: true)
-            .appendingPathComponent("run", isDirectory: true)
+    private func socketPaths() -> (socket: String, token: String) {
+        let runDir = runDirectory
         #if DEBUG
         return (runDir.appendingPathComponent("control-debug.sock").path,
                 runDir.appendingPathComponent("control-debug.token").path)
@@ -55,10 +63,7 @@ final class ControlBridge {
     /// `start()` for the rationale on why a private parent dir matters here.
     func start() {
         guard !isRunning else { return }
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let runDir = home
-            .appendingPathComponent(".glint", isDirectory: true)
-            .appendingPathComponent("run", isDirectory: true)
+        let runDir = runDirectory
         do {
             try FileManager.default.createDirectory(
                 at: runDir,
@@ -71,7 +76,7 @@ final class ControlBridge {
         }
         chmod(runDir.path, 0o700)
 
-        let (path, tokPath) = Self.socketPaths()
+        let (path, tokPath) = socketPaths()
         socketPath = path
         tokenPath = tokPath
 
@@ -117,7 +122,10 @@ final class ControlBridge {
 
         listenFD = fd
         let src = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
-        src.setEventHandler { [weak self] in self?.acceptOne() }
+        let sessionID = UUID()
+        self.sessionID = sessionID
+        src.setEventHandler { [weak self] in self?.acceptOne(listenFD: fd, sessionID: sessionID) }
+        src.setCancelHandler { close(fd) }
         src.resume()
         acceptSource = src
         isRunning = true
@@ -126,14 +134,17 @@ final class ControlBridge {
 
     /// Stop listening and remove the socket + token so the
     /// externalControlEnabled toggle can revoke access live — no app restart.
-    /// Safe when already stopped. Connections already accepted finish on their
-    /// own; no new ones are accepted.
+    /// Safe when already stopped. Previously accepted connections can only
+    /// receive disabled errors, including after a subsequent restart.
     func stop() {
         guard isRunning else { return }
         isRunning = false
         acceptSource?.cancel()
         acceptSource = nil
-        if listenFD >= 0 { close(listenFD); listenFD = -1 }
+        // The cancel handler closes the captured listener after queued accept
+        // handlers finish, so a restart cannot reuse its fd underneath them.
+        listenFD = -1
+        token = ""
         if !socketPath.isEmpty { unlink(socketPath) }
         // Drop the token too — a fresh one is minted on the next start(), so a
         // stale on-disk token can't authorize anything while we're off.
@@ -146,7 +157,7 @@ final class ControlBridge {
     /// covers a crash / force-quit where stop() never ran. No-op if running.
     func reapStale() {
         guard !isRunning else { return }
-        let (sock, tok) = Self.socketPaths()
+        let (sock, tok) = socketPaths()
         unlink(sock)
         unlink(tok)
     }
@@ -188,18 +199,21 @@ final class ControlBridge {
 
     // MARK: accept / serve
 
-    private func acceptOne() {
+    private func acceptOne(listenFD: Int32, sessionID: UUID) {
         let client = accept(listenFD, nil, nil)
         guard client >= 0 else { return }
+        var noSigPipe: Int32 = 1
+        _ = setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
         var tv = timeval(tv_sec: 5, tv_usec: 0)
+        _ = setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
         _ = setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
-        DispatchQueue.global(qos: .utility).async { [weak self] in self?.serve(fd: client) }
+        DispatchQueue.global(qos: .utility).async { [weak self] in self?.serve(fd: client, sessionID: sessionID) }
     }
 
     /// Runs off the accept queue. Each request line is parsed here, dispatched
     /// onto the main queue (where the store + surfaces live), and the response
     /// line written straight back on this connection.
-    private func serve(fd: Int32) {
+    private func serve(fd: Int32, sessionID: UUID) {
         defer { close(fd) }
         var buf = Data()
         var tmp = [UInt8](repeating: 0, count: 4096)
@@ -212,35 +226,52 @@ final class ControlBridge {
             while let nl = buf.firstIndex(of: 0x0A) {
                 let line = buf.subdata(in: buf.startIndex..<nl)
                 buf.removeSubrange(buf.startIndex...nl)
-                var resp = handle(line: line)
+                var resp = line.count > (1 << 20)
+                    ? Self.errorResponse("request-too-large") : handle(line: line, sessionID: sessionID)
                 resp.append(0x0A)
-                resp.withUnsafeBytes { raw in
+                let sent = resp.withUnsafeBytes { raw -> Bool in
+                    var offset = 0
+                    while offset < raw.count {
+                        let written = Darwin.write(fd, raw.baseAddress!.advanced(by: offset), raw.count - offset)
+                        if written < 0 && errno == EINTR { continue }
+                        guard written > 0 else { return false }
+                        offset += written
+                    }
+                    return true
+                }
+                if !sent { return }
+            }
+            if buf.count > (1 << 20) {
+                var response = Self.errorResponse("request-too-large")
+                response.append(0x0A)
+                response.withUnsafeBytes { raw in
                     _ = Darwin.write(fd, raw.baseAddress, raw.count)
                 }
+                return
             }
-            if buf.count > (1 << 20) { break }
         }
     }
 
-    private func handle(line: Data) -> Data {
+    private func handle(line: Data, sessionID: UUID) -> Data {
         guard let obj = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any],
               let cmd = obj["cmd"] as? String else {
             return Self.errorResponse("bad-request")
         }
 
-        // Command-level gating: send-* mutate the terminal, so they require a
-        // token; focus/list don't (see §4.4). Auth is checked off the main
-        // thread — it's a pure comparison.
-        let requiresToken = (cmd == "send-text" || cmd == "send-key")
-        if requiresToken && !tokenMatches(obj["token"] as? String) {
-            return Self.errorResponse("unauthorized")
-        }
-
         var response = Self.errorResponse("unknown-cmd")
+        var readGrid: (pane: String, data: Data, scrollback: Bool, maxLines: Int)?
         DispatchQueue.main.sync {
             guard let store = WorkspaceStore.current else {
                 response = Self.errorResponse("bad-request")
                 return
+            }
+            // Check on the main queue alongside start/stop: disabling access
+            // also revokes commands on already accepted connections.
+            guard self.isEnabled(), self.isRunning, self.sessionID == sessionID else {
+                response = Self.errorResponse("disabled"); return
+            }
+            if Self.requiresToken(for: cmd) && !self.tokenMatches(obj["token"] as? String) {
+                response = Self.errorResponse("unauthorized"); return
             }
             switch cmd {
             case "list":
@@ -251,6 +282,20 @@ final class ControlBridge {
                     response = Self.errorResponse("bad-request"); return
                 }
                 response = store.controlFocus(pane: pane).map(Self.errorResponse) ?? Self.okResponse([:])
+
+            case "read-text":
+                guard let pane = obj["pane"] as? String,
+                      obj["scrollback"] == nil || obj["scrollback"] is Bool,
+                      let maxLines = Self.readTextMaxLines(obj["maxLines"]) else {
+                    response = Self.errorResponse("bad-request"); return
+                }
+                switch store.controlReadGrid(pane: pane,
+                                             scrollback: obj["scrollback"] as? Bool ?? false,
+                                             maxLines: maxLines) {
+                case let .success(grid):
+                    readGrid = (pane, grid, obj["scrollback"] as? Bool ?? false, maxLines)
+                case let .failure(error): response = Self.errorResponse(error)
+                }
 
             case "send-text":
                 guard let pane = obj["pane"] as? String, let text = obj["text"] as? String else {
@@ -275,7 +320,30 @@ final class ControlBridge {
                 response = Self.errorResponse("unknown-cmd")
             }
         }
+        // The main queue owns Ghostty; decoding, span assembly and response JSON
+        // belong to this connection's serve thread, especially for large history.
+        if let readGrid {
+            guard let text = GhosttySurfaceView.controlText(fromRenderGrid: readGrid.data,
+                scrollback: readGrid.scrollback, maxLines: readGrid.maxLines) else {
+                return Self.errorResponse("pane-not-ready")
+            }
+            return Self.okResponse(["pane": readGrid.pane, "text": text])
+        }
         return response
+    }
+
+    static func requiresToken(for command: String) -> Bool {
+        command == "send-text" || command == "send-key" || command == "read-text"
+    }
+
+    static func readTextMaxLines(_ value: Any?) -> Int? {
+        guard let value else { return 1000 }
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite,
+              number.doubleValue.rounded() == number.doubleValue,
+              (1...10_000).contains(number.doubleValue) else { return nil }
+        return number.intValue
     }
 
     // MARK: responses
@@ -293,5 +361,52 @@ final class ControlBridge {
     private static func serialize(_ dict: [String: Any]) -> Data {
         SafeJSON.data(dict)
             ?? Data(#"{"ok":false,"error":"bad-request"}"#.utf8)
+    }
+}
+
+/// Discovery and installation live in the app; terminal access always goes
+/// through ControlBridge, including commands launched by the bundled CLI.
+enum ControlCLIIntegration {
+    static var executableURL: URL {
+        Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/glint")
+    }
+
+    private static var installationDirectory: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin")
+    }
+
+    static var installationState: CLIInstallation.State {
+        CLIInstallation.state(executable: executableURL, directory: installationDirectory)
+    }
+
+    static func install() throws -> URL {
+        try CLIInstallation.install(executable: executableURL, directory: installationDirectory)
+    }
+
+    static func uninstall() throws {
+        try CLIInstallation.uninstall(executable: executableURL, directory: installationDirectory)
+    }
+
+    static var agentInstructions: String {
+        #if DEBUG
+        let debug = true
+        #else
+        let debug = false
+        #endif
+        return agentInstructions(executable: executableURL, debug: debug)
+    }
+
+    static func agentInstructions(executable: URL, debug: Bool) -> String {
+        let command = "'" + executable.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+            + (debug ? " --debug" : "")
+        return String(localized: "Use the following Glint CLI to control terminals on this Mac. Start with --help and panes list to identify the target pane, then read its contents before sending input. Replace PANE with the full handle from the list.")
+            + "\n\n```sh\n"
+            + "\(command) --help\n"
+            + "\(command) panes list\n"
+            + "\(command) pane read PANE --scrollback --max-lines 1000\n"
+            + "\(command) pane send PANE --text 'pwd' --enter\n"
+            + "\(command) pane key PANE down enter\n"
+            + "```\n\n"
+            + String(localized: "After input, read the terminal again to verify the result. Ordinary reads and input preserve local workspace selection. Use pane focus PANE only when explicitly asked to switch local focus. External control must be enabled in Glint Settings; if access is unavailable, report that instead of bypassing the switch. The CLI reads its token locally; never print or copy the token.")
     }
 }
