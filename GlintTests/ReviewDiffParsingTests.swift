@@ -14,6 +14,9 @@ final class ReviewDiffParsingTests: XCTestCase {
     private struct NonLocalDiffRunner: GitRunner {
         /// Return NUL-delimited fixture output. Parameters: Git args, cwd and timeout. Returns a successful result.
         func run(_ args: [String], cwd: String?, timeout: GitTimeout) async throws -> GitResult {
+            if args.first == "rev-parse" {
+                return GitResult(exitCode: 0, stdout: String(repeating: "a", count: 40) + "\n", stderr: "")
+            }
             if args.contains("--name-status") {
                 return GitResult(exitCode: 0, stdout: "M\0file.txt\0", stderr: "")
             }
@@ -27,6 +30,69 @@ final class ReviewDiffParsingTests: XCTestCase {
         func countUntrackedAdditions(repo: String, paths: [String]) async -> [String: Int] {
             [:]
         }
+    }
+
+    private struct FailedDiffRunner: GitRunner {
+        let failAt: String
+
+        /// Simulate one failed Git step. Parameters: argv, cwd, timeout. Returns fixture output or failure.
+        func run(_ args: [String], cwd: String?, timeout: GitTimeout) async throws -> GitResult {
+            if args.contains(failAt) {
+                return GitResult(exitCode: 128, stdout: "", stderr: "fixture failure")
+            }
+            return try await NonLocalDiffRunner().run(args, cwd: cwd, timeout: timeout)
+        }
+
+        /// Supply empty untracked counts. Parameters: repository and paths. Returns an empty map.
+        func countUntrackedAdditions(repo: String, paths: [String]) async -> [String: Int] { [:] }
+    }
+
+    /// Reject failed tracked comparisons. Parameters: none. Returns nothing; asserts both tracked list reads.
+    func testChangedFilesThrowsForFailedGitRead() async {
+        for step in ["--name-status", "--numstat"] {
+            do {
+                _ = try await GitService(runner: FailedDiffRunner(failAt: step))
+                    .changedFiles(repo: "/unused", scope: .workingTree)
+                XCTFail("Expected Git failure for \(step)")
+            } catch { }
+        }
+    }
+
+    /// Keep tracked changes when only untracked enumeration fails; no inputs; asserts partial results and warning.
+    @MainActor
+    func testUntrackedFailureKeepsTrackedChangesAndWarns() async throws {
+        let runner = FailedDiffRunner(failAt: "ls-files")
+        let result = try await GitService(runner: runner).reviewChanges(repo: "/unused", scope: .workingTree)
+        XCTAssertEqual(result.files.map(\.path), ["file.txt"])
+        XCTAssertTrue(result.untrackedWarning)
+        XCTAssertEqual(result.baseline, String(repeating: "a", count: 40))
+        let model = ReviewModel(repo: "/unused", title: "Test", scopes: [.workingTree], runner: runner)
+        await model.reload()
+        XCTAssertEqual(model.files.map(\.path), ["file.txt"])
+        XCTAssertNotNil(model.filesWarning)
+        XCTAssertNil(model.filesError)
+        XCTAssertEqual(model.selected?.path, "file.txt")
+    }
+
+    /// Expose Git failures in Review rather than empty content. Parameters: none. Returns nothing; asserts model state.
+    @MainActor
+    func testReviewPublishesListAndDiffErrors() async {
+        let model = ReviewModel(repo: "/unused", title: "Test", scopes: [.workingTree],
+                                runner: FailedDiffRunner(failAt: "--name-status"))
+        model.files = [file("stale.txt")]
+        model.selected = model.files.first
+        await model.reload()
+        XCTAssertNotNil(model.filesError)
+        XCTAssertTrue(model.files.isEmpty)
+        XCTAssertNil(model.selected)
+        XCTAssertFalse(model.loadingFiles)
+
+        let diffModel = ReviewModel(repo: "/unused", title: "Test", scopes: [.workingTree],
+                                    runner: FailedDiffRunner(failAt: "--unified=1000000"))
+        await diffModel.select(file("file.txt"))
+        XCTAssertNotNil(diffModel.diffError)
+        XCTAssertTrue(diffModel.diffText.isEmpty)
+        XCTAssertFalse(diffModel.loadingDiff)
     }
 
     /// Preserve literal path bytes in NUL records. Parameters: none. Returns nothing; asserts counts and kinds.
@@ -269,7 +335,7 @@ rename to n
         defer { try? FileManager.default.removeItem(at: repo) }
         try Data("local collision".utf8).write(to: repo.appendingPathComponent("file.txt"))
 
-        let files = await GitService(runner: NonLocalDiffRunner())
+        let files = try await GitService(runner: NonLocalDiffRunner())
             .changedFiles(repo: repo.path, scope: .workingTree)
 
         XCTAssertEqual(files.count, 1)

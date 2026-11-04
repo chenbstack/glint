@@ -580,7 +580,8 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// which is what corrupted the earlier byte-tee approach). Decoding that
     /// JSON, rebuilding ANSI text, and the disk write all happen on the archive
     /// queue, which also drops the frame early when the grid hasn't changed.
-    func flushScrollbackToDisk() {
+    /// Snapshot this surface; force bypasses the daily dirty optimization; returns no value and queues archive I/O.
+    func flushScrollbackToDisk(force: Bool = false) {
         guard let id = scrollbackID, let s = surface else { return }
         // Per-pane dirty bit. Without it each fallback flush serializes every live
         // pane's full grid (viewport + 3000 scrollback rows × per-cell color/
@@ -591,7 +592,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // the C API), but covering user input + our own writes + foreground-
         // pid changes catches the common idle case (a finished Claude/Codex
         // turn) and lets idle panes settle to zero cost.
-        guard scrollbackNeedsFlush else { return }
+        guard force || scrollbackNeedsFlush else { return }
         let json = ghostty_surface_render_grid_json(s, "", 0, 0, UInt(maxScrollbackLines))
         defer { ghostty_string_free(json) }
         guard let ptr = json.ptr, json.len > 0 else { return }

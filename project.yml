@@ -17,7 +17,7 @@ settings:
 packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle.git
-    from: "2.6.4"
+    exactVersion: "2.6.4"
 
 targets:
   Glint:

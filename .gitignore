@@ -12,6 +12,7 @@ xcuserdata/
 # Swift Package Manager
 .build/
 Package.resolved
+!Glint.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 .swiftpm/
 
 # Build output of scripts/setup-ghosttykit.sh (zig builds it from the

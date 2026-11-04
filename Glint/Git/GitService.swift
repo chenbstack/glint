@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Foundation
 
 // MARK: - Out-of-band git
@@ -351,9 +352,26 @@ struct LocalGitRunner: GitRunner {
     ///     so non-UTF-8 text (Latin-1, Shift-JIS) counts identically to git
     ///     (`numstat` doesn't decode either — the earlier `String(data:encoding:.utf8)`
     ///     dropped any non-UTF-8 file to 0).
+    /// Parameters: repository directory and relative file path. Returns the
+    /// addition count, or zero for unreadable/non-regular/oversized files.
     private static func addCountFromBytes(repo: String, relPath: String) -> Int {
         let abs = (repo as NSString).appendingPathComponent(relPath)
-        guard let data = FileManager.default.contents(atPath: abs), !data.isEmpty,
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: abs),
+              attributes[.type] as? FileAttributeType == .typeRegular,
+              let size = attributes[.size] as? NSNumber,
+              size.int64Value <= Int64(maxLocalCountBytes) else { return 0 }
+        // The path can be replaced after preflight: never block on a FIFO or
+        // follow a new symlink, and validate the descriptor we actually opened.
+        let descriptor = Darwin.open(abs, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else { return 0 }
+        defer { _ = Darwin.close(descriptor) }
+        var info = stat()
+        guard fstat(descriptor, &info) == 0,
+              info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
+              info.st_size <= off_t(maxLocalCountBytes) else { return 0 }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
+        // A regular file may grow after stat; cap the read itself as well.
+        guard let data = try? handle.read(upToCount: maxLocalCountBytes + 1), !data.isEmpty,
               data.count <= maxLocalCountBytes else { return 0 }
         return data.withUnsafeBytes { buf -> Int in
             let bytes = buf.bindMemory(to: UInt8.self)

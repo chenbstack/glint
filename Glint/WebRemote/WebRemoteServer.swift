@@ -83,21 +83,111 @@ struct WebRemoteOutboundBuffer {
     }
 
     let maxQueuedOutputBytes: Int
+    let maxQueuedBytes: Int
+    let maxQueuedItems: Int
     private var items: [Item] = []
     private var queuedOutputBytes = 0
+    private var queuedBytes = 0
+    private var queuedMessageBytes = 0
+    private struct RejectionNotice {
+        let data: Data
+        var itemsAhead: Int
+        let coalesced: Bool
+        let streamBoundaryPane: String?
+        let snapshot: Bool
+    }
+    private var rejectionNotices: [RejectionNotice] = []
+    private var rejectionBytes = 0
+    private var hasBusyNotice = false
 
-    init(maxQueuedOutputBytes: Int) {
+    /// Ordinary responses leave the terminal stream's byte allowance available.
+    private var maxQueuedMessageBytes: Int { max(0, maxQueuedBytes - maxQueuedOutputBytes) }
+
+    /// Set stream, total-byte and item budgets; returns an empty response queue.
+    /// The total allows a 5 MiB image after base64/JSON encoding and snapshots.
+    init(maxQueuedOutputBytes: Int, maxQueuedBytes: Int = 16 * 1024 * 1024,
+         maxQueuedItems: Int = 256) {
         precondition(maxQueuedOutputBytes >= 0)
+        precondition(maxQueuedBytes >= 0 && maxQueuedItems > 0)
         self.maxQueuedOutputBytes = maxQueuedOutputBytes
+        self.maxQueuedBytes = maxQueuedBytes
+        self.maxQueuedItems = maxQueuedItems
     }
 
-    mutating func enqueueMessage(_ data: Data) {
+    /// Queue a JSON response; data is its encoded body; returns false at capacity.
+    @discardableResult
+    mutating func enqueueMessage(_ data: Data) -> Bool {
+        // An existing output item may precede messages, so it cannot absorb the
+        // next bytes. Always leave a slot for that next terminal segment.
+        let messageItemLimit = maxQueuedItems - 1
+        guard data.count <= maxQueuedMessageBytes - queuedMessageBytes,
+              data.count <= maxQueuedBytes - queuedBytes,
+              items.count < messageItemLimit else { return false }
         items.append(.message(data))
+        queuedBytes += data.count
+        queuedMessageBytes += data.count
+        return true
     }
 
+    /// Record a rejected response without retaining its body; data identifies
+    /// the original request. Returns nothing. Ordinary notices use 64 KiB/32
+    /// slots, plus one coalesced busy and one latest control notice (under 2 KiB).
+    mutating func rejectMessage(_ data: Data) {
+        let tooLarge = data.count > maxQueuedMessageBytes
+        let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        if object?["type"] as? String == "snapshot" {
+            // Only the latest pending pane selection can establish control.
+            // Reserve one small control notice so a file-error flood cannot
+            // turn its rejection into an unrelated file-pressure notification.
+            let pane = String(decoding: (object?["pane"] as? String ?? "").utf8.prefix(256), as: UTF8.self)
+            let control: [String: String] = [
+                "type": "error", "pane": pane,
+                "code": tooLarge ? "response-too-large" : "snapshot-busy",
+            ]
+            guard let encoded = try? JSONSerialization.data(withJSONObject: control) else { return }
+            rejectionBytes -= rejectionNotices.filter(\.snapshot).reduce(0) { $0 + $1.data.count }
+            rejectionNotices.removeAll { $0.snapshot }
+            rejectionNotices.append(RejectionNotice(data: encoded, itemsAhead: items.count,
+                                                   coalesced: false, streamBoundaryPane: pane, snapshot: true))
+            rejectionBytes += encoded.count
+            return
+        }
+        let fileResponse = ["fileList", "fileContent", "fileImage", "fileError"]
+            .contains(object?["type"] as? String ?? "")
+        var notice: [String: Any] = [
+            "type": fileResponse ? "fileError" : "error",
+            "code": tooLarge ? "response-too-large" : (fileResponse ? "file-busy" : "send-queue-busy"),
+        ]
+        for key in fileResponse ? ["workspace", "pane", "path", "root", "request"] : ["pane"] {
+            if let value = object?[key] as? String { notice[key] = value }
+        }
+        guard let encoded = try? JSONSerialization.data(withJSONObject: notice),
+              encoded.count <= 64 * 1024 - rejectionBytes,
+              rejectionNotices.count < 32 else {
+            if !hasBusyNotice {
+                let busy = Data(#"{"type":"error","code":"send-queue-busy"}"#.utf8)
+                rejectionNotices.append(RejectionNotice(data: busy, itemsAhead: items.count,
+                                                       coalesced: true, streamBoundaryPane: nil, snapshot: false))
+                rejectionBytes += busy.count
+                hasBusyNotice = true
+            }
+            return
+        }
+        rejectionNotices.append(RejectionNotice(data: encoded, itemsAhead: items.count,
+                                               coalesced: false, streamBoundaryPane: nil, snapshot: false))
+        rejectionBytes += encoded.count
+    }
+
+    /// Queue terminal bytes for a pane; returns false when either budget is full.
     mutating func enqueueTerminalOutput(_ data: Data, pane: String) -> Bool {
-        guard data.count <= maxQueuedOutputBytes - queuedOutputBytes else { return false }
-        if let last = items.last,
+        guard data.count <= maxQueuedOutputBytes - queuedOutputBytes,
+              data.count <= maxQueuedBytes - queuedBytes else { return false }
+        // File errors do not revoke terminal control and can share its existing
+        // segment. A rejected snapshot is a control boundary for that pane.
+        let crossesSnapshotBoundary = rejectionNotices.contains {
+            $0.itemsAhead == items.count && $0.streamBoundaryPane == pane
+        }
+        if !crossesSnapshotBoundary, let last = items.last,
            case let .terminalOutput(existingPane, existingData) = last,
            existingPane == pane {
             var combined = existingData
@@ -107,24 +197,49 @@ struct WebRemoteOutboundBuffer {
                 data: combined
             )
         } else {
+            guard items.count < maxQueuedItems else { return false }
             items.append(.terminalOutput(pane: pane, data: data))
         }
         queuedOutputBytes += data.count
+        queuedBytes += data.count
         return true
     }
 
+    /// Remove the next response and release its budget; no parameters; returns nil if empty.
     mutating func next() -> Item? {
+        // A later error must not overtake an older snapshot for the same pane:
+        // the browser could otherwise restore control from that stale snapshot.
+        if rejectionNotices.first?.itemsAhead == 0 {
+            let notice = rejectionNotices.removeFirst()
+            rejectionBytes -= notice.data.count
+            if notice.coalesced { hasBusyNotice = false }
+            return .message(notice.data)
+        }
         guard !items.isEmpty else { return nil }
         let item = items.removeFirst()
-        if case let .terminalOutput(_, data) = item {
+        for index in rejectionNotices.indices where rejectionNotices[index].itemsAhead > 0 {
+            rejectionNotices[index].itemsAhead -= 1
+        }
+        switch item {
+        case let .terminalOutput(_, data):
             queuedOutputBytes -= data.count
+            queuedBytes -= data.count
+        case let .message(data):
+            queuedBytes -= data.count
+            queuedMessageBytes -= data.count
         }
         return item
     }
 
+    /// Clear queued responses and all accounting; no parameters or return value.
     mutating func removeAll() {
         items.removeAll()
         queuedOutputBytes = 0
+        queuedBytes = 0
+        queuedMessageBytes = 0
+        rejectionNotices.removeAll()
+        rejectionBytes = 0
+        hasBusyNotice = false
     }
 }
 
@@ -168,6 +283,7 @@ final class WebRemoteServer: @unchecked Sendable {
 
     static let maxClientConnections = 32
     static let maxUnauthenticatedConnections = 8
+    static let maxHTTPConnections = 32
     private static let maxIngressOutputBytes = 256 * 1024
     private static let maxSelectionOutputBytes = 512 * 1024
     private static let authFailureCountCap = 7
@@ -228,6 +344,13 @@ final class WebRemoteServer: @unchecked Sendable {
     private var httpListener: NWListener?
     private var webSocketListener: NWListener?
     private var clients: [UUID: WebRemoteClientConnection] = [:]
+    private var httpConnections: [ObjectIdentifier: NWConnection] = [:]
+    private var httpHeadersPending = Set<ObjectIdentifier>()
+    private var httpSendGenerations: [ObjectIdentifier: UUID] = [:]
+    private var httpSendTimeouts: [ObjectIdentifier: DispatchWorkItem] = [:]
+    private var activeFileRequests: [UUID: UUID] = [:]
+    private let httpRequestTimeout: TimeInterval
+    private let httpSendIdleTimeout: TimeInterval
     private var authThrottle = WebRemoteAuthThrottle(
         countCap: WebRemoteServer.authFailureCountCap,
         expirySeconds: WebRemoteServer.authFailureExpirySeconds
@@ -255,10 +378,14 @@ final class WebRemoteServer: @unchecked Sendable {
     init(
         defaults: UserDefaults = .standard,
         interfaceRetryInterval: TimeInterval = 5,
+        httpRequestTimeout: TimeInterval = 10,
+        httpSendIdleTimeout: TimeInterval = 30,
         resolveBindAddress: @escaping (String) -> String? = WebRemoteListenTarget.bindAddress
     ) {
         self.defaults = defaults
         self.interfaceRetryInterval = interfaceRetryInterval
+        self.httpRequestTimeout = httpRequestTimeout
+        self.httpSendIdleTimeout = httpSendIdleTimeout
         self.resolveBindAddress = resolveBindAddress
         ports = WebRemotePortStore.loadOrCreate(defaults: defaults)
     }
@@ -449,7 +576,8 @@ final class WebRemoteServer: @unchecked Sendable {
             configure(http, kind: .http, runID: currentRun)
             configure(webSocket, kind: .webSocket, runID: currentRun)
             http.newConnectionHandler = { [weak self] connection in
-                self?.handleHTTPConnection(connection)
+                guard let self else { connection.cancel(); return }
+                self.handleHTTPConnection(connection, runID: currentRun)
             }
             webSocket.newConnectionHandler = { [weak self] connection in
                 self?.handleWebSocketConnection(connection)
@@ -607,6 +735,15 @@ final class WebRemoteServer: @unchecked Sendable {
         webSocketListener = nil
         clients.values.forEach { $0.cancel() }
         clients.removeAll()
+        for connection in httpConnections.values {
+            connection.stateUpdateHandler = nil
+            connection.cancel()
+        }
+        httpConnections.removeAll()
+        httpHeadersPending.removeAll()
+        httpSendTimeouts.values.forEach { $0.cancel() }
+        httpSendTimeouts.removeAll()
+        httpSendGenerations.removeAll()
         authThrottle.removeAll()
         readyListeners.removeAll()
         token = ""
@@ -642,28 +779,56 @@ final class WebRemoteServer: @unchecked Sendable {
         }
     }
 
-    private func handleHTTPConnection(_ connection: NWConnection) {
+    /// Track a connection for this listener generation; returns nothing. The
+    /// fixed deadline covers only headers; response sends have progress deadlines.
+    private func handleHTTPConnection(_ connection: NWConnection, runID: UUID) {
+        guard self.runID == runID, httpConnections.count < Self.maxHTTPConnections else {
+            connection.cancel()
+            return
+        }
+        let id = ObjectIdentifier(connection)
+        httpConnections[id] = connection
+        httpHeadersPending.insert(id)
         connection.stateUpdateHandler = { [weak self, weak connection] state in
-            guard let self, let connection else { return }
+            guard let self, let connection, self.httpConnections[id] === connection else { return }
             switch state {
             case .ready:
                 self.receiveHTTPRequest(connection, buffer: Data())
             case .failed,
                  .cancelled:
-                connection.stateUpdateHandler = nil
+                self.finishHTTPConnection(connection)
             default:
                 break
             }
         }
         connection.start(queue: queue)
+        queue.asyncAfter(deadline: .now() + httpRequestTimeout) { [weak self, weak connection] in
+            guard let self, let connection, self.httpConnections[id] === connection,
+                  self.httpHeadersPending.contains(id) else { return }
+            self.finishHTTPConnection(connection)
+        }
     }
 
+    /// Remove and cancel a tracked HTTP connection; no return value.
+    private func finishHTTPConnection(_ connection: NWConnection) {
+        httpConnections.removeValue(forKey: ObjectIdentifier(connection))
+        let id = ObjectIdentifier(connection)
+        httpHeadersPending.remove(id)
+        httpSendTimeouts.removeValue(forKey: id)?.cancel()
+        httpSendGenerations.removeValue(forKey: id)
+        connection.stateUpdateHandler = nil
+        connection.cancel()
+    }
+
+    /// Receive bounded headers for a tracked connection; buffer is accumulated
+    /// header data. Returns nothing and stops on completion, failure or deadline.
     private func receiveHTTPRequest(_ connection: NWConnection, buffer: Data) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) {
             [weak self, weak connection] content, _, complete, error in
-            guard let self, let connection else { return }
+            guard let self, let connection,
+                  self.httpConnections[ObjectIdentifier(connection)] === connection else { return }
             if error != nil {
-                connection.cancel()
+                self.finishHTTPConnection(connection)
                 return
             }
             var next = buffer
@@ -673,6 +838,7 @@ final class WebRemoteServer: @unchecked Sendable {
                 return
             }
             if next.range(of: Data([13, 10, 13, 10])) != nil {
+                self.httpHeadersPending.remove(ObjectIdentifier(connection))
                 self.serveHTTPRequest(next, on: connection)
                 return
             }
@@ -731,9 +897,36 @@ final class WebRemoteServer: @unchecked Sendable {
         sendHTTP(response, to: connection)
     }
 
+    /// Send a response without a total transfer deadline; data and connection
+    /// are inputs. Returns nothing; each bounded chunk must make send progress.
     private func sendHTTP(_ data: Data, to connection: NWConnection) {
-        connection.send(content: data, completion: .contentProcessed { _ in
-            connection.cancel()
+        httpHeadersPending.remove(ObjectIdentifier(connection))
+        sendHTTPChunk(data, offset: 0, to: connection)
+    }
+
+    /// Send the next 64 KiB response chunk; data, byte offset and connection
+    /// identify the transfer. Returns nothing; stale completions cannot restart it.
+    private func sendHTTPChunk(_ data: Data, offset: Int, to connection: NWConnection) {
+        let id = ObjectIdentifier(connection)
+        guard httpConnections[id] === connection else { return }
+        guard offset < data.count else { finishHTTPConnection(connection); return }
+        let generation = UUID()
+        httpSendGenerations[id] = generation
+        let timeout = DispatchWorkItem { [weak self, weak connection] in
+            guard let self, let connection, self.httpSendGenerations[id] == generation else { return }
+            self.finishHTTPConnection(connection)
+        }
+        httpSendTimeouts[id]?.cancel()
+        httpSendTimeouts[id] = timeout
+        queue.asyncAfter(deadline: .now() + httpSendIdleTimeout, execute: timeout)
+        let end = min(offset + 64 * 1024, data.count)
+        connection.send(content: data.subdata(in: offset..<end), completion: .contentProcessed {
+            [weak self, weak connection] error in
+            guard let self, let connection, self.httpSendGenerations[id] == generation else { return }
+            self.httpSendTimeouts.removeValue(forKey: id)?.cancel()
+            self.httpSendGenerations.removeValue(forKey: id)
+            if error != nil { self.finishHTTPConnection(connection); return }
+            self.sendHTTPChunk(data, offset: end, to: connection)
         })
     }
 
@@ -996,14 +1189,20 @@ final class WebRemoteServer: @unchecked Sendable {
                         let bufferedOutput = client.pendingSelectionOutput.take(
                             after: snapshot.outputSequence
                         )
-                        client.pendingPane = nil
-                        client.subscribedPane = pane
-                        updateSubscribedPanesLocked()
-                        sendJSON([
+                        guard sendJSON([
                             "type": "snapshot",
                             "pane": pane,
                             "data": snapshot.payload.base64EncodedString(),
-                        ], to: clientID)
+                        ], to: clientID) else {
+                            client.pendingPane = nil
+                            client.subscribedPane = nil
+                            updateSubscribedPanesLocked()
+                            reconcileTerminalSizeLocked(for: pane)
+                            return
+                        }
+                        client.pendingPane = nil
+                        client.subscribedPane = pane
+                        updateSubscribedPanesLocked()
                         if !bufferedOutput.isEmpty,
                            !client.sendTerminalOutput(bufferedOutput, pane: pane) {
                             dropSlowClientLocked(clientID)
@@ -1086,56 +1285,83 @@ final class WebRemoteServer: @unchecked Sendable {
         }
     }
 
+    /// Read/list files for a live client; inputs identify its request. Returns
+    /// nothing. Keep tickets until I/O finishes, even across stop/restart, so
+    /// toggling the server cannot bypass the global background-work budget.
     private func accessFiles(_ request: WebRemoteFileRequest, clientID: UUID) {
+        guard clients[clientID] != nil else { return }
+        guard activeFileRequests.count < 8,
+              activeFileRequests.values.filter({ $0 == clientID }).count < 2 else {
+            sendJSON(request.error(.busy), to: clientID)
+            return
+        }
+        let ticket = UUID()
+        activeFileRequests[ticket] = clientID
         DispatchQueue.main.async { [weak self] in
-            guard let self, let store = WorkspaceStore.current else { return }
+            guard let self else { return }
+            guard let store = WorkspaceStore.current else {
+                self.queue.async { self.activeFileRequests.removeValue(forKey: ticket) }
+                return
+            }
             let currentRoot = store.webRemoteFileRoot(workspace: request.workspace, pane: request.pane)
             guard case let .success(root) = request.validatedRoot(current: currentRoot) else {
                 let error: WebRemoteFiles.ErrorCode = currentRoot == nil ? .rootUnavailable : .rootChanged
-                self.queue.async { [weak self] in self?.sendJSON(request.error(error), to: clientID) }
+                self.queue.async {
+                    self.activeFileRequests.removeValue(forKey: ticket)
+                    self.sendJSON(request.error(error), to: clientID)
+                }
                 return
             }
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                var response: [String: Any] = [
-                    "workspace": request.workspace.uuidString, "pane": request.pane,
-                    "path": request.path, "root": root, "request": request.requestID,
-                ]
-                if request.read {
-                    if WebRemoteFiles.isImage(request.path) {
-                        switch WebRemoteFiles.readImage(root: root, path: request.path) {
-                        case let .success(png):
-                            response["type"] = "fileImage"
-                            response["data"] = png.base64EncodedString()
-                        case let .failure(error): response = request.error(error)
+            self.queue.async { [self] in
+                guard self.clients[clientID] != nil else {
+                    self.activeFileRequests.removeValue(forKey: ticket)
+                    return
+                }
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    var response: [String: Any] = [
+                        "workspace": request.workspace.uuidString, "pane": request.pane,
+                        "path": request.path, "root": root, "request": request.requestID,
+                    ]
+                    if request.read {
+                        if WebRemoteFiles.isImage(request.path) {
+                            switch WebRemoteFiles.readImage(root: root, path: request.path) {
+                            case let .success(png):
+                                response["type"] = "fileImage"
+                                response["data"] = png.base64EncodedString()
+                            case let .failure(error): response = request.error(error)
+                            }
+                        } else {
+                            switch WebRemoteFiles.read(root: root, path: request.path) {
+                            case let .success(content):
+                                response["type"] = "fileContent"
+                                response["content"] = content
+                                response["format"] = WebRemoteFiles.isHTML(request.path) ? "html" : "text"
+                            case let .failure(error): response = request.error(error)
+                            }
                         }
                     } else {
-                        switch WebRemoteFiles.read(root: root, path: request.path) {
-                        case let .success(content):
-                            response["type"] = "fileContent"
-                            response["content"] = content
-                            response["format"] = WebRemoteFiles.isHTML(request.path) ? "html" : "text"
+                        switch WebRemoteFiles.list(root: root, path: request.path) {
+                        case let .success(entries):
+                            response["type"] = "fileList"
+                            response["entries"] = entries
+                            response["limit"] = WebRemoteFiles.maxEntries
                         case let .failure(error): response = request.error(error)
                         }
                     }
-                } else {
-                    switch WebRemoteFiles.list(root: root, path: request.path) {
-                    case let .success(entries):
-                        response["type"] = "fileList"
-                        response["entries"] = entries
-                        response["limit"] = WebRemoteFiles.maxEntries
-                    case let .failure(error): response = request.error(error)
+                    // I/O can outlive a cd, pane removal, or transition to SSH.
+                    // Revalidate before handing the result back to the browser.
+                    let completedResponse = response
+                    DispatchQueue.main.async { [weak self] in
+                        let latest = WorkspaceStore.current?.webRemoteFileRoot(
+                            workspace: request.workspace, pane: request.pane
+                        )
+                        let checkedResponse = latest == root ? completedResponse
+                            : request.error(latest == nil ? .rootUnavailable : .rootChanged)
+                        self?.queue.async { [weak self] in
+                            self?.activeFileRequests.removeValue(forKey: ticket)
+                            self?.sendJSON(checkedResponse, to: clientID)
+                        }
                     }
-                }
-                // I/O can outlive a cd, pane removal, or transition to SSH.
-                // Revalidate before handing the result back to the browser.
-                let completedResponse = response
-                DispatchQueue.main.async { [weak self] in
-                    let latest = WorkspaceStore.current?.webRemoteFileRoot(
-                        workspace: request.workspace, pane: request.pane
-                    )
-                    let checkedResponse = latest == root ? completedResponse
-                        : request.error(latest == nil ? .rootUnavailable : .rootChanged)
-                    self?.queue.async { [weak self] in self?.sendJSON(checkedResponse, to: clientID) }
                 }
             }
         }
@@ -1203,9 +1429,12 @@ final class WebRemoteServer: @unchecked Sendable {
         }
     }
 
-    private func sendJSON(_ object: [String: Any], to clientID: UUID) {
-        guard let data = SafeJSON.data(object) else { return }
-        clients[clientID]?.send(data)
+    /// Queue a JSON response for a client; inputs identify payload and client;
+    /// returns whether it was accepted so snapshots can retain stream ordering.
+    @discardableResult
+    private func sendJSON(_ object: [String: Any], to clientID: UUID) -> Bool {
+        guard let data = SafeJSON.data(object) else { return false }
+        return clients[clientID]?.send(data) ?? false
     }
 
     private func sendError(_ code: String, to clientID: UUID) {
@@ -1327,6 +1556,9 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
     )
     private var sendInFlight = false
     private var cancelled = false
+    private var sendQueue: DispatchQueue?
+    private var sendGeneration: UUID?
+    private var sendTimeout: DispatchWorkItem?
 
     init(
         id: UUID,
@@ -1341,6 +1573,7 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
     }
 
     func start(on queue: DispatchQueue, authenticationTimeout: TimeInterval) {
+        sendQueue = queue
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
             switch state {
@@ -1373,6 +1606,9 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
     func cancel() {
         guard !cancelled else { return }
         cancelled = true
+        sendTimeout?.cancel()
+        sendTimeout = nil
+        sendGeneration = nil
         outbound.removeAll()
         _ = pendingSelectionOutput.take()
         connection.cancel()
@@ -1388,10 +1624,18 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
         encrypted = true
     }
 
-    func send(_ data: Data) {
-        guard !cancelled else { return }
-        outbound.enqueueMessage(data)
+    /// Queue ordinary data; returns false and records a bounded error notice
+    /// when the response is too large or the queue is temporarily full.
+    @discardableResult
+    func send(_ data: Data) -> Bool {
+        guard !cancelled else { return false }
+        guard outbound.enqueueMessage(data) else {
+            outbound.rejectMessage(data)
+            sendNextIfNeeded()
+            return false
+        }
         sendNextIfNeeded()
+        return true
     }
 
     func sendTerminalOutput(_ data: Data, pane: String) -> Bool {
@@ -1446,12 +1690,24 @@ private final class WebRemoteClientConnection: @unchecked Sendable {
             metadata: [metadata]
         )
         sendInFlight = true
+        let generation = UUID()
+        sendGeneration = generation
+        let timeout = DispatchWorkItem { [weak self] in
+            guard let self, self.sendGeneration == generation, self.sendInFlight else { return }
+            self.cancel()
+        }
+        sendTimeout?.cancel()
+        sendTimeout = timeout
+        sendQueue?.asyncAfter(deadline: .now() + 30, execute: timeout)
         connection.send(
             content: wireData,
             contentContext: context,
             isComplete: true,
             completion: .contentProcessed { [weak self] error in
-                guard let self else { return }
+                guard let self, !self.cancelled, self.sendGeneration == generation else { return }
+                self.sendTimeout?.cancel()
+                self.sendTimeout = nil
+                self.sendGeneration = nil
                 self.sendInFlight = false
                 if let error {
                     webRemoteLogger.error("WebSocket send failed: \(error.localizedDescription, privacy: .public)")

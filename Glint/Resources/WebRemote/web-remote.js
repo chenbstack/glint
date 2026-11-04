@@ -95,6 +95,9 @@ const translations = {
     invalid_file_path: "文件路径无效或超出项目目录",
     file_unavailable: "文件或目录无法读取",
     file_too_large: "文件超过 128 KB，无法预览",
+    file_busy: "文件读取繁忙，请稍后重试；终端仍可使用",
+    response_too_large: "响应过大，无法传输，请选择较小内容",
+    send_queue_busy: "连接发送繁忙，请重试未完成的操作",
     file_not_text: "仅支持预览 UTF-8 文本文件",
     invalid_project_path: "目录不存在，或不是这台 Mac 上可访问的文件夹。",
     loading_terminal: "正在载入终端",
@@ -167,6 +170,9 @@ const translations = {
     invalid_file_path: "File path is invalid or outside the workspace",
     file_unavailable: "File or folder cannot be read",
     file_too_large: "Files over 128 KB cannot be previewed",
+    file_busy: "File reads are busy. Try again shortly; the terminal is still available.",
+    response_too_large: "The response is too large to transfer. Choose smaller content.",
+    send_queue_busy: "The connection is busy sending. Retry unfinished operations.",
     file_not_text: "Only UTF-8 text files can be previewed",
     invalid_project_path: "The directory does not exist or is not accessible on this Mac.",
     loading_terminal: "Loading terminal",
@@ -714,7 +720,7 @@ function handleMessage(raw) {
       setStatus("connected", t("terminal_closed"));
       break;
     case "error":
-      handleError(message.code);
+      handleError(message.code, message.pane);
       break;
   }
 }
@@ -796,8 +802,18 @@ function applyTheme(theme) {
   };
 }
 
-/** Update protocol error UI; takes a server error code and returns nothing. */
-function handleError(code) {
+/** Update protocol error UI; code and optional pane identify the failure; returns nothing. */
+function handleError(code, pane) {
+  if (code === "send-queue-busy") {
+    fileContentRequest = "";
+    fileListRequest = "";
+    elements.filesMessage.textContent = t("send_queue_busy");
+  }
+  if ((code === "response-too-large" || code === "snapshot-busy") && pane === selectedPane) {
+    controllingPane = "";
+    clearTimeout(paneRetryTimer);
+    paneRetryCount = paneRetryLimit;
+  }
   if (code === "unauthorized") {
     if (encrypted) {
       socket?.close();
@@ -832,6 +848,9 @@ function handleError(code) {
 
 function errorLabel(code) {
   const labels = {
+    "response-too-large": t("response_too_large"),
+    "snapshot-busy": t("send_queue_busy"),
+    "send-queue-busy": t("send_queue_busy"),
     "bad-request": t("bad_request"),
     "unknown-pane": t("unknown_pane"),
     "unknown-workspace": t("unknown_workspace"),
@@ -850,6 +869,8 @@ function fileErrorLabel(code) {
     "file-root-changed": "file_root_changed",
     "invalid-file-path": "invalid_file_path",
     "file-unavailable": "file_unavailable",
+    "file-busy": "file_busy",
+    "response-too-large": "response_too_large",
     "file-too-large": "file_too_large",
     "file-not-text": "file_not_text",
     "image-too-large": "image_too_large",

@@ -773,6 +773,28 @@
         }
       }
     },
+    "Archive Workspace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "归档工作区"
+          }
+        }
+      }
+    },
+    "Archive “%@”?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "归档“%@”？"
+          }
+        }
+      }
+    },
     "Archived": {
       "extractionState": "manual",
       "localizations": {
@@ -6314,6 +6336,116 @@
           "stringUnit": {
             "state": "translated",
             "value": "✗ 名称非法"
+          }
+        }
+      }
+    },
+    "Couldn't load changed files. Try refreshing.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法加载更改文件，请刷新重试。"
+          }
+        }
+      }
+    },
+    "Couldn't load the diff. Try refreshing.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法加载差异，请刷新重试。"
+          }
+        }
+      }
+    },
+    "Untracked files couldn't be loaded. Tracked changes are still available.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法加载未跟踪文件，仍可查看已跟踪文件的更改。"
+          }
+        }
+      }
+    },
+    "1 of its panes still has something running; archiving will terminate its processes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其中 1 个面板仍有任务在运行，归档将终止其中的进程。"
+          }
+        }
+      }
+    },
+    "%lld of its panes still have something running; archiving will terminate their processes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其中 %lld 个面板仍有任务在运行，归档将终止这些进程。"
+          }
+        }
+      }
+    },
+    "Saved Session Unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取已保存会话"
+          }
+        }
+      }
+    },
+    "Your saved session is still on disk. Retry will restore it, replacing this temporary workspace session and closing its terminals. Continuing without saving keeps the original untouched; temporary workspace changes will not be saved.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已保存的会话仍保留在磁盘原处。重试将恢复它，替换当前临时工作区会话并关闭其中的终端。继续而不保存会保留原存档；临时工作区的更改不会保存。"
+          }
+        }
+      }
+    },
+    "The temporary session changed while the dialog was open. Review it before trying again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对话框打开期间临时会话发生了变化，请检查后重试。"
+          }
+        }
+      }
+    },
+    "Retry and Restore": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重试并恢复"
+          }
+        }
+      }
+    },
+    "Continue Without Saving": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "继续临时会话（不保存）"
           }
         }
       }

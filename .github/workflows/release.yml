@@ -48,6 +48,9 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Verify dependency lock
+        run: node scripts/verify-dependency-lock.mjs
+
       - name: Resolve ghostty SHA
         id: ghostty
         run: |
@@ -85,6 +88,8 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild \
+            -disableAutomaticPackageResolution \
+            -onlyUsePackageVersionsFromResolvedFile \
             -project Glint.xcodeproj \
             -scheme Glint \
             -configuration Release \

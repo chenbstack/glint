@@ -163,8 +163,13 @@ final class ControlBridgeIntegrationTests: XCTestCase {
 
         enabled = true
         bridge.start()
-        let oldConnection = try await Task.detached { try Self.exchange(connection, ["cmd": "list"]) }.value
-        XCTAssertEqual(oldConnection["error"] as? String, "disabled")
+        let oldConnectionClosed = await Task.detached { () -> Bool in
+            do {
+                _ = try Self.exchange(connection, ["cmd": "list"])
+                return false
+            } catch { return true }
+        }.value
+        XCTAssertTrue(oldConnectionClosed, "Stop must shut down the old connection rather than keep it alive after restart")
         let freshConnection = try await Task.detached { try Self.connect(path) }.value
         defer { close(freshConnection) }
         let staleToken = try await Task.detached {
@@ -174,6 +179,29 @@ final class ControlBridgeIntegrationTests: XCTestCase {
         let on = try await cli(["--socket", path, "panes", "list"])
         XCTAssertEqual(on.status, 0, on.error)
         XCTAssertEqual(store.selectedWorkspaceID, local.id)
+    }
+
+    /// Reject bad credentials before entering a busy main queue; no inputs; returns after the private socket reply.
+    func testInvalidTokenDoesNotWaitForMainQueue() async throws {
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        let bridge = ControlBridge(runDirectory: try directory(), isEnabled: { true })
+        bridge.start()
+        defer { bridge.stop(); withExtendedLifetime(store) {} }
+        let path = bridge.socketPath
+        let rejected = try await Task.detached { () throws -> Bool in
+            let entered = DispatchSemaphore(value: 0)
+            let release = DispatchSemaphore(value: 0)
+            DispatchQueue.main.async { entered.signal(); release.wait() }
+            defer { release.signal() }
+            guard entered.wait(timeout: .now() + 3) == .success else { return false }
+            let fd = try Self.connect(path)
+            defer { close(fd) }
+            guard let response = try? Self.exchange(fd, ["cmd": "send-text", "pane": "invalid:1",
+                                                         "text": "must-not-run", "token": "definitely-invalid-token"])
+            else { return false }
+            return response["error"] as? String == "unauthorized"
+        }.value
+        XCTAssertTrue(rejected, "Invalid credentials must not wait on modal/layout work on the main queue")
     }
 
     func testOversizedSocketRequestReturnsExplicitError() async throws {

@@ -1756,6 +1756,8 @@ final class WorkspaceStore: ObservableObject {
         self.init(activity: PaneActivityStore())
     }
 
+    /// Load the initial workspace snapshot and wire live updates; activity owns
+    /// pane status and externalControlNow supplies the clock; initializes the store.
     init(activity: PaneActivityStore, externalControlNow: @escaping () -> Date = Date.init) {
         self.externalControlNow = externalControlNow
         self.activity = activity
@@ -1780,7 +1782,12 @@ final class WorkspaceStore: ObservableObject {
         // Drain paths Launch Services handed us before the store existed (cold
         // launch with a folder/file/glint:// URL). No-op when nothing's pending;
         // AppDelegate.deliver also calls flush() for warm-launch opens.
-        DispatchQueue.main.async { AppDelegate.flush() }
+        // Recovery needs AppKit ready and must precede pending URL opens that
+        // could otherwise create temporary workspaces before restoration.
+        DispatchQueue.main.async { [weak self] in
+            self?.offerSavedSessionRecovery()
+            AppDelegate.flush()
+        }
 
         // Reconcile the zsh-side inline-suggestion install on every launch:
         // first-ever launch installs from the current default; subsequent
@@ -1844,7 +1851,9 @@ final class WorkspaceStore: ObservableObject {
                     ScrollbackArchive.fileID(forPaneKey: "\(ws.id.uuidString):\(paneID.value)"))
             }
         }
-        ScrollbackArchive.prune(keeping: liveScrollbackIDs)
+        if !Persistence.requiresLoadRetry {
+            ScrollbackArchive.prune(keeping: liveScrollbackIDs)
+        }
 
         // Block-based observers hold their tokens in `observerTokens`; the
         // store currently lives as long as the app, but if it's ever torn
@@ -1863,7 +1872,7 @@ final class WorkspaceStore: ObservableObject {
                 guard let self else { return }
                 self.clearDockBadge()
                 self.captureCwdsFromLiveSurfaces()
-                self.flushScrollback()
+                self.flushScrollback(force: true)
                 self.persist()
             }
             ScrollbackArchive.drain()
@@ -2149,13 +2158,9 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
-    /// Snapshot every live surface's cwd back into the workspace model and
-    /// refresh the per-pane foreground process name. Called periodically, on
-    /// app exit, and whenever ghostty pushes a PWD update via its action
-    /// callback.
-    /// Persist every live pane's recorded terminal output. No-op when the
-    /// feature is off. Each view only writes when it has new bytes.
-    func flushScrollback() {
+    /// Persist live terminal grids when enabled; force bypasses the daily dirty
+    /// optimization for final snapshots; returns no value and queues archive I/O.
+    func flushScrollback(force: Bool = false) {
         guard restoreTerminalScrollback else { return }
         for view in surfaceViews.values {
             // Mark dirty when the pane's foreground pid changed since the last
@@ -2164,7 +2169,7 @@ final class WorkspaceStore: ObservableObject {
             // the grid clearly evolved. Cheap (a single sysctl read; the cwd
             // sweep just did the same one) and idempotent.
             view.noteForegroundPidForScrollback()
-            view.flushScrollbackToDisk()
+            view.flushScrollbackToDisk(force: force)
         }
     }
 
@@ -2670,6 +2675,73 @@ final class WorkspaceStore: ObservableObject {
               let ws = UUID(uuidString: String(parts[0])),
               let seq = UInt32(parts[1]) else { return nil }
         return WorkspacePaneKey(workspace: ws, pane: PaneID(value: seq))
+    }
+
+    /// Offer an explicit retry before replacing a temporary startup session;
+    /// no parameters; returns without changing terminals or save protection on cancellation.
+    private func offerSavedSessionRecovery() {
+        var temporarySessionChanged = false
+        while Persistence.requiresLoadRetry {
+            let workspaceIDs = Set(workspaces.map { $0.id })
+            let paneKeys = Set(workspaces.flatMap { workspace in
+                workspace.panes.keys.map { WorkspacePaneKey(workspace: workspace.id, pane: $0) }
+            })
+            let identities = surfaceViews.mapValues { ObjectIdentifier($0) }
+            let busyPanes = Set(paneKeys.filter { paneNeedsCloseConfirmation($0) })
+
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = String(localized: "Saved Session Unavailable")
+            alert.informativeText = String(localized: "Your saved session is still on disk. Retry will restore it, replacing this temporary workspace session and closing its terminals. Continuing without saving keeps the original untouched; temporary workspace changes will not be saved.")
+            if temporarySessionChanged {
+                alert.informativeText += "\n\n" + String(localized: "The temporary session changed while the dialog was open. Review it before trying again.")
+            }
+            alert.addButton(withTitle: String(localized: "Retry and Restore"))
+            alert.addButton(withTitle: String(localized: "Continue Without Saving"))
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+            let currentPaneKeys = Set(workspaces.flatMap { workspace in
+                workspace.panes.keys.map { WorkspacePaneKey(workspace: workspace.id, pane: $0) }
+            })
+            let currentBusy = Set(currentPaneKeys.filter { paneNeedsCloseConfirmation($0) })
+            guard workspaceIDs == Set(workspaces.map { $0.id }), paneKeys == currentPaneKeys,
+                  identities == surfaceViews.mapValues({ ObjectIdentifier($0) }),
+                  currentBusy.isSubset(of: busyPanes) else {
+                temporarySessionChanged = true
+                continue
+            }
+            // Read only after the modal and identity checks. A successful load
+            // permits saving, so adopt it synchronously without another modal
+            // or await that could let a temporary-state autosave run first.
+            guard let restored = Persistence.load() else { continue }
+            captureCwdsFromLiveSurfaces()
+            flushScrollback(force: true)
+            ScrollbackArchive.drain()
+            surfaceViews.removeAll()
+            paneAgentState.removeAll()
+            paneProcesses.removeAll()
+            pendingInitialInput.removeAll()
+            gitStatuses.removeAll()
+            webRemoteControlledPanes.removeAll()
+            clearExternalControlActivity()
+            clearDockBadge()
+            workspaces = restored.workspaces
+            let firstActiveID = workspaces.first(where: { !$0.archived })?.id ?? workspaces.first?.id
+            let shouldRestore = (UserDefaults.standard.object(forKey: "glint.restoreLastWorkspace") as? Bool) ?? true
+            let selected = shouldRestore ? (restored.selectedWorkspaceID ?? firstActiveID) : firstActiveID
+            selectedWorkspaceID = workspaces.first(where: { $0.id == selected })?.archived == true
+                ? firstActiveID : selected
+            sidebarCollapsed = restored.sidebarCollapsed
+            syncGitWatchers()
+            refreshAllGitStatuses()
+            let liveIDs = Set(workspaces.flatMap { workspace in
+                workspace.panes.keys.map {
+                    ScrollbackArchive.fileID(forPaneKey: "\(workspace.id.uuidString):\($0.value)")
+                }
+            })
+            ScrollbackArchive.prune(keeping: liveIDs)
+            return
+        }
     }
 
     func persist() {
@@ -3609,7 +3681,8 @@ final class WorkspaceStore: ObservableObject {
     /// the same code path as an app restart. Refuses to archive the last
     /// active workspace (the user must always have something visible).
     /// If the archived workspace was selected, advances to the next active
-    /// one in sidebar order.
+    /// one in sidebar order. Parameter id identifies the workspace; returns
+    /// no value and leaves live terminals untouched when confirmation cancels.
     func archiveWorkspace(_ id: UUID) {
         guard let idx = workspaces.firstIndex(where: { $0.id == id }),
               !workspaces[idx].archived else { return }
@@ -3620,20 +3693,52 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
+        let busyPanes = workspaces[idx].panes.keys
+            .filter { paneNeedsCloseConfirmation(WorkspacePaneKey(workspace: id, pane: $0)) }
+        if !busyPanes.isEmpty,
+           !Self.confirmDestruction(
+               message: String(format: String(localized: "Archive “%@”?"), workspaces[idx].displayName),
+               informative: busyPanes.count == 1
+                   ? String(localized: "1 of its panes still has something running; archiving will terminate its processes.")
+                   : String(format: String(localized: "%lld of its panes still have something running; archiving will terminate their processes."), Int64(busyPanes.count)),
+               confirmTitle: String(localized: "Archive Workspace"),
+               suppressionKey: "glint.suppressArchiveWorkspaceConfirm"
+           ) {
+            return
+        }
+
+        // The modal runs a nested event loop: its target may have been closed,
+        // reordered or archived while the user was deciding.
+        guard let archiveIndex = workspaces.firstIndex(where: { $0.id == id }),
+              !workspaces[archiveIndex].archived else { return }
+        guard activeWorkspaces.count > 1 else {
+            NSSound.beep()
+            return
+        }
+
+        for (key, view) in surfaceViews where key.workspace == id {
+            captureSurfaceState(from: view)
+            if restoreTerminalScrollback {
+                view.flushScrollbackToDisk(force: true)
+            }
+        }
+        ScrollbackArchive.drain()
+
         // Drop live surfaces + side-state so the parked workspace doesn't
         // hold onto GPU/IOSurface memory. The Pane / SplitNode / scrollback
         // archive stay on disk so unarchive can rehydrate them.
         surfaceViews = surfaceViews.filter { $0.key.workspace != id }
-        clearDockBadges(for: workspaces[idx].panes.keys.map { WorkspacePaneKey(workspace: id, pane: $0) })
+        clearDockBadges(for: workspaces[archiveIndex].panes.keys.map { WorkspacePaneKey(workspace: id, pane: $0) })
         paneAgentState = paneAgentState.filter { $0.key.workspace != id }
         paneProcesses = paneProcesses.filter { $0.key.workspace != id }
 
         let wasSelected = selectedWorkspaceID == id
-        workspaces[idx].archived = true
+        workspaces[archiveIndex].archived = true
 
         if wasSelected, let next = activeWorkspaces.first {
             selectedWorkspaceID = next.id
         }
+        persist()
     }
 
     /// Lift a workspace back to the main sidebar list and select it. Surfaces

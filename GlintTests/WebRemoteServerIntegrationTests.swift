@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Network
 import XCTest
 @testable import Glint
@@ -26,7 +27,7 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         testDefaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
         testDefaults.set(Int(try availableHTTPPort()), forKey: "glint.webRemoteHTTPPort")
         interfaceAddress.set(nil)
-        server = WebRemoteServer(defaults: testDefaults, interfaceRetryInterval: 0.2) { [interfaceAddress] key in
+        server = WebRemoteServer(defaults: testDefaults, interfaceRetryInterval: 0.2, httpRequestTimeout: 1) { [interfaceAddress] key in
             key == "test-interface" ? interfaceAddress.get() : WebRemoteListenTarget.bindAddress(for: key)
         }
         urlSession = URLSession(configuration: .ephemeral)
@@ -114,6 +115,53 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         XCTAssertEqual(http.statusCode, 200)
         XCTAssertTrue(data.isEmpty, "HEAD must not return a body")
         XCTAssertNotNil(http.value(forHTTPHeaderField: "Content-Length"))
+    }
+
+    /// Silent HTTP peers must release their slot; takes no arguments; returns after observing EOF.
+    func testHTTPSilentHeadersExpire() async throws {
+        let peer = try connectHTTPPeer(receiveTimeout: 2)
+        defer { close(peer) }
+        let closed = await httpPeerClosed(peer)
+        XCTAssertTrue(closed, "An accepted HTTP connection must have a header deadline")
+    }
+
+    /// Partial header progress must not extend the request deadline; takes no arguments; returns after observing EOF.
+    func testHTTPPartialHeadersUseFixedDeadline() async throws {
+        let peer = try connectHTTPPeer(receiveTimeout: 2)
+        defer { close(peer) }
+        let start = Date()
+        try sendHTTPBytes("GET / HTTP/1.1\r\nX: ", to: peer)
+        try await Task.sleep(nanoseconds: 600_000_000)
+        try sendHTTPBytes("a", to: peer)
+        let closed = await httpPeerClosed(peer)
+        XCTAssertTrue(closed)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 1.5,
+                          "Progress must not turn the fixed deadline into an idle timeout")
+    }
+
+    /// Pending HTTP connections must obey the admission cap; takes no arguments; returns after the overflow peer closes.
+    func testHTTPRejectsConnectionsBeyondPendingLimit() async throws {
+        var peers: [Int32] = []
+        defer { peers.forEach { close($0) } }
+        for _ in 0..<WebRemoteServer.maxHTTPConnections {
+            peers.append(try connectHTTPPeer(receiveTimeout: 0.5))
+        }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let overflow = try connectHTTPPeer(receiveTimeout: 0.5)
+        defer { close(overflow) }
+        let closed = await httpPeerClosed(overflow)
+        XCTAssertTrue(closed, "The HTTP cap must apply before parsing a request")
+    }
+
+    /// Stopping the service must cancel already accepted HTTP peers; takes no arguments; returns after observing EOF.
+    func testHTTPStopClosesPendingHeadersImmediately() async throws {
+        let peer = try connectHTTPPeer(receiveTimeout: 0.5)
+        defer { close(peer) }
+        try sendHTTPBytes("GET / HTTP/1.1\r\nX: ", to: peer)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        server.stop()
+        let closed = await httpPeerClosed(peer)
+        XCTAssertTrue(closed, "Stop must close HTTP peers before their one-second deadline")
     }
 
     @MainActor
@@ -609,6 +657,48 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    /// Connect a bounded raw loopback HTTP peer; input is its receive timeout; returns its descriptor.
+    private func connectHTTPPeer(receiveTimeout: TimeInterval) throws -> Int32 {
+        let origin = try XCTUnwrap(httpOrigin)
+        let components = try XCTUnwrap(URLComponents(string: origin))
+        let port = try XCTUnwrap(components.port)
+        let peer = socket(AF_INET, SOCK_STREAM, 0)
+        guard peer >= 0 else { throw POSIXError(.EMFILE) }
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = UInt16(port).bigEndian
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let result = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(peer, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard result == 0 else { close(peer); throw POSIXError(.ECONNREFUSED) }
+        var timeout = timeval(tv_sec: Int(receiveTimeout),
+                              tv_usec: Int32((receiveTimeout - floor(receiveTimeout)) * 1_000_000))
+        _ = setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        var noSignal: Int32 = 1
+        _ = setsockopt(peer, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size))
+        return peer
+    }
+
+    /// Send partial HTTP data; inputs are text and descriptor; returns after sending or throws.
+    private func sendHTTPBytes(_ text: String, to peer: Int32) throws {
+        let bytes = Data(text.utf8)
+        let count = bytes.withUnsafeBytes { Darwin.send(peer, $0.baseAddress, $0.count, 0) }
+        guard count == bytes.count else { throw POSIXError(.EPIPE) }
+    }
+
+    /// Wait for bounded EOF/reset off the test executor; input is the peer descriptor; returns whether it closed.
+    private func httpPeerClosed(_ peer: Int32) async -> Bool {
+        await Task.detached {
+            var byte: UInt8 = 0
+            let count = recv(peer, &byte, 1, 0)
+            return count == 0 || (count < 0 && (errno == ECONNRESET || errno == ENOTCONN))
+        }.value
+    }
 
     /// Reserve both sockets together before choosing the pair. NWListener binds
     /// them after these probes close; no persisted production ports are reused.
