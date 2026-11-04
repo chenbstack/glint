@@ -71,16 +71,22 @@ struct PaneView: View {
                 Color.black.opacity(unfocusedDimOpacity)
                     .allowsHitTesting(false)
             }
-            if store.isWebRemoteControlled(workspaceID: workspaceID, paneID: paneID) {
-                VStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Label("Controlled from web", systemImage: "network")
+            let controlSources = store.paneControlSources(workspaceID: workspaceID, paneID: paneID)
+            if !controlSources.isEmpty {
+                VStack(spacing: 4) {
+                    ForEach(controlSources, id: \.self) { source in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label {
+                                Text(verbatim: source.title)
+                            } icon: {
+                                Image(systemName: "dot.radiowaves.left.and.right")
+                            }
                             .font(.system(size: 10.5, weight: .semibold))
                             .foregroundStyle(Theme.text1)
-                        Text("Layout may be inaccurate while controlled. It will restore automatically after disconnecting.")
-                            .font(.system(size: 9.5, weight: .medium))
-                            .foregroundStyle(Theme.text3)
-                    }
+                            Text(verbatim: source.detail)
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundStyle(Theme.text3)
+                        }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
                         .background(
@@ -92,9 +98,10 @@ struct PaneView: View {
                                 .stroke(Theme.overlay(0.12), lineWidth: 1)
                         )
                         .shadow(color: Color.black.opacity(0.22), radius: 8, y: 3)
-                        .padding(.top, 8)
+                    }
                     Spacer()
                 }
+                .padding(.top, 8)
                 .allowsHitTesting(false)
             }
         }

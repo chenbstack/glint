@@ -179,7 +179,7 @@ final class UsageStore: ObservableObject {
             guard codexEnabled != oldValue else { return }
             UserDefaults.standard.set(codexEnabled, forKey: Self.codexKey)
             if !codexEnabled {
-                codexHomeRefreshes.values.forEach { $0.task.cancel() }
+                codexHomeRefreshes.values.forEach { $0.task.cancel(); $0.deadline.cancel() }
                 codexHomeRefreshes.removeAll()
                 codex = nil
                 codexHomeStatuses = []
@@ -207,16 +207,19 @@ final class UsageStore: ObservableObject {
     private static let codexKey = "glint.showCodexUsage"
     private static let grokKey = "glint.showGrokUsage"
     private var timer: Timer?
-    private var agentRefreshes: [Agent: (id: UUID, task: Task<Void, Never>)] = [:]
-    private var codexHomeRefreshes: [URL: (id: UUID, task: Task<Void, Never>)] = [:]
+    private var agentRefreshes: [Agent: (id: UUID, task: Task<Void, Never>, deadline: Task<Void, Never>)] = [:]
+    private var codexHomeRefreshes: [URL: (id: UUID, task: Task<Void, Never>, deadline: Task<Void, Never>)] = [:]
+    private let refreshTimeout: TimeInterval
     /// Refresh cadence. Rate-limit windows move on the order of minutes, so a
     /// minute of staleness is invisible and keeps disk/network churn trivial.
     private let interval: TimeInterval = 60
 
     private var anyEnabled: Bool { claudeEnabled || codexEnabled || grokEnabled }
 
-    /// Load enabled agents and cached quotas; takes no arguments and initializes the poller.
-    init() {
+    /// Load cached quotas and start polling; refreshTimeout is each read's
+    /// deadline in seconds; returns an initialized store without waiting for I/O.
+    init(refreshTimeout: TimeInterval = 30) {
+        self.refreshTimeout = refreshTimeout
         self.claudeEnabled = (UserDefaults.standard.object(forKey: Self.claudeKey) as? Bool) ?? false
         self.codexEnabled = (UserDefaults.standard.object(forKey: Self.codexKey) as? Bool) ?? false
         self.grokEnabled = (UserDefaults.standard.object(forKey: Self.grokKey) as? Bool) ?? false
@@ -231,8 +234,8 @@ final class UsageStore: ObservableObject {
 
     deinit {
         timer?.invalidate()
-        agentRefreshes.values.forEach { $0.task.cancel() }
-        codexHomeRefreshes.values.forEach { $0.task.cancel() }
+        agentRefreshes.values.forEach { $0.task.cancel(); $0.deadline.cancel() }
+        codexHomeRefreshes.values.forEach { $0.task.cancel(); $0.deadline.cancel() }
     }
 
     /// Start or stop the repeating timer; takes no arguments and returns nothing.
@@ -269,15 +272,24 @@ final class UsageStore: ObservableObject {
         let task = Task { [weak self] in
             let quota = await read()
             guard !Task.isCancelled, let self, self.agentRefreshes[agent]?.id == id else { return }
-            self.agentRefreshes[agent] = nil
+            self.agentRefreshes.removeValue(forKey: agent)?.deadline.cancel()
             self.apply(quota, to: agent)
         }
-        agentRefreshes[agent] = (id, task)
+        let timeout = refreshTimeout
+        let deadline = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(timeout)) }
+            catch { return }
+            guard let self, self.agentRefreshes[agent]?.id == id else { return }
+            self.cancelRefresh(for: agent)
+        }
+        agentRefreshes[agent] = (id, task, deadline)
     }
 
     /// Cancel an agent's pending read and invalidate its identity; input is agent; returns nothing.
     private func cancelRefresh(for agent: Agent) {
-        agentRefreshes.removeValue(forKey: agent)?.task.cancel()
+        let refresh = agentRefreshes.removeValue(forKey: agent)
+        refresh?.task.cancel()
+        refresh?.deadline.cancel()
     }
 
     /// Reconcile enabled homes and share one read per path; takes no arguments and returns nothing.
@@ -286,6 +298,7 @@ final class UsageStore: ObservableObject {
         let urls = Set(homes.map(\.resolvedURL))
         for (url, refresh) in codexHomeRefreshes where !urls.contains(url) {
             refresh.task.cancel()
+            refresh.deadline.cancel()
             codexHomeRefreshes[url] = nil
         }
         let previous = Dictionary(uniqueKeysWithValues: codexHomeStatuses.map { ($0.resolvedURL, $0) })
@@ -309,7 +322,7 @@ final class UsageStore: ObservableObject {
             let task = Task { [weak self] in
                 let quota = await CodexUsageReader.readPreferLive(from: url)
                 guard !Task.isCancelled, let self, self.codexHomeRefreshes[url]?.id == id else { return }
-                self.codexHomeRefreshes[url] = nil
+                self.codexHomeRefreshes.removeValue(forKey: url)?.deadline.cancel()
                 guard self.codexEnabled,
                       let currentHome = CodexHomeStore.configuredHomes().first(where: {
                           $0.isEnabled && $0.resolvedURL == url
@@ -327,8 +340,31 @@ final class UsageStore: ObservableObject {
                 )
                 self.applyCodex(statuses)
             }
-            codexHomeRefreshes[url] = (id, task)
+            let timeout = refreshTimeout
+            let deadline = Task { [weak self] in
+                do { try await Task.sleep(for: .seconds(timeout)) }
+                catch { return }
+                self?.expireHomeRefresh(url: url, id: id)
+            }
+            codexHomeRefreshes[url] = (id, task, deadline)
         }
+    }
+
+    /// Release a timed-out home read; url and id identify its current request.
+    /// Returns nothing; preserves usable quota and ends an initial loading state.
+    private func expireHomeRefresh(url: URL, id: UUID) {
+        guard let refresh = codexHomeRefreshes[url], refresh.id == id else { return }
+        codexHomeRefreshes[url] = nil
+        refresh.task.cancel()
+        refresh.deadline.cancel()
+        guard let index = codexHomeStatuses.firstIndex(where: { $0.resolvedURL == url }) else { return }
+        if case .available = codexHomeStatuses[index].quotaStatus { return }
+        var statuses = codexHomeStatuses
+        let old = statuses[index]
+        statuses[index] = CodexHomeStatus(home: old.home, resolvedURL: url,
+                                         hookStatus: old.hookStatus, authStatus: old.authStatus,
+                                         quotaStatus: .unavailable(String(localized: "Quota unavailable")))
+        applyCodex(statuses)
     }
 
     /// Publish the configured homes and their first usable quota; input is statuses; returns nothing.

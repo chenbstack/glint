@@ -326,6 +326,7 @@ enum WebRemoteFiles {
     }
 
     enum ErrorCode: String, Error {
+        case busy = "file-busy"
         case rootChanged = "file-root-changed"
         case rootUnavailable = "files-unavailable"
         case invalidPath = "invalid-file-path"

@@ -1,5 +1,7 @@
 import AppKit
 import CryptoKit
+import Combine
+import GhosttyKit
 import XCTest
 @testable import Glint
 
@@ -399,6 +401,7 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertTrue(script.contains("(hover: none) and (pointer: coarse)"))
         XCTAssertTrue(script.contains("if (autoFocusTerminal) terminal.focus()"))
     }
+
 
     func testBundledClientRecoversStaleWebSocketConnections() throws {
         let scriptURL = try XCTUnwrap(
@@ -904,4 +907,292 @@ final class WebRemoteProtocolTests: XCTestCase {
         )
         XCTAssertNil(WebRemoteAssets.asset(for: "/crypto.js"))
     }
+}
+
+
+@MainActor
+final class ExternalControlTests: XCTestCase {
+    func testReadsRequireTokenAndLineLimitRejectsInvalidJSONNumbers() {
+        XCTAssertTrue(ControlBridge.requiresToken(for: "read-text"))
+        XCTAssertTrue(ControlBridge.requiresToken(for: "send-text"))
+        XCTAssertTrue(ControlBridge.requiresToken(for: "send-key"))
+        XCTAssertFalse(ControlBridge.requiresToken(for: "list"))
+        XCTAssertEqual(ControlBridge.readTextMaxLines(nil), 1000)
+        XCTAssertEqual(ControlBridge.readTextMaxLines(10_000), 10_000)
+        for invalid: Any in [true, false, 0, -1, 10_001, 2.5, "100", NSNull()] {
+            XCTAssertNil(ControlBridge.readTextMaxLines(invalid))
+        }
+    }
+
+    func testReadGridJoinsSoftWrapsAndKeepsUnicodeAndColumnGaps() throws {
+        let grid = Data(#"""
+        {
+          "styles": [], "rows": 4,
+          "row_spans": [
+            {"row":0,"column":0,"style_id":0,"cell_width":4,"text":"你好"},
+            {"row":1,"column":0,"style_id":0,"cell_width":2,"text":"😀"},
+            {"row":1,"column":4,"style_id":1,"cell_width":1,"text":"X"},
+            {"row":2,"column":0,"style_id":0,"cell_width":6,"text":"done  "}
+          ],
+          "row_wraps": [true, false, false, false],
+          "scrollback_rows": 1,
+          "scrollback_spans": [
+            {"row":0,"column":0,"style_id":0,"cell_width":7,"text":"history"}
+          ], "scrollback_row_wraps": [false]
+        }
+        """#.utf8)
+        XCTAssertEqual(GhosttySurfaceView.controlText(fromRenderGrid: grid, scrollback: false, maxLines: 1000),
+                       "你好😀  X\ndone")
+        XCTAssertEqual(GhosttySurfaceView.controlText(fromRenderGrid: grid, scrollback: true, maxLines: 1000),
+                       "history\n你好😀  X\ndone")
+        XCTAssertEqual(GhosttySurfaceView.controlText(fromRenderGrid: grid, scrollback: true, maxLines: 1), "done")
+    }
+
+    func testBackgroundTerminalReadAndWebSelectionPreserveLocalWorkspace() async throws {
+        let local = Workspace.fresh(name: "Local", accentHex: "5E5CE6", symbol: "L")
+        let remote = Workspace.fresh(name: "Controlled", accentHex: "5E5CE6", symbol: "R")
+        let pane = try XCTUnwrap(remote.selectedTab?.focusedPane)
+        let handle = "\(remote.id.uuidString):\(pane.value)"
+        var now = Date()
+        let store = WorkspaceStore(activity: PaneActivityStore(), externalControlNow: { now })
+        store.workspaces = [local, remote]
+        store.selectedWorkspaceID = local.id
+        let view = store.surfaceView(workspaceID: remote.id, paneID: pane, cwd: "/tmp")
+        XCTAssertTrue(view.ensureLiveForWebRemoteControl())
+        let surface = try XCTUnwrap(view.surface)
+        let output = "\u{1b}[2J\u{1b}[Hcontrol-read-你好😀"
+        output.withCString { ghostty_surface_process_output(surface, $0, UInt(output.utf8.count)) }
+        switch store.controlReadGrid(pane: handle, scrollback: false, maxLines: 1000) {
+        case let .success(grid): XCTAssertTrue(GhosttySurfaceView.controlText(fromRenderGrid: grid, scrollback: false, maxLines: 1000)?.contains("control-read-你好😀") == true)
+        case let .failure(error): XCTFail(error)
+        }
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+        XCTAssertEqual(store.workspaces[1].selectedTabID, remote.selectedTabID)
+        XCTAssertTrue(store.isWorkspaceRemotelyControlled(remote.id))
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [.local])
+        XCTAssertEqual(store.paneControlSources(workspaceID: remote.id, paneID: pane), [.local])
+        XCTAssertEqual(store.paneControlSources(workspaceID: remote.id, paneID: PaneID(value: 1)), [])
+        XCTAssertEqual(store.paneControlSources(workspaceID: local.id, paneID: pane), [])
+        XCTAssertFalse(store.isWorkspaceRemotelyControlled(local.id))
+        let snapshot: WebRemoteTerminalSnapshotResult = await withCheckedContinuation { continuation in
+            store.webRemoteTerminalSnapshot(pane: handle, size: WebRemoteTerminalSize(columns: 80, rows: 24)) {
+                continuation.resume(returning: $0)
+            }
+        }
+        switch snapshot {
+        case .success: break
+        case let .failure(error): XCTFail(error)
+        }
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [.local, .web])
+        XCTAssertEqual(store.paneControlSources(workspaceID: remote.id, paneID: pane), [.local, .web])
+        XCTAssertNil(store.controlSendText(pane: handle, text: "external-input", enter: false))
+        XCTAssertNil(store.controlSendKeys(pane: handle, keys: ["left"]))
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+        var publications = 0
+        let observation = store.objectWillChange.sink { publications += 1 }
+        for _ in 0..<10 {
+            if case let .failure(error) = store.controlReadGrid(pane: handle, scrollback: false, maxLines: 1000) { XCTFail(error) }
+        }
+        XCTAssertEqual(publications, 0, "Repeated reads must not invalidate workspace views")
+        withExtendedLifetime(observation) {}
+        // Socket activity expires without clearing the browser's ownership.
+        now = now.addingTimeInterval(15.2)
+        store.expireExternalControlActivity()
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [.local, .web])
+        XCTAssertEqual(store.paneControlSources(workspaceID: remote.id, paneID: pane), [.local, .web])
+        now = now.addingTimeInterval(15)
+        store.expireExternalControlActivity()
+        XCTAssertTrue(store.isWorkspaceRemotelyControlled(remote.id))
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [.web])
+        XCTAssertEqual(store.paneControlSources(workspaceID: remote.id, paneID: pane), [.web])
+        store.webRemoteReleaseTerminalSize(pane: handle)
+        XCTAssertFalse(store.isWorkspaceRemotelyControlled(remote.id))
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [])
+        XCTAssertEqual(store.paneControlSources(workspaceID: remote.id, paneID: pane), [])
+        if case let .failure(error) = store.controlReadGrid(pane: handle, scrollback: false, maxLines: 1000) {
+            XCTFail(error)
+        }
+        XCTAssertTrue(store.isWorkspaceRemotelyControlled(remote.id))
+        let oldEnabled = store.externalControlEnabled
+        defer { store.externalControlEnabled = oldEnabled }
+        store.externalControlEnabled = false
+        XCTAssertFalse(store.isWorkspaceRemotelyControlled(remote.id))
+    }
+
+    func testInvalidReadsDoNotClaimControlOrChangeWorkspace() throws {
+        let workspace = Workspace.fresh(name: "Unready", accentHex: "5E5CE6", symbol: "U")
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [workspace]
+        store.selectedWorkspaceID = workspace.id
+        let pane = try XCTUnwrap(workspace.selectedTab?.focusedPane)
+        for (handle, limit, expected) in [
+            ("invalid", 1000, "bad-request"),
+            ("\(workspace.id.uuidString):\(pane.value)", 0, "bad-request"),
+            ("\(UUID().uuidString):1", 1000, "unknown-pane")
+        ] {
+            switch store.controlReadGrid(pane: handle, scrollback: false, maxLines: limit) {
+            case .success: XCTFail("Expected \(expected)")
+            case let .failure(error): XCTAssertEqual(error, expected)
+            }
+        }
+        XCTAssertEqual(store.selectedWorkspaceID, workspace.id)
+        XCTAssertFalse(store.isWorkspaceRemotelyControlled(workspace.id))
+    }
+    func testUnvisitedBackgroundPanesWakeForEveryControlCommand() throws {
+        let local = Workspace.fresh(name: "Local", accentHex: "5E5CE6", symbol: "L")
+        for command in ["read", "send", "key"] {
+            let remote = Workspace.fresh(name: "Unvisited", accentHex: "5E5CE6", symbol: "R")
+            let pane = try XCTUnwrap(remote.selectedTab?.focusedPane)
+            let handle = "\(remote.id.uuidString):\(pane.value)"
+            let store = WorkspaceStore(activity: PaneActivityStore())
+            store.workspaces = [local, remote]
+            store.selectedWorkspaceID = local.id
+            switch command {
+            case "read":
+                if case let .failure(error) = store.controlReadGrid(pane: handle, scrollback: false, maxLines: 1000) { XCTFail(error) }
+            case "send": XCTAssertNil(store.controlSendText(pane: handle, text: "hello", enter: false))
+            default: XCTAssertNil(store.controlSendKeys(pane: handle, keys: ["left"]))
+            }
+            let view = store.surfaceView(workspaceID: remote.id, paneID: pane, cwd: nil)
+            XCTAssertTrue(view.hasLiveSurface, command)
+            XCTAssertNil(view.window)
+            XCTAssertEqual(store.selectedWorkspaceID, local.id)
+            XCTAssertEqual(store.workspaces[1].selectedTabID, remote.selectedTabID)
+        }
+    }
+
+    func testRemoteAccessDoesNotConsumePendingStartupCommands() async throws {
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.addWorkspace(agentCommand: "echo MUST_WAIT_FOR_LOCAL_VIEW")
+        let remote = try XCTUnwrap(store.workspaces.last)
+        let pane = try XCTUnwrap(remote.selectedTab?.focusedPane)
+        let local = Workspace.fresh(name: "Local", accentHex: "5E5CE6", symbol: "L")
+        store.workspaces.append(local)
+        store.selectedWorkspaceID = local.id
+        let handle = "\(remote.id.uuidString):\(pane.value)"
+        if case let .failure(error) = store.controlReadGrid(pane: handle, scrollback: false, maxLines: 1000) {
+            XCTAssertEqual(error, "pane-requires-local-open")
+        } else { XCTFail("Pending launch must wait for a local view") }
+        XCTAssertEqual(store.controlSendText(pane: handle, text: "x", enter: false), "pane-requires-local-open")
+        XCTAssertEqual(store.controlSendKeys(pane: handle, keys: ["enter"]), "pane-requires-local-open")
+        let result: WebRemoteTerminalSnapshotResult = await withCheckedContinuation { continuation in
+            store.webRemoteTerminalSnapshot(pane: handle, size: WebRemoteTerminalSize(columns: 80, rows: 24)) { continuation.resume(returning: $0) }
+        }
+        if case let .failure(error) = result { XCTAssertEqual(error, "pane-requires-local-open") }
+        else { XCTFail("Web selection must report pending local launch") }
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [])
+        // A rejected remote attempt must leave the one-shot command intact.
+        let view = store.surfaceView(workspaceID: remote.id, paneID: pane, cwd: nil)
+        XCTAssertTrue(view.hasPendingInitialInput)
+        XCTAssertFalse(view.hasLiveSurface)
+    }
+
+    func testControlActivityRefreshExtendsDeadlineWithoutPublishing() throws {
+        var now = Date()
+        let store = WorkspaceStore(activity: PaneActivityStore(), externalControlNow: { now })
+        let workspace = Workspace.fresh(name: "Expiry", accentHex: "5E5CE6", symbol: "E")
+        store.workspaces = [workspace]
+        let pane = try XCTUnwrap(workspace.selectedTab?.focusedPane)
+        let handle = "\(workspace.id.uuidString):\(pane.value)"
+        if case let .failure(error) = store.controlReadGrid(pane: handle, scrollback: false, maxLines: 1) { XCTFail(error) }
+        var publications = 0
+        let observation = store.objectWillChange.sink { publications += 1 }
+        now = now.addingTimeInterval(20)
+        XCTAssertNil(store.controlSendKeys(pane: handle, keys: ["left"]))
+        now = now.addingTimeInterval(11)
+        store.expireExternalControlActivity()
+        XCTAssertEqual(store.workspaceControlSources(workspace.id), [.local])
+        XCTAssertEqual(publications, 0)
+        now = now.addingTimeInterval(19)
+        store.expireExternalControlActivity()
+        XCTAssertEqual(store.workspaceControlSources(workspace.id), [])
+        XCTAssertEqual(publications, 1)
+        withExtendedLifetime(observation) {}
+    }
+
+    func testRemoteReadDefersAutomaticAgentRestore() throws {
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        let old = store.restoreCodexSession
+        store.restoreCodexSession = true
+        defer { store.restoreCodexSession = old }
+        var remote = Workspace.fresh(name: "Restore", accentHex: "5E5CE6", symbol: "R")
+        let pane = try XCTUnwrap(remote.selectedTab?.focusedPane)
+        remote.panes[pane]?.lastAgent = "codex"
+        let local = Workspace.fresh(name: "Local", accentHex: "5E5CE6", symbol: "L")
+        store.workspaces = [local, remote]
+        store.selectedWorkspaceID = local.id
+        let handle = "\(remote.id.uuidString):\(pane.value)"
+        if case let .failure(error) = store.controlReadGrid(pane: handle, scrollback: false, maxLines: 1) {
+            XCTAssertEqual(error, "pane-requires-local-open")
+        } else { XCTFail("Automatic agent restore must wait for a local view") }
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [])
+        let view = store.surfaceView(workspaceID: remote.id, paneID: pane, cwd: nil)
+        XCTAssertTrue(view.hasPendingInitialInput)
+        XCTAssertFalse(view.hasLiveSurface)
+    }
+
+    func testCLIRequiresLocalOpenBeforeWakingPaneWithArchivedHistory() async throws {
+        let defaults = UserDefaults.standard
+        let setting = "glint.restoreTerminalScrollback"
+        let previous = defaults.object(forKey: setting)
+        defaults.set(true, forKey: setting)
+        defer {
+            if let previous { defaults.set(previous, forKey: setting) }
+            else { defaults.removeObject(forKey: setting) }
+        }
+        let local = Workspace.fresh(name: "Local", accentHex: "5E5CE6", symbol: "L")
+        let remote = Workspace.fresh(name: "Archived history", accentHex: "5E5CE6", symbol: "R")
+        let pane = try XCTUnwrap(remote.selectedTab?.focusedPane)
+        let handle = "\(remote.id.uuidString):\(pane.value)"
+        let archiveID = ScrollbackArchive.fileID(forPaneKey: handle)
+        let directory = try XCTUnwrap(SupportDir.url).appendingPathComponent("scrollback", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let archive = directory.appendingPathComponent("\(archiveID).ansi")
+        defer { try? FileManager.default.removeItem(at: archive) }
+        let oldMarker = "PR132_ARCHIVED_HISTORY"
+        let history = Data((oldMarker + "\n").utf8)
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [local, remote]
+        store.selectedWorkspaceID = local.id
+        // Finish the store initialization prune before creating this test-only archive.
+        ScrollbackArchive.drain()
+        try history.write(to: archive, options: .atomic)
+
+        if case let .failure(error) = store.controlReadGrid(pane: handle, scrollback: true, maxLines: 1000) {
+            XCTAssertEqual(error, "pane-requires-local-open")
+        } else { XCTFail("CLI must not wake a shell before its archive can be restored") }
+        XCTAssertEqual(store.controlSendText(pane: handle, text: "must-not-run", enter: true), "pane-requires-local-open")
+        XCTAssertEqual(store.controlSendKeys(pane: handle, keys: ["enter"]), "pane-requires-local-open")
+        let view = store.surfaceView(workspaceID: remote.id, paneID: pane, cwd: nil)
+        XCTAssertFalse(view.hasLiveSurface)
+        XCTAssertEqual(ScrollbackArchive.read(id: archiveID), history)
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [])
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+
+        // Web has an explicit grid and a restore completion barrier; keep that path usable.
+        let snapshot: WebRemoteTerminalSnapshotResult = await withCheckedContinuation { continuation in
+            store.webRemoteTerminalSnapshot(pane: handle, size: WebRemoteTerminalSize(columns: 100, rows: 30)) {
+                continuation.resume(returning: $0)
+            }
+        }
+        if case let .success(value) = snapshot {
+            XCTAssertTrue(String(decoding: value.payload, as: UTF8.self).contains(oldMarker))
+        } else { XCTFail("Web must still restore archived history at its requested grid size") }
+        let surface = try XCTUnwrap(view.surface)
+        let newMarker = "PR132_NEW_SESSION_OUTPUT"
+        let output = newMarker + "\r\n"
+        output.withCString { ghostty_surface_process_output(surface, $0, UInt(output.utf8.count)) }
+        guard case let .success(grid) = store.controlReadGrid(pane: handle, scrollback: true, maxLines: 1000),
+              let text = GhosttySurfaceView.controlText(fromRenderGrid: grid, scrollback: true, maxLines: 1000) else {
+            return XCTFail("A completed restore must permit subsequent CLI reads")
+        }
+        let oldRange = try XCTUnwrap(text.range(of: oldMarker))
+        let newRange = try XCTUnwrap(text.range(of: newMarker))
+        XCTAssertLessThan(oldRange.lowerBound, newRange.lowerBound)
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+    }
+
 }

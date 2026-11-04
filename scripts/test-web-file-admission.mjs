@@ -10,6 +10,15 @@ const baseline = process.argv.includes("--baseline");
 const source = baseline
   ? spawnSync("git", ["show", "HEAD:Glint/WebRemote/WebRemoteServer.swift"], { cwd: root, encoding: "utf8" }).stdout
   : fs.readFileSync(path.join(root, "Glint/WebRemote/WebRemoteServer.swift"), "utf8");
+const protocolSource = fs.readFileSync(path.join(root, "Glint/WebRemote/WebRemoteProtocol.swift"), "utf8");
+const requestErrorStart = protocolSource.indexOf("    func error(_ code: WebRemoteFiles.ErrorCode)");
+const requestErrorEnd = protocolSource.indexOf("\n    }", requestErrorStart) + 6;
+assert.ok(requestErrorStart >= 0 && requestErrorEnd > requestErrorStart);
+const requestError = protocolSource.slice(requestErrorStart, requestErrorEnd);
+const codeStart = protocolSource.indexOf("    enum ErrorCode: String, Error {");
+const codeEnd = protocolSource.indexOf("\n    }", codeStart) + 6;
+assert.ok(codeStart >= 0 && codeEnd > codeStart);
+const errorCodes = protocolSource.slice(codeStart, codeEnd);
 const start = source.indexOf("    private func accessFiles(");
 const end = source.indexOf("\n    private func ", start + 1);
 assert.ok(start >= 0 && end > start, "accessFiles extraction markers changed");
@@ -52,7 +61,7 @@ final class IOGate: @unchecked Sendable {
     }
 }
 enum WebRemoteFiles {
-    enum ErrorCode: String, Error { case rootUnavailable, rootChanged, unavailable }
+FILECODES
     static let maxEntries = 200
     static var gate = IOGate()
     /// Classify a synthetic image; input is path; returns whether its extension is PNG.
@@ -95,9 +104,7 @@ struct WebRemoteFileRequest {
         return .success(current)
     }
     /// Encode a fixture error; input is its code; returns a correlated response dictionary.
-    func error(_ code: WebRemoteFiles.ErrorCode) -> [String: Any] {
-        ["type": "fileError", "code": code.rawValue, "request": requestID]
-    }
+REQUESTERROR
 }
 final class AdmissionFixture: @unchecked Sendable {
     private let queue = DispatchQueue(label: "glint.tests.file-admission")
@@ -161,13 +168,15 @@ ACCESS
         fixture.submit(WebRemoteFileRequest(path: "two.txt"), client: client)
         try await until("two blocked reads") { WebRemoteFiles.gate.snapshot().running == 2 }
         fixture.submit(WebRemoteFileRequest(path: "three.txt"), client: client)
-        await settle()
-        try expect(fixture.snapshot().drops.contains(client), "third request did not drop its client")
+        try await until("per-client overflow response") { fixture.snapshot().replies.contains { $0.0 == client } }
+        try expect(!fixture.snapshot().drops.contains(client), "a file burst disconnected its terminal")
+        try expect(fixture.snapshot().replies.last?.1["code"] as? String == "file-busy", "overflow did not return busy")
+        try expect(fixture.snapshot().replies.last?.1["path"] as? String == "three.txt", "busy response lost request correlation")
         try expect(fixture.snapshot().tickets == 2, "dropping a client freed running I/O tickets")
         try expect(WebRemoteFiles.gate.snapshot().paths.count == 2, "third request started I/O")
         WebRemoteFiles.gate.releaseAll()
         try await until("dropped client's tickets released") { fixture.snapshot().tickets == 0 }
-        try expect(fixture.snapshot().replies.isEmpty, "dropped client received a late response")
+        try expect(fixture.snapshot().replies.count == 3, "connected client did not receive busy and both completed reads")
     }
     /// Global tickets survive disconnects and restarts until I/O actually completes; takes no inputs; throws on mismatch.
     static func globalLimitSurvivesRestart() async throws {
@@ -183,8 +192,9 @@ ACCESS
         try expect(fixture.snapshot().tickets == 8, "disconnect/stop freed unfinished global work")
         let rejected = fixture.addClient()
         fixture.submit(WebRemoteFileRequest(path: "overflow.txt"), client: rejected)
-        await settle()
-        try expect(fixture.snapshot().drops.contains(rejected), "new client bypassed the global I/O cap")
+        try await until("global overflow response") { fixture.snapshot().replies.contains { $0.0 == rejected } }
+        try expect(!fixture.snapshot().drops.contains(rejected), "global file pressure disconnected a terminal")
+        try expect(fixture.snapshot().replies.last?.1["code"] as? String == "file-busy", "global overflow did not return busy")
         try expect(WebRemoteFiles.gate.snapshot().paths.count == 8, "overflow started a ninth operation")
         WebRemoteFiles.gate.release("0-a.txt")
         try await until("one old ticket completes") { fixture.snapshot().tickets == 7 }
@@ -195,7 +205,7 @@ ACCESS
         WebRemoteFiles.gate.releaseAll()
         try await until("all tickets complete") { fixture.snapshot().tickets == 0 }
         try expect(WebRemoteFiles.gate.snapshot().maximum <= 8, "actual concurrent I/O exceeded eight")
-        try expect(fixture.snapshot().replies.count == 1 && fixture.snapshot().replies.first?.0 == admitted,
+        try expect(fixture.snapshot().replies.count == 2 && fixture.snapshot().replies.last?.0 == admitted,
                    "late I/O replied to a removed client")
         try expect(fixture.snapshot().suppressed == 8, "missing-client transport no-op was not exercised")
     }
@@ -215,12 +225,12 @@ ACCESS
         fixture.submit(WebRemoteFileRequest(path: "missing-root.txt"), client: client)
         try await until("missing root response") { fixture.snapshot().replies.count == 1 }
         try expect(fixture.snapshot().tickets == 0, "missing root leaked its ticket")
-        try expect(fixture.snapshot().replies.last?.1["code"] as? String == "rootUnavailable", "wrong missing-root error")
+        try expect(fixture.snapshot().replies.last?.1["code"] as? String == "files-unavailable", "wrong missing-root error")
         WorkspaceStore.current?.root = "/other"
         fixture.submit(WebRemoteFileRequest(path: "changed-root.txt"), client: client)
         try await until("changed root response") { fixture.snapshot().replies.count == 2 }
         try expect(fixture.snapshot().tickets == 0, "invalid root leaked its ticket")
-        try expect(fixture.snapshot().replies.last?.1["code"] as? String == "rootChanged", "wrong changed-root error")
+        try expect(fixture.snapshot().replies.last?.1["code"] as? String == "file-root-changed", "wrong changed-root error")
         try expect(WebRemoteFiles.gate.snapshot().paths.isEmpty, "invalid roots reached file I/O")
     }
     /// Dead clients must not begin I/O before or after the main-queue hop; takes no inputs; throws on mismatch.
@@ -263,7 +273,7 @@ ACCESS
         WebRemoteFiles.gate.release("late.txt")
         try await until("changed-root response") { fixture.snapshot().replies.count == 1 }
         try expect(fixture.snapshot().tickets == 0, "revalidation leaked ticket")
-        try expect(fixture.snapshot().replies.last?.1["code"] as? String == "rootChanged", "late read bypassed root revalidation")
+        try expect(fixture.snapshot().replies.last?.1["code"] as? String == "file-root-changed", "late read bypassed root revalidation")
     }
 }
 @main struct Runner {
@@ -293,7 +303,7 @@ ACCESS
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "glint-web-file-admission-"));
 try {
   const swift = path.join(directory, "Admission.swift");
-  fs.writeFileSync(swift, fixture.replace("ACCESS", source.slice(start, end)));
+  fs.writeFileSync(swift, fixture.replace("ACCESS", source.slice(start, end)).replace("REQUESTERROR", requestError).replace("FILECODES", errorCodes));
   const binary = path.join(directory, "file-admission-tests");
   const compile = spawnSync("swiftc", ["-swift-version", "5", "-parse-as-library", "-module-cache-path", path.join(os.tmpdir(), "glint-file-admission-cache"), swift, "-o", binary], { encoding: "utf8", timeout: 60000 });
   process.stdout.write(compile.stdout ?? "");

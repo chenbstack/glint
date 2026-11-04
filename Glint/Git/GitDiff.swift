@@ -27,12 +27,29 @@ struct GitFileChange: Identifiable, Equatable {
     var id: String { path }
 }
 
+/// One Review list load, including a recoverable untracked failure and the
+/// comparison baseline reused by file selection until the next reload.
+struct GitReviewChanges {
+    let files: [GitFileChange]
+    let untrackedWarning: Bool
+    /// Fixed OID/empty tree for working-tree review; original range expression for branch review.
+    let baseline: String
+}
+
 extension GitService {
 
     /// Return files changed in `repo` under `scope`, sorted by literal path.
     /// Parameters: repository directory and comparison scope. Returns an empty
-    /// list only when Git succeeds without changes. Throws on Git/transport failure.
+    /// list when the tracked comparison succeeds without changes. Untracked
+    /// failures are recoverable; use reviewChanges to also display their warning.
     func changedFiles(repo: String, scope: DiffScope) async throws -> [GitFileChange] {
+        try await reviewChanges(repo: repo, scope: scope).files
+    }
+
+    /// Load files and their comparison baseline; inputs are repository and scope.
+    /// Returns partial tracked results if untracked enumeration fails; throws if
+    /// the baseline or tracked comparison fails. Raw diagnostics stay in logs.
+    func reviewChanges(repo: String, scope: DiffScope) async throws -> GitReviewChanges {
         switch scope {
         case .workingTree:
             let base = try await workingTreeDiffBase(repo: repo)
@@ -47,14 +64,21 @@ extension GitService {
             var map = Self.mergeNameNumstat(
                 nameStatus: try await names.stdout,
                 numstat: try await nums.stdout)
-            let paths = try await untrk.stdout.split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
-            let counts = await runner.countUntrackedAdditions(repo: repo, paths: paths)
-            for p in paths {
-                map[p] = GitFileChange(path: p, kind: .untracked,
-                                       additions: counts[p] ?? 0,
-                                       deletions: 0, isBinary: false)
+            var untrackedWarning = false
+            do {
+                let paths = try await untrk.stdout.split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
+                let counts = await runner.countUntrackedAdditions(repo: repo, paths: paths)
+                for p in paths {
+                    map[p] = GitFileChange(path: p, kind: .untracked,
+                                          additions: counts[p] ?? 0,
+                                          deletions: 0, isBinary: false)
+                }
+            } catch {
+                untrackedWarning = true
+                NSLog("Review untracked loading failed: %@", error.localizedDescription)
             }
-            return withMtime(map.values.sorted { $0.path < $1.path }, repo: repo)
+            return GitReviewChanges(files: withMtime(map.values.sorted { $0.path < $1.path }, repo: repo),
+                                    untrackedWarning: untrackedWarning, baseline: base)
 
         case .branch(let base):
             async let names = reviewGit(["diff", "\(base)...HEAD", "--no-renames", "--name-status", "-z"], repo: repo)
@@ -62,7 +86,8 @@ extension GitService {
             let map = Self.mergeNameNumstat(
                 nameStatus: try await names.stdout,
                 numstat: try await nums.stdout)
-            return withMtime(map.values.sorted { $0.path < $1.path }, repo: repo)
+            return GitReviewChanges(files: withMtime(map.values.sorted { $0.path < $1.path }, repo: repo),
+                                    untrackedWarning: false, baseline: "\(base)...HEAD")
         }
     }
 
@@ -82,7 +107,8 @@ extension GitService {
     }
 
     /// Unified-diff text for one file; throws on Git failure or interruption.
-    /// Parameters: repository, scope, changed file and whitespace preference.
+    /// Parameters: repository, scope, changed file, whitespace preference and
+    /// an optional working-tree baseline from the same Review list load.
     /// Returns complete diff text, including an empty successful diff.
     /// `ignoreWhitespace` adds `--ignore-all-space` (indentation/whitespace-only
     /// changes collapse to context) — a load-time flag, not a render filter.
@@ -93,7 +119,7 @@ extension GitService {
     /// complete-looking diff with the tail silently missing, so on signal we
     /// drop the bytes and throw rather than render a complete-looking empty diff.
     func fileDiff(repo: String, scope: DiffScope, file: GitFileChange,
-                  ignoreWhitespace: Bool = false) async throws -> String {
+                  ignoreWhitespace: Bool = false, baseline: String? = nil) async throws -> String {
         // Huge -U makes git emit the entire file as context (clamped to file
         // length), so "Show All" renders the whole file and "Changes Only"
         // just filters context at render time. One load serves both states.
@@ -111,7 +137,9 @@ extension GitService {
                 result = try await reviewGit(args + ["--no-index", "--", "/dev/null", file.path],
                                              repo: repo, allowedExitCodes: [0, 1])
             } else {
-                let base = try await workingTreeDiffBase(repo: repo)
+                let base: String
+                if let baseline { base = baseline }
+                else { base = try await workingTreeDiffBase(repo: repo) }
                 result = try await reviewGit(args + [base, "--", file.path], repo: repo)
             }
         case .branch(let base):
@@ -132,12 +160,12 @@ extension GitService {
     }
 
     /// Resolve the working-tree baseline. Parameter: repository directory.
-    /// Returns HEAD or the repository-format empty tree for an unborn branch;
+    /// Returns the resolved HEAD OID or repository-format empty tree for an unborn branch;
     /// throws for invalid repositories, broken refs and other Git failures.
     private func workingTreeDiffBase(repo: String) async throws -> String {
         let headArgs = ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]
         let head = try await reviewGit(headArgs, repo: repo, allowedExitCodes: [0, 1])
-        if head.ok { return "HEAD" }
+        if head.ok { return head.stdout.trimmingCharacters(in: .whitespacesAndNewlines) }
         guard head.stderr.isEmpty else {
             throw GitError.commandFailed(args: headArgs, exitCode: head.exitCode, stderr: head.stderr)
         }

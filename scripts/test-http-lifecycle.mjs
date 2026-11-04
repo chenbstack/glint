@@ -47,6 +47,10 @@ final class HTTPFixture {
     private var runID: UUID? = UUID()
     private var admissionRun = UUID()
     private var httpConnections: [ObjectIdentifier: NWConnection] = [:]
+    private var httpHeadersPending = Set<ObjectIdentifier>()
+    private var httpSendGenerations: [ObjectIdentifier: UUID] = [:]
+    private var httpSendTimeouts: [ObjectIdentifier: DispatchWorkItem] = [:]
+    private let httpSendIdleTimeout: TimeInterval = 0.5
     private var accepted: [NWConnection] = []
     private let httpRequestTimeout: TimeInterval
     private var httpListener: NWListener?
@@ -111,7 +115,10 @@ final class HTTPFixture {
     private func emit(_ status: Status) {}
     /// Complete an HTTP request without bundles or user files; inputs are data and connection; returns nothing.
     private func serveHTTPRequest(_ data: Data, on connection: NWConnection) {
-        sendHTTP(Data("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK".utf8), to: connection)
+        let response = Data("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK".utf8)
+        if String(decoding: data, as: UTF8.self).contains("/slow") {
+            queue.asyncAfter(deadline: .now() + 0.4) { self.sendHTTP(response, to: connection) }
+        } else { sendHTTP(response, to: connection) }
     }
     /// Complete a malformed request; inputs are status, reason and connection; returns nothing.
     private func sendHTTPError(_ status: Int, reason: String, to connection: NWConnection) {
@@ -224,10 +231,21 @@ func testCompleteRequest() throws {
     try expect(count > 0 && String(decoding: bytes.prefix(max(count, 0)), as: UTF8.self).contains("200 OK"), "valid HTTP request failed")
     try expect(peerClosed(peer), "successful response left its connection alive")
 }
+/// A valid request may outlive its header deadline; no inputs; throws on premature cancellation.
+func testResponseOutlivesHeaderDeadline() throws {
+    let fixture = HTTPFixture(timeout: 0.15)
+    defer { fixture.cleanup() }
+    let peer = try connectPeer(fixture.start(), timeout: 1)
+    defer { close(peer) }
+    try send(peer, "GET /slow HTTP/1.1\r\nHost: localhost\r\n\r\n")
+    var bytes = [UInt8](repeating: 0, count: 4096)
+    let count = recv(peer, &bytes, bytes.count, 0)
+    try expect(count > 0 && String(decoding: bytes.prefix(max(count, 0)), as: UTF8.self).contains("200 OK"), "header deadline cancelled a valid response phase")
+}
 let tests: [(String, () throws -> Void)] = [
     ("silent headers expire", testSilent), ("partial headers have a fixed deadline", testPartial),
     ("HTTP connection cap is enforced", testCapacity), ("stop cancels pending HTTP", testStop),
-    ("stale listener generations reject peers", testStaleGeneration), ("valid HTTP response completes", testCompleteRequest),
+    ("stale listener generations reject peers", testStaleGeneration), ("valid HTTP response completes", testCompleteRequest), ("response outlives header deadline", testResponseOutlivesHeaderDeadline),
 ]
 var failures = 0
 for (name, test) in tests {
@@ -241,7 +259,7 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), "glint-http-lifecycle-")
 try {
   const swift = fixture.replace("MAXIMUM", maximum).replace("ADMISSION", admission)
     .replace("HANDLERS", source.slice(handlerStart, handlerEnd))
-    .replace("SEND", method("sendHTTP")).replace("STOP", method("stopLocked"));
+    .replace("SEND", method("sendHTTP") + "\n" + method("sendHTTPChunk")).replace("STOP", method("stopLocked"));
   fs.writeFileSync(path.join(directory, "main.swift"), swift);
   const binary = path.join(directory, "http-lifecycle-tests");
   const compile = spawnSync("swiftc", ["-swift-version", "5", "-module-cache-path", path.join(os.tmpdir(), "glint-http-lifecycle-cache"), path.join(directory, "main.swift"), "-o", binary], { encoding: "utf8", timeout: 60000 });

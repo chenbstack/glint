@@ -45,11 +45,14 @@ final class ReviewModel: ObservableObject {
     @Published var loadingFiles = false
     @Published var loadingDiff = false
     @Published private(set) var filesError: String?
+    @Published private(set) var filesWarning: String?
     @Published private(set) var diffError: String?
 
     private let git: GitService
     private var fileLoadToken = 0   // guards against out-of-order file-list loads
     private var diffLoadToken = 0   // guards against out-of-order diff loads
+    private var loadedBaseline: String?
+    private var loadedScope: DiffScope?
 
     init(repo: String, title: String, subdir: String? = nil, scopes: [DiffScope],
          isRemote: Bool = false,
@@ -70,16 +73,18 @@ final class ReviewModel: ObservableObject {
         // older fetch must not clobber the newer scope's file list.
         fileLoadToken += 1
         let token = fileLoadToken
+        let requestedScope = scope
+        let selectedPath = selected?.path
+        clearSelection()
         loadingFiles = true
         filesError = nil
-        diffError = nil
-        diffLoadToken += 1
-        loadingDiff = false
-        let loaded: [GitFileChange]
+        filesWarning = nil
+        loadedBaseline = nil
+        let loaded: GitReviewChanges
         do {
-            loaded = try await git.changedFiles(repo: repo, scope: scope)
+            loaded = try await git.reviewChanges(repo: repo, scope: requestedScope)
         } catch {
-            guard token == fileLoadToken else { return }
+            guard token == fileLoadToken, scope == requestedScope else { return }
             NSLog("Review file loading failed: %@", error.localizedDescription)
             loadingFiles = false
             files = []
@@ -89,8 +94,13 @@ final class ReviewModel: ObservableObject {
             filesError = String(localized: "Couldn't load changed files. Try refreshing.")
             return
         }
-        var fs = loaded
-        guard token == fileLoadToken else { return }
+        var fs = loaded.files
+        guard token == fileLoadToken, scope == requestedScope else { return }
+        loadedBaseline = loaded.baseline
+        loadedScope = requestedScope
+        if loaded.untrackedWarning {
+            filesWarning = String(localized: "Untracked files couldn't be loaded. Tracked changes are still available.")
+        }
         // Scope the file list to the focused pane's subtree when reviewing a
         // subdirectory. Git reports root-relative paths, so a prefix filter
         // (exact match for the dir itself, or "<subdir>/" for contents) is
@@ -107,7 +117,7 @@ final class ReviewModel: ObservableObject {
         combined = Self.groupByDir(fs)
         // Keep the current file selected if it still exists, else fall back to
         // the first change so the diff pane is never blank when there's content.
-        if let sel = selected, let still = fs.first(where: { $0.path == sel.path }) {
+        if let path = selectedPath, let still = fs.first(where: { $0.path == path }) {
             await select(still)
         } else if let first = fs.first {
             await select(first)
@@ -134,32 +144,35 @@ final class ReviewModel: ObservableObject {
     /// Load a selected file. Parameter: changed file. Returns nothing; publishes
     /// complete diff content or a localized error for the current selection.
     func select(_ f: GitFileChange) async {
+        guard !loadingFiles, loadedScope == nil || loadedScope == scope else { return }
         selected = f
         diffLoadToken += 1
         let token = diffLoadToken
+        let requestedScope = scope
         loadingDiff = true
         diffText = ""
         diff = .empty
         diffError = nil
         let text: String
         do {
-            text = try await git.fileDiff(repo: repo, scope: scope, file: f, ignoreWhitespace: ignoreWhitespace)
+            text = try await git.fileDiff(repo: repo, scope: requestedScope, file: f,
+                                         ignoreWhitespace: ignoreWhitespace, baseline: loadedBaseline)
         } catch {
-            guard token == diffLoadToken else { return }
+            guard token == diffLoadToken, scope == requestedScope else { return }
             NSLog("Review diff loading failed: %@", error.localizedDescription)
             diffError = String(localized: "Couldn't load the diff. Try refreshing.")
             loadingDiff = false
             return
         }
         // A newer selection (or scope change) superseded this load — drop it.
-        guard token == diffLoadToken else { return }
+        guard token == diffLoadToken, scope == requestedScope else { return }
         // Parse off the main actor so a multi-thousand-line diff doesn't hitch
         // the UI; the result is cached so re-renders (splitter drags) don't reparse.
         let language = SyntaxLanguage.from(path: f.path)
         let doc = await Task.detached(priority: .userInitiated) {
             DiffDocument(text: text, language: language)
         }.value
-        guard token == diffLoadToken else { return }
+        guard token == diffLoadToken, scope == requestedScope else { return }
         diffText = text
         diff = doc
         loadingDiff = false
@@ -334,13 +347,20 @@ private struct FileListView: View {
             Rectangle().fill(Theme.overlay(0.05)).frame(height: 1)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
+                    if let warning = model.filesWarning {
+                        Text(warning)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.text3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 8)
+                    }
                     if let error = model.filesError {
                         Text(error)
                             .font(.system(size: 12))
                             .foregroundStyle(Theme.text3)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.top, 40)
-                    } else if model.files.isEmpty && !model.loadingFiles {
+                    } else if model.files.isEmpty && !model.loadingFiles && model.filesWarning == nil {
                         Text("No changes")
                             .font(.system(size: 12))
                             .foregroundStyle(Theme.text3)
@@ -917,10 +937,10 @@ private struct DiffPaneView: View {
     private var content: some View {
         if let error = model.filesError ?? model.diffError {
             hint(error)
-        } else if model.loadingDiff && model.diffText.isEmpty {
+        } else if model.loadingFiles || (model.loadingDiff && model.diffText.isEmpty) {
             hint(String(localized: "Loading…"))
         } else if model.selected == nil {
-            hint(String(localized: "No changes to review"))
+            hint(model.filesWarning ?? String(localized: "No changes to review"))
         } else if model.selected?.isBinary == true {
             hint(String(localized: "Binary file — no text diff"))
         } else if model.diffText.isEmpty {

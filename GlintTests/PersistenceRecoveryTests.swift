@@ -30,37 +30,55 @@ final class PersistenceRecoveryTests: XCTestCase {
             }
     }
 
-    /// Preserve an unreadable original before fresh state is saved; no inputs; returns no value and asserts both snapshots survive.
-    func testUnreadableStateIsPreservedBeforeSave() throws {
+    /// Keep a read-failing original in place; no inputs; returns no value and asserts temporary saves cannot overwrite it.
+    func testUnreadableStateStaysInPlaceAndBlocksSave() throws {
         try withTemporaryState { url in
             let original = try stateData(workspaces: [Workspace.fresh(name: "Original", accentHex: "5E5CE6", symbol: "O")])
             try original.write(to: url)
             try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: url.path)
             XCTAssertNil(Persistence.load(from: url))
-            let replacement = PersistedState.fresh
-            Persistence.save(replacement, to: url)
-            XCTAssertTrue(try preservedStateBytes(at: url).contains(original))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), "A temporary read error must not move state.json")
+            Persistence.save(.fresh, to: url)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-            XCTAssertNotNil(try JSONDecoder().decode(PersistedState.self, from: Data(contentsOf: url)))
+            XCTAssertEqual(try Data(contentsOf: url), original)
+            XCTAssertTrue(try preservedStateBytes(at: url).isEmpty, "I/O failures must not create corrupt backups")
         }
     }
 
-    /// Retry a failed preservation when directory access recovers; no inputs; returns no value and asserts originals remain protected.
-    func testUnreadableBackupFailureCanRecoverOnLaterSave() throws {
+    /// Resume saving only after explicitly adopting a recovered snapshot; no inputs; returns no value and asserts restored permissions alone cannot authorize replacement.
+    func testUnreadableStateRequiresSuccessfulReloadBeforeSave() throws {
         try withTemporaryState { url in
             let original = try stateData(workspaces: [Workspace.fresh(name: "Original", accentHex: "5E5CE6", symbol: "O")])
             try original.write(to: url)
             try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: url.path)
-            let parent = url.deletingLastPathComponent()
-            try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: parent.path)
             XCTAssertNil(Persistence.load(from: url))
             Persistence.save(.fresh, to: url)
-            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: parent.path)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-            XCTAssertEqual(try Data(contentsOf: url), original)
             Persistence.save(.fresh, to: url)
-            XCTAssertTrue(try preservedStateBytes(at: url).contains(original))
-            XCTAssertNotNil(Persistence.load(from: url))
+            XCTAssertEqual(try Data(contentsOf: url), original, "A now-readable original still belongs to the saved session")
+            let restored = try XCTUnwrap(Persistence.load(from: url))
+            XCTAssertEqual(restored.workspaces.first?.name, "Original")
+            let updated = PersistedState.fresh
+            Persistence.save(updated, to: url)
+            XCTAssertEqual(Persistence.load(from: url)?.workspaces.first?.id, updated.workspaces.first?.id)
+            XCTAssertTrue(try preservedStateBytes(at: url).isEmpty)
+        }
+    }
+
+    /// Keep an original protected across repeated transient reads; no inputs; returns no value and asserts recovery is an explicit read.
+    func testRepeatedReadFailuresDoNotQuarantineState() throws {
+        try withTemporaryState { url in
+            let original = try stateData(workspaces: [Workspace.fresh(name: "Original", accentHex: "5E5CE6", symbol: "O")])
+            try original.write(to: url)
+            for _ in 0..<3 {
+                try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: url.path)
+                XCTAssertNil(Persistence.load(from: url))
+                Persistence.save(.fresh, to: url)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+                XCTAssertEqual(try Data(contentsOf: url), original)
+            }
+            XCTAssertEqual(Persistence.load(from: url)?.workspaces.first?.name, "Original")
+            XCTAssertTrue(try preservedStateBytes(at: url).isEmpty)
         }
     }
 
@@ -81,6 +99,23 @@ final class PersistenceRecoveryTests: XCTestCase {
         }
     }
 
+    /// Do not quarantine a valid file repaired after a failed backup; no inputs; returns no value and asserts save waits for adoption.
+    func testRepairedCorruptOriginalMustReloadBeforeSave() throws {
+        try withTemporaryState { url in
+            try Data("not-json".utf8).write(to: url)
+            let parent = url.deletingLastPathComponent()
+            try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: parent.path)
+            XCTAssertNil(Persistence.load(from: url))
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: parent.path)
+            let repaired = try stateData(workspaces: [Workspace.fresh(name: "Repaired", accentHex: "5E5CE6", symbol: "R")])
+            try repaired.write(to: url)
+            Persistence.save(.fresh, to: url)
+            XCTAssertEqual(try Data(contentsOf: url), repaired, "A valid repaired original must not be moved or replaced")
+            XCTAssertTrue(try preservedStateBytes(at: url).isEmpty)
+            XCTAssertEqual(Persistence.load(from: url)?.workspaces.first?.name, "Repaired")
+        }
+    }
+
     /// Allow fresh installations to save; no inputs; returns no value and asserts missing files create no quarantine.
     func testMissingStateAllowsSaveWithoutBackup() throws {
         try withTemporaryState { url in
@@ -91,20 +126,21 @@ final class PersistenceRecoveryTests: XCTestCase {
         }
     }
 
-    /// Preserve an existing link whose target is temporarily missing; no inputs; returns no value and asserts the link survives in backup.
-    func testDanglingStateSymlinkIsPreserved() throws {
+    /// Leave a temporarily unavailable symlink target untouched; no inputs; returns no value and asserts later reads restore its session.
+    func testDanglingStateSymlinkRemainsInPlace() throws {
         try withTemporaryState { url in
             let target = url.deletingLastPathComponent().appendingPathComponent("temporarily-unavailable.json")
             try FileManager.default.createSymbolicLink(at: url, withDestinationURL: target)
             XCTAssertNil(Persistence.load(from: url))
             Persistence.save(.fresh, to: url)
+            let link = try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)
+            XCTAssertEqual(link, target.path, "Missing targets must not cause the original symlink to be replaced")
+            let original = try stateData(workspaces: [Workspace.fresh(name: "Returned", accentHex: "5E5CE6", symbol: "R")])
+            try original.write(to: target)
+            XCTAssertEqual(Persistence.load(from: url)?.workspaces.first?.name, "Returned")
             let backups = try FileManager.default.contentsOfDirectory(at: url.deletingLastPathComponent(), includingPropertiesForKeys: nil)
                 .filter { $0.lastPathComponent.hasPrefix("state.json.corrupt-") }
-            XCTAssertEqual(backups.count, 1)
-            if let backup = backups.first {
-                XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: backup.path), target.path)
-            }
-            XCTAssertNotNil(Persistence.load(from: url))
+            XCTAssertTrue(backups.isEmpty)
         }
     }
 

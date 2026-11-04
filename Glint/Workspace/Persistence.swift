@@ -58,18 +58,22 @@ enum Persistence {
         return FileManager.default.fileExists(atPath: url.path)
     }
 
-    /// Path of an unreadable/corrupt state.json we could not preserve. A later
-    /// save retries preservation before writing, so recovered permissions or
-    /// disk space allow saving again without sacrificing the original.
+    /// A temporary read failure never authorizes replacing the saved session.
+    /// Only a successful explicit load can adopt it and permit later saves.
+    private static var unreadablePaths = Set<String>()
+
+    /// Path of a confirmed corrupt state.json whose quarantine failed.
     private static var corruptUnmovablePath: String?
 
-    /// Returns nil both for "no saved state" (fresh install) and "state was
-    /// unreadable" — but the two paths differ in side effects: an unreadable
-    /// file is moved aside (never deleted or overwritten) so a decode bug or
-    /// half-written file can't silently destroy the user's workspaces. Before
-    /// quarantining we try to surgically strip a single bad pane entry so it
-    /// costs only that pane, not every workspace. Takes no parameters; returns
-    /// the restored snapshot or nil when a fresh in-memory state is needed.
+    /// Whether startup must offer recovery rather than silently saving a fresh session.
+    static var requiresLoadRetry: Bool {
+        guard let url = fileURL else { return false }
+        return unreadablePaths.contains(url.path) || corruptUnmovablePath == url.path
+    }
+
+    /// Load the application snapshot; no parameters; returns nil if absent or
+    /// unavailable. I/O failures keep the original in place and block saves;
+    /// only confirmed undecodable data is quarantined after repair attempts.
     static func load() -> PersistedState? {
         guard let url = fileURL else { return nil }
         return load(from: url)
@@ -81,17 +85,18 @@ enum Persistence {
         do {
             data = try Data(contentsOf: url)
         } catch {
-            let failure = error as NSError
-            if failure.domain != NSCocoaErrorDomain || failure.code != NSFileReadNoSuchFileError {
-                NSLog("[glint] couldn't read \(fileName): \(error); preserving the original before starting fresh")
+            if isMissingOriginal(at: url, readError: error) {
+                clearRecoveryBlock(at: url)
+            } else {
+                unreadablePaths.insert(url.path)
+                NSLog("[glint] couldn't read \(fileName): \(error); leaving it in place and blocking saves until it is reloaded")
             }
-            // A missing target can still leave a real symlink at state.json;
-            // only the move's missing-source result proves nothing needs saving.
-            _ = preserveOriginal(at: url)
             return nil
         }
         do {
-            return try JSONDecoder().decode(PersistedState.self, from: data)
+            let restored = try JSONDecoder().decode(PersistedState.self, from: data)
+            clearRecoveryBlock(at: url)
+            return restored
         } catch {
             // Progressive recovery before quarantining. Two stages, each
             // feeding the next so a file with mixed damage still recovers the
@@ -107,6 +112,7 @@ enum Persistence {
             let repaired = Self.stripBadWorkspaces(from: paneFixed) ?? paneFixed
             if repaired != data,
                let state = try? JSONDecoder().decode(PersistedState.self, from: repaired) {
+                clearRecoveryBlock(at: url)
                 NSLog("[glint] decoded \(fileName) after stripping undecodable pane(s)/workspace(s); persisting the repaired copy")
                 do {
                     try repaired.write(to: url, options: [.atomic])
@@ -128,9 +134,33 @@ enum Persistence {
             }
 
             NSLog("[glint] failed to decode \(fileName): \(error); preserving it before starting fresh")
+            unreadablePaths.remove(url.path)
             _ = preserveOriginal(at: url)
             return nil
         }
+    }
+
+    /// Distinguish a genuinely absent entry from a missing symlink target;
+    /// inputs are its URL and read error; returns true only for missing entries.
+    private static func isMissingOriginal(at url: URL, readError: Error) -> Bool {
+        let failure = readError as NSError
+        guard failure.domain == NSCocoaErrorDomain,
+              failure.code == NSFileReadNoSuchFileError || failure.code == NSFileNoSuchFileError else { return false }
+        do {
+            _ = try FileManager.default.attributesOfItem(atPath: url.path)
+            return false
+        } catch {
+            let lookup = error as NSError
+            return lookup.domain == NSCocoaErrorDomain
+                && (lookup.code == NSFileReadNoSuchFileError || lookup.code == NSFileNoSuchFileError)
+        }
+    }
+
+    /// Permit saves after adopting or confirming absence of a saved session;
+    /// url identifies the snapshot; returns nothing.
+    private static func clearRecoveryBlock(at url: URL) {
+        unreadablePaths.remove(url.path)
+        if corruptUnmovablePath == url.path { corruptUnmovablePath = nil }
     }
 
     /// Move an unreadable original to a unique sibling; url is its location; returns whether saving may safely proceed.
@@ -163,7 +193,26 @@ enum Persistence {
 
     /// Save a snapshot; state and destination url are inputs; returns no value, preserving unreadable originals.
     static func save(_ state: PersistedState, to url: URL) {
-        if corruptUnmovablePath == url.path, !preserveOriginal(at: url) { return }
+        guard !unreadablePaths.contains(url.path) else { return }
+        if corruptUnmovablePath == url.path {
+            do {
+                let data = try Data(contentsOf: url)
+                let paneFixed = stripBadPanes(from: data) ?? data
+                let repaired = stripBadWorkspaces(from: paneFixed) ?? paneFixed
+                if (try? JSONDecoder().decode(PersistedState.self, from: repaired)) != nil {
+                    unreadablePaths.insert(url.path)
+                    NSLog("[glint] \(fileName) is now recoverable; leaving it in place until the session is reloaded")
+                    return
+                }
+                guard preserveOriginal(at: url) else { return }
+            } catch {
+                guard isMissingOriginal(at: url, readError: error) else {
+                    unreadablePaths.insert(url.path)
+                    return
+                }
+                clearRecoveryBlock(at: url)
+            }
+        }
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         do {

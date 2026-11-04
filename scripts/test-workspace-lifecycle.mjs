@@ -29,6 +29,9 @@ const observerEnd = storeSource.indexOf('\n        })', marker) + '\n        })'
 if ([modelStart, factoryStart, factoryEnd, marker, observerStart].some(index => index < 0)) {
   throw new Error('Lifecycle extraction markers changed');
 }
+const pruneAt = storeSource.indexOf('        // Drop scrollback snapshots for panes that no longer exist.');
+const pruneEnd = storeSource.indexOf('        // Block-based observers', pruneAt);
+if (pruneAt < 0 || pruneEnd < 0) throw new Error('Startup prune markers changed');
 const source = `import Foundation
 import Darwin
 struct Color {
@@ -62,10 +65,18 @@ func ghostty_surface_foreground_pid(_ surface: Int) -> Int32 { 77 }
 enum ScrollbackArchive {
     static var pending: [String: String] = [:]
     static var saved: [String: String] = [:]
+    static var pruned: Set<String>?
     /// Queue a fake archive write; arguments match production; returns no value.
     static func writeRendered(id: String, gridJSON: Data, maxLines: Int, priorHistory: String?, restoreMarker: String) {
         events.append("snapshot:" + id)
         pending[id] = String(decoding: gridJSON, as: UTF8.self)
+    }
+    /// Map fake pane keys to archive IDs; input is a pane key; returns its test ID.
+    static func fileID(forPaneKey key: String) -> String { key }
+    /// Execute real callers' pruning policy; input is live IDs; returns no value.
+    static func prune(keeping ids: Set<String>) {
+        events.append("prune"); pruned = ids
+        saved = saved.filter { ids.contains($0.key) }
     }
     /// Complete queued writes; no parameters; returns no value.
     static func drain() {
@@ -102,11 +113,55 @@ enum NSSound {
     static func beep() { events.append("beep") }
 }
 enum NSApplication { static let willTerminateNotification = Notification.Name("lifecycle-test-terminate") }
+enum ModalResponse { case alertFirstButtonReturn, alertSecondButtonReturn }
+final class NSAlert {
+    enum Style { case warning }
+    var messageText = ""
+    var informativeText = ""
+    var alertStyle = Style.warning
+    static var decisions: [() -> ModalResponse] = []
+    static var prompts: [String] = []
+    /// Record a test button; input is its label; returns no value.
+    func addButton(withTitle title: String) {}
+    /// Drive only modal input; no inputs; returns the next fixture decision.
+    func runModal() -> ModalResponse {
+        Self.prompts.append(informativeText)
+        guard !Self.decisions.isEmpty else { return .alertSecondButtonReturn }
+        return Self.decisions.removeFirst()()
+    }
+}
+final class UserDefaults {
+    static let standard = UserDefaults()
+    /// Avoid global preferences; input is a key; returns nil to use the production default.
+    func object(forKey key: String) -> Any? { nil }
+}
+enum Persistence {
+    static var requiresLoadRetry = false
+    static var next: PersistedState?
+    static var reads = 0
+    static var blockedSaves = 0
+    static var saved: [PersistedState] = []
+    /// Model the separately disk-tested load boundary; no inputs; returns the next snapshot and only then permits writes.
+    static func load() -> PersistedState? {
+        reads += 1
+        guard let next else { return nil }
+        requiresLoadRetry = false
+        return next
+    }
+    /// Model the separately disk-tested write boundary; input is the state; returns no value.
+    static func save(_ state: PersistedState) {
+        if requiresLoadRetry { blockedSaves += 1 } else { saved.append(state) }
+    }
+}
 enum Status { case thinking, tool, compacting, needsPermission, idle }
 struct AgentState { let status: Status }
 final class Store {
     var workspaces: [Workspace] = []
     var selectedWorkspaceID: UUID?
+    var sidebarCollapsed = false
+    var pendingInitialInput: [WorkspacePaneKey: String] = [:]
+    var gitStatuses: [UUID: Int] = [:]
+    var webRemoteControlledPanes = Set<WorkspacePaneKey>()
     var surfaceViews: [WorkspacePaneKey: GhosttySurfaceView] = [:]
     var paneAgentState: [WorkspacePaneKey: AgentState] = [:]
     var paneProcesses: [WorkspacePaneKey: String] = [:]
@@ -114,6 +169,7 @@ final class Store {
     var observerTokens: [NSObjectProtocol] = []
     var persisted: [Workspace] = []
     var activeWorkspaces: [Workspace] { workspaces.filter { !$0.archived } }
+    static var informativePrompts: [String] = []
     static var allowConfirmation = true
     static var duringConfirmation: (() -> Void)?
     static let benignShells: Set<String> = ["zsh", "bash", "sh", "fish"]
@@ -125,6 +181,7 @@ final class Store {
     static func isBenignShellProcessName(_ name: String) -> Bool { benignShells.contains(name) }
     /// Stand in for the modal only; arguments are prompt text and preference key; returns the fixture response.
     static func confirmDestruction(message: String, informative: String, confirmTitle: String, suppressionKey: String) -> Bool {
+        informativePrompts.append(informative)
         events.append("confirm:" + suppressionKey)
         let reentry = duringConfirmation
         duringConfirmation = nil
@@ -140,7 +197,21 @@ final class Store {
     /// Stand in for unrelated agent presentation; key and processName are inputs; returns no value.
     func reconcileAgentState(key: WorkspacePaneKey, processName: String) {}
     /// Record persistence order and contents; no parameters; returns no value.
-    func persist() { events.append("persist"); persisted = workspaces }
+    func persist() {
+        events.append("persist"); persisted = workspaces
+        Persistence.save(PersistedState(workspaces: workspaces, selectedWorkspaceID: selectedWorkspaceID, sidebarCollapsed: sidebarCollapsed))
+    }
+    /// Record watcher reconciliation; no inputs; returns no value.
+    func syncGitWatchers() { events.append("watchers") }
+    /// Record status loading; no inputs; returns no value.
+    func refreshAllGitStatuses() { events.append("git-status") }
+    /// Clear unrelated live control presentation; no inputs; returns no value.
+    func clearExternalControlActivity() { events.append("clear-external") }
+    /// Run the actual startup-prune block; no inputs; returns no value.
+    func pruneStartupScrollback() {
+${storeSource.slice(pruneAt, pruneEnd)}
+    }
+${method(storeSource, 'func offerSavedSessionRecovery(')}
     /// Remove temporary notification observers; no parameters; returns no value.
     deinit { for token in observerTokens { NotificationCenter.default.removeObserver(token) } }
 ${method(storeSource, 'func paneNeedsCloseConfirmation(')}
@@ -162,7 +233,10 @@ func check(_ condition: Bool, _ message: String) {
 func scenario(_ name: String, _ body: () -> Void) {
     scenarios += 1
     events = []; ScrollbackArchive.saved = [:]; ScrollbackArchive.pending = [:]
-    Store.duringConfirmation = nil
+    Store.duringConfirmation = nil; Store.informativePrompts = []
+    NSAlert.decisions = []; NSAlert.prompts = []
+    Persistence.requiresLoadRetry = false; Persistence.next = nil; Persistence.reads = 0; Persistence.blockedSaves = 0; Persistence.saved = []
+    ScrollbackArchive.pruned = nil
     let before = failures
     body()
     print("\\(failures == before ? "PASS" : "FAIL"): \\(name)")
@@ -197,6 +271,20 @@ scenario("busy archive cancellation keeps terminal and state") {
     check(store.selectedWorkspaceID == target && store.persisted.isEmpty, "cancel must preserve selection and saved state")
     check(events.contains(where: { $0.hasPrefix("confirm:") }), "busy archive must ask")
     check(!events.contains("capture:1") && !events.contains("drain"), "cancel must not begin destructive preparation")
+}
+scenario("one busy pane gets singular archive confirmation") {
+    let store = fixture(); Store.allowConfirmation = false
+    store.archiveWorkspace(store.workspaces[0].id)
+    check(Store.informativePrompts == ["1 of its panes still has something running; archiving will terminate its processes."], "one-pane prompt must use singular grammar")
+}
+scenario("multiple busy panes get formatted plural archive confirmation") {
+    let store = fixture(); Store.allowConfirmation = false
+    let target = store.workspaces[0].id
+    let pane = PaneID(value: 1)
+    store.workspaces[0].panes[pane] = Pane(id: pane, title: "Second")
+    store.paneProcesses[WorkspacePaneKey(workspace: target, pane: pane)] = "vim"
+    store.archiveWorkspace(target)
+    check(Store.informativePrompts == ["2 of its panes still have something running; archiving will terminate their processes."], "multiple-pane prompt must format Int64 without truncation")
 }
 scenario("confirmed archive captures final metadata and drains before release") {
     let store = fixture(); Store.allowConfirmation = true
@@ -272,6 +360,75 @@ scenario("termination forces latest grids before drain") {
     check(ScrollbackArchive.saved["1"] == "final-output-1" && ScrollbackArchive.saved["2"] == "final-output-2", "termination must save output that arrived with unchanged PID and no input")
     check(events.last == "drain" && store.persisted.first?.panes[PaneID(value: 0)]?.workingDirectory == "/final/cwd", "termination must drain and persist captured state")
 }
+/// Construct a recoverable snapshot; name identifies it; returns a saved state with valid selection.
+func restoredSnapshot(_ name: String = "Restored") -> PersistedState {
+    let workspace = Workspace.fresh(name: name, accentHex: "5E5CE6", symbol: "R")
+    return PersistedState(workspaces: [workspace], selectedWorkspaceID: workspace.id, sidebarCollapsed: true)
+}
+scenario("read-failure startup never prunes original session history") {
+    let store = fixture(); Persistence.requiresLoadRetry = true
+    ScrollbackArchive.saved["original-history"] = "last saved output"
+    store.pruneStartupScrollback()
+    check(ScrollbackArchive.saved["original-history"] == "last saved output" && ScrollbackArchive.pruned == nil, "temporary models must not prune saved history")
+}
+scenario("continuing a temporary session retains terminals and blocks autosave") {
+    let store = fixture(); let ids = store.workspaces.map(\\.id)
+    Persistence.requiresLoadRetry = true; Persistence.next = restoredSnapshot()
+    NSAlert.decisions = [{ .alertSecondButtonReturn }]
+    store.offerSavedSessionRecovery(); store.persist()
+    check(store.workspaces.map(\\.id) == ids && store.surfaceViews.count == 2, "cancel must preserve temporary terminals")
+    check(Persistence.reads == 0 && Persistence.blockedSaves == 1 && Persistence.saved.isEmpty, "cancel must not load or overwrite the original")
+}
+scenario("failed recovery read keeps protection and permits another decision") {
+    let store = fixture(); Persistence.requiresLoadRetry = true
+    NSAlert.decisions = [{ .alertFirstButtonReturn }, { .alertSecondButtonReturn }]
+    store.offerSavedSessionRecovery(); store.persist()
+    check(NSAlert.prompts.count == 2 && Persistence.reads == 1, "failed retry must remain recoverable")
+    check(store.surfaceViews.count == 2 && Persistence.blockedSaves == 1 && Persistence.saved.isEmpty, "read failure must retain terminals and protect saves")
+}
+scenario("confirmed recovery adopts state after draining temporary terminals") {
+    let store = fixture(); let restored = restoredSnapshot()
+    Persistence.requiresLoadRetry = true; Persistence.next = restored
+    store.webRemoteControlledPanes = Set(store.surfaceViews.keys)
+    store.pendingInitialInput = [store.surfaceViews.keys.first!: "do not replay"]
+    NSAlert.decisions = [{ .alertFirstButtonReturn }]
+    store.offerSavedSessionRecovery()
+    check(store.workspaces.map(\\.id) == restored.workspaces.map(\\.id) && store.selectedWorkspaceID == restored.selectedWorkspaceID && store.sidebarCollapsed, "retry must adopt the exact saved session")
+    check(store.surfaceViews.isEmpty && store.paneProcesses.isEmpty && store.paneAgentState.isEmpty && store.pendingInitialInput.isEmpty && store.webRemoteControlledPanes.isEmpty, "restoration must clear temporary live state")
+    let drained = events.firstIndex(of: "drain"), released = events.firstIndex(where: { $0.hasPrefix("release:") })
+    check(drained != nil && released != nil && drained! < released!, "temporary snapshots must drain before surface release")
+    check(ScrollbackArchive.pruned?.count == restored.workspaces[0].panes.count && events.contains("watchers"), "restored IDs must drive pruning and watchers")
+    store.persist()
+    check(Persistence.saved.last?.workspaces.first?.id == restored.workspaces.first?.id, "saves may resume only with the adopted model")
+}
+scenario("new workspace during recovery confirmation requires another decision") {
+    let store = fixture(); let original = store.workspaces[0].id
+    Persistence.requiresLoadRetry = true; Persistence.next = restoredSnapshot()
+    NSAlert.decisions = [{ store.workspaces.append(Workspace.fresh(name: "New", accentHex: "5E5CE6", symbol: "N")); return .alertFirstButtonReturn }, { .alertSecondButtonReturn }]
+    store.offerSavedSessionRecovery()
+    check(Persistence.reads == 0 && NSAlert.prompts.count == 2 && store.workspaces.first?.id == original && store.workspaces.count == 3, "new workspaces must not be closed without a fresh decision")
+}
+scenario("replaced surface during recovery confirmation requires another decision") {
+    let store = fixture(); let key = store.surfaceViews.keys.first!
+    Persistence.requiresLoadRetry = true; Persistence.next = restoredSnapshot()
+    NSAlert.decisions = [{ store.surfaceViews[key] = GhosttySurfaceView(handle: 3, id: "replacement"); return .alertFirstButtonReturn }, { .alertSecondButtonReturn }]
+    store.offerSavedSessionRecovery()
+    check(Persistence.reads == 0 && NSAlert.prompts.count == 2 && store.surfaceViews[key]?.scrollbackID == "replacement", "new surface identity must be re-confirmed")
+}
+scenario("a newly busy temporary terminal requires another decision") {
+    let store = fixture(process: "zsh"); let key = store.surfaceViews.keys.first!
+    Persistence.requiresLoadRetry = true; Persistence.next = restoredSnapshot()
+    NSAlert.decisions = [{ store.surfaceViews[key]?.process = "vim"; return .alertFirstButtonReturn }, { .alertSecondButtonReturn }]
+    store.offerSavedSessionRecovery()
+    check(Persistence.reads == 0 && NSAlert.prompts.count == 2 && store.surfaceViews[key]?.process == "vim", "new busy terminals must not be killed by a prior decision")
+}
+scenario("saved data is reread after the recovery decision") {
+    let store = fixture(); Persistence.requiresLoadRetry = true; Persistence.next = restoredSnapshot("Before")
+    NSAlert.decisions = [{ Persistence.next = restoredSnapshot("Changed"); return .alertFirstButtonReturn }]
+    store.offerSavedSessionRecovery()
+    check(Persistence.reads == 1 && store.workspaces.first?.name == "Changed", "recovery must reread the current original")
+}
+
 print("Executed \\(scenarios) lifecycle scenarios; \\(failures) assertion failures")
 exit(failures == 0 ? 0 : 1)
 `;

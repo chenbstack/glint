@@ -14,6 +14,9 @@ final class ReviewDiffParsingTests: XCTestCase {
     private struct NonLocalDiffRunner: GitRunner {
         /// Return NUL-delimited fixture output. Parameters: Git args, cwd and timeout. Returns a successful result.
         func run(_ args: [String], cwd: String?, timeout: GitTimeout) async throws -> GitResult {
+            if args.first == "rev-parse" {
+                return GitResult(exitCode: 0, stdout: String(repeating: "a", count: 40) + "\n", stderr: "")
+            }
             if args.contains("--name-status") {
                 return GitResult(exitCode: 0, stdout: "M\0file.txt\0", stderr: "")
             }
@@ -44,15 +47,31 @@ final class ReviewDiffParsingTests: XCTestCase {
         func countUntrackedAdditions(repo: String, paths: [String]) async -> [String: Int] { [:] }
     }
 
-    /// Reject partial file lists. Parameters: none. Returns nothing; asserts errors from every list step.
+    /// Reject failed tracked comparisons. Parameters: none. Returns nothing; asserts both tracked list reads.
     func testChangedFilesThrowsForFailedGitRead() async {
-        for step in ["--name-status", "--numstat", "ls-files"] {
+        for step in ["--name-status", "--numstat"] {
             do {
                 _ = try await GitService(runner: FailedDiffRunner(failAt: step))
                     .changedFiles(repo: "/unused", scope: .workingTree)
                 XCTFail("Expected Git failure for \(step)")
             } catch { }
         }
+    }
+
+    /// Keep tracked changes when only untracked enumeration fails; no inputs; asserts partial results and warning.
+    @MainActor
+    func testUntrackedFailureKeepsTrackedChangesAndWarns() async throws {
+        let runner = FailedDiffRunner(failAt: "ls-files")
+        let result = try await GitService(runner: runner).reviewChanges(repo: "/unused", scope: .workingTree)
+        XCTAssertEqual(result.files.map(\.path), ["file.txt"])
+        XCTAssertTrue(result.untrackedWarning)
+        XCTAssertEqual(result.baseline, String(repeating: "a", count: 40))
+        let model = ReviewModel(repo: "/unused", title: "Test", scopes: [.workingTree], runner: runner)
+        await model.reload()
+        XCTAssertEqual(model.files.map(\.path), ["file.txt"])
+        XCTAssertNotNil(model.filesWarning)
+        XCTAssertNil(model.filesError)
+        XCTAssertEqual(model.selected?.path, "file.txt")
     }
 
     /// Expose Git failures in Review rather than empty content. Parameters: none. Returns nothing; asserts model state.

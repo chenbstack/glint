@@ -115,6 +115,7 @@ func expect(_ condition: Bool, _ message: String) throws {
 const tests = `
 @MainActor enum RefreshTests {
     static var stores: [UsageStore] = []
+    static var refreshTimeout: TimeInterval = 30
     /// Drain runnable main-actor work without wall-clock sleeps; takes no inputs; returns nothing.
     static func settle() async { for _ in 0..<100 { await Task.yield() } }
     /// Create a store with isolated enabled flags; inputs are enabled agents; returns the store.
@@ -122,7 +123,7 @@ const tests = `
         UserDefaults.standard.set(claude, forKey: "glint.showClaudeUsage")
         UserDefaults.standard.set(codex, forKey: "glint.showCodexUsage")
         UserDefaults.standard.set(grok, forKey: "glint.showGrokUsage")
-        let result = UsageStore()
+        let result = UsageStore(refreshTimeout: refreshTimeout)
         stores.append(result)
         return result
     }
@@ -135,6 +136,7 @@ const tests = `
         await Probe.shared.reset()
         UserDefaults.standard.reset()
         CodexHomeStore.homes = []
+        refreshTimeout = 30
     }
     /// A first enable must issue one read; takes no inputs; throws on mismatch.
     static func firstEnable() async throws {
@@ -279,6 +281,88 @@ const tests = `
         await settle()
         try expect(await Probe.shared.count(home.resolvedURL.path) == 2, "completed home task was not released")
     }
+    /// A hung agent read must release its refresh slot and reject late results; no inputs; throws on mismatch.
+    static func agentDeadline() async throws {
+        refreshTimeout = 0.2
+        let usage = store(claude: true, grok: true)
+        await settle()
+        try await Task.sleep(nanoseconds: 350_000_000)
+        usage.refreshNow()
+        await settle()
+        try expect(await Probe.shared.count("claude") == 2, "hung Claude read permanently blocked refresh")
+        try expect(await Probe.shared.count("grok") == 2, "hung Grok read permanently blocked refresh")
+        await Probe.shared.complete("claude", index: 2, percent: 60)
+        await Probe.shared.complete("grok", index: 2, percent: 70)
+        await settle()
+        await Probe.shared.complete("claude", percent: 1)
+        await Probe.shared.complete("grok", percent: 2)
+        await settle()
+        try expect(usage.claude?.sessionPercent == 60 && usage.grok?.sessionPercent == 70, "timed-out agent result overwrote a newer quota")
+        let claudeCancelled = await Probe.shared.wasCancelled("claude")
+        let grokCancelled = await Probe.shared.wasCancelled("grok")
+        try expect(claudeCancelled && grokCancelled, "expired agent reads were not cancelled")
+    }
+    /// Hung homes must release slots without erasing previously available quota; no inputs; throws on mismatch.
+    static func homeDeadline() async throws {
+        refreshTimeout = 0.2
+        let home = CodexHome(path: "/tmp/glint-home-timeout")
+        CodexHomeStore.homes = [home]
+        let usage = store(codex: true)
+        await settle()
+        await Probe.shared.complete(home.resolvedURL.path, percent: 35)
+        await settle()
+        usage.refreshNow()
+        await settle()
+        try await Task.sleep(nanoseconds: 350_000_000)
+        try expect(usage.codex?.sessionPercent == 35, "home timeout erased the last known quota")
+        usage.refreshNow()
+        await settle()
+        try expect(await Probe.shared.count(home.resolvedURL.path) == 3, "hung home read permanently blocked refresh")
+        await Probe.shared.complete(home.resolvedURL.path, index: 3, percent: 45)
+        await settle()
+        await Probe.shared.complete(home.resolvedURL.path, index: 2, percent: 99)
+        await settle()
+        try expect(usage.codex?.sessionPercent == 45, "expired home result replaced a later successful refresh")
+        try expect(await Probe.shared.wasCancelled(home.resolvedURL.path, index: 2), "expired home request was not cancelled")
+    }
+    /// Repeated hung reads may retry and a completed request's timer cannot clear a later request; no inputs; throws on mismatch.
+    static func repeatedDeadline() async throws {
+        refreshTimeout = 0.2
+        let usage = store(claude: true)
+        await settle()
+        try await Task.sleep(nanoseconds: 350_000_000)
+        usage.refreshNow()
+        await settle()
+        try await Task.sleep(nanoseconds: 350_000_000)
+        usage.refreshNow()
+        await settle()
+        try expect(await Probe.shared.count("claude") == 3, "second timeout left the refresh slot occupied")
+        await Probe.shared.complete("claude", index: 3, percent: 55)
+        await settle()
+        usage.refreshNow()
+        await settle()
+        await Probe.shared.complete("claude", index: 4, percent: 65)
+        await settle()
+        await Probe.shared.complete("claude", index: 1, percent: 95)
+        await Probe.shared.complete("claude", index: 2, percent: 85)
+        await settle()
+        try expect(usage.claude?.sessionPercent == 65, "orphaned deadline/read changed a newer completed quota")
+    }
+    /// A first home timeout must end its initial loading indicator; no inputs; throws on mismatch.
+    static func firstHomeDeadline() async throws {
+        refreshTimeout = 0.2
+        let home = CodexHome(path: "/tmp/glint-first-home-timeout")
+        CodexHomeStore.homes = [home]
+        let usage = store(codex: true)
+        await settle()
+        try await Task.sleep(nanoseconds: 350_000_000)
+        if case .loading = usage.codexHomeStatuses.first?.quotaStatus {
+            throw Failure(message: "home timeout left its loading indicator running forever")
+        }
+        usage.refreshNow()
+        await settle()
+        try expect(await Probe.shared.count(home.resolvedURL.path) == 2, "initial home timeout did not permit retry")
+    }
     /// Dropping a store cancels its readers without retaining the store; takes no inputs; throws on mismatch.
     static func deallocation() async throws {
         let home = CodexHome(path: "/tmp/glint-home-deinit")
@@ -312,6 +396,10 @@ const tests = `
             ("disabling Codex cancels pending work", RefreshTests.homeDisable),
             ("completed work permits subsequent polls", RefreshTests.completedRefreshCanRepeat),
             ("renaming a home reuses its pending request", RefreshTests.homeRename),
+            ("hung agent reads expire without waiting for cancellation", RefreshTests.agentDeadline),
+            ("home timeouts retain quota and reject late results", RefreshTests.homeDeadline),
+            ("repeated timeouts release refresh slots", RefreshTests.repeatedDeadline),
+            ("initial home timeout ends loading", RefreshTests.firstHomeDeadline),
             ("deinitializing the store cancels its readers", RefreshTests.deallocation),
         ]
         var failures = 0

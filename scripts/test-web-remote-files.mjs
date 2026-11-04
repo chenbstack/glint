@@ -27,13 +27,17 @@ function harness() {
   const elements = Object.fromEntries([
     "filesPanel", "filesUp", "filesLocation", "filesList", "filesPreviewName", "filesContent",
     "filesImageViewport", "filesImage", "filesHTML", "filesSourceToggle", "filesMessage", "openFiles",
+    "emptyState", "terminal",
   ].map(name => [name, element()]));
   const context = vm.createContext({
     elements, sent,
     document: { createElement: element, querySelector: element },
     imageZoom: { reset() {} },
+    terminal: { reset() {}, write(_data, complete) { complete?.(); }, focus() {} },
+    decodeBase64: data => Buffer.from(data, "base64"),
     mobileSidebarLayout: { matches: false },
     send: message => sent.push(message), t: key => key,
+    clearTimeout() {}, setStatus() {},
     applyBrand() {}, applyTheme() {}, renderState() {}, chooseInitialPane() {}, fitTerminal() {},
   });
   vm.runInContext(`
@@ -41,11 +45,14 @@ function harness() {
     let fileRequestSequence = 0, fileListRequest = "", fileContentRequest = "";
     let fileDirectory = "", filePath = "", htmlSource = "", htmlSourceShown = false;
     let authenticated = true, selectedPane = "pane";
+    let controllingPane = "pane", paneRetryTimer = null, paneRetryCount = 0, paneRetryLimit = 5;
+    let autoFocusTerminal = false;
     let lastState = { workspaces: [{ id: "ws", panes: [{ id: "pane", cwd: "/A" }] }] };
   `, context);
   for (const name of [
     "handleMessage", "fileErrorLabel", "sandboxedHTML", "clearFilePreview", "matchesFileResponse",
     "updateFilesButton", "updateFileLocation", "openFiles", "closeFiles", "browseFiles", "renderFiles",
+    "handleError", "errorLabel",
   ]) vm.runInContext(shippedFunction(name), context);
   const run = code => vm.runInContext(code, context);
   const deliver = message => context.handleMessage(JSON.stringify(message));
@@ -150,4 +157,63 @@ test("errors for an obsolete read cannot clear the current preview", () => {
   h.deliver({ ...old, type: "fileError", code: "file-root-changed" });
   assert.equal(h.elements.filesContent.textContent, "new");
   assert.equal(h.sent.at(-1).request, fresh.request);
+});
+
+// A rejected file operation must leave the live terminal usable and permit a
+// fresh request instead of requiring a transport reconnect.
+test("busy and oversized file errors allow a successful retry", () => {
+  for (const [code, label] of [["file-busy", "file_busy"], ["response-too-large", "response_too_large"]]) {
+    const h = harness();
+    const read = h.click();
+    h.deliver({ ...read, type: "fileError", code });
+    assert.equal(h.elements.filesMessage.textContent, label);
+    assert.equal(h.run("authenticated && controllingPane === 'pane'"), true);
+    const retry = h.click();
+    assert.notEqual(retry.request, read.request);
+    h.deliver({ ...retry, type: "fileContent", content: "retried", format: "text" });
+    assert.equal(h.elements.filesContent.textContent, "retried");
+  }
+});
+
+test("coalesced send pressure releases pending file operations without disabling the terminal", () => {
+  const h = harness();
+  h.click();
+  h.run("fileListRequest = 'pending-list'");
+  h.deliver({ type: "error", code: "send-queue-busy" });
+  assert.equal(h.run("fileListRequest === '' && fileContentRequest === ''"), true);
+  assert.equal(h.run("authenticated && controllingPane === 'pane'"), true);
+  assert.equal(h.elements.filesMessage.textContent, "send_queue_busy");
+});
+
+test("oversized snapshots stop automatic retries without closing the connection", () => {
+  const h = harness();
+  h.deliver({ type: "error", code: "response-too-large", pane: "pane" });
+  assert.equal(h.run("authenticated && selectedPane === 'pane' && controllingPane === ''"), true);
+  assert.equal(h.run("paneRetryCount === paneRetryLimit"), true);
+});
+
+for (const [label, fileErrors] of [["ordinary response pressure", 0], ["a saturated file-error queue", 32]]) {
+  test(`snapshot busy after ${label} revokes old control until a successful retry`, () => {
+    const h = harness();
+    h.deliver({ type: "snapshot", pane: "pane", data: "b2xk" });
+    const request = h.click();
+    for (let index = 0; index < fileErrors; index += 1) {
+      h.deliver({ ...request, type: "fileError", code: "file-busy" });
+    }
+    assert.equal(h.run("controllingPane"), "pane");
+    h.deliver({ type: "error", code: "snapshot-busy", pane: "pane" });
+    assert.equal(h.run("controllingPane"), "");
+    assert.equal(h.run("authenticated"), true);
+    h.deliver({ type: "snapshot", pane: "pane", data: "bmV3" });
+    assert.equal(h.run("controllingPane"), "pane");
+  });
+}
+
+test("a rejected snapshot for an old pane cannot revoke the newly selected pane", () => {
+  const h = harness();
+  h.deliver({ type: "snapshot", pane: "pane", data: "bmV3" });
+  for (const code of ["snapshot-busy", "response-too-large"]) {
+    h.deliver({ type: "error", code, pane: "previous-pane" });
+    assert.equal(h.run("controllingPane"), "pane");
+  }
 });

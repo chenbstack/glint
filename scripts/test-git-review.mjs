@@ -91,7 +91,7 @@ struct FailureRunner: GitRunner {
         if args.contains(stage) || (stage == "signal" && args.contains("--numstat")) {
             return GitResult(exitCode: stage == "signal" ? 0 : 128, stdout: "partial", stderr: "failed", wasSignaled: stage == "signal")
         }
-        let out = args.contains("--name-status") ? "M\0file.txt\0" : args.contains("--numstat") ? "1\t1\tfile.txt\0" : args.contains("rev-parse") ? "abcdef\n" : ""
+        let out = args.contains("--name-status") ? "M\0file.txt\0" : args.contains("--numstat") ? "1\t1\tfile.txt\0" : args.contains("rev-parse") ? String(repeating: "a", count: 40) + "\n" : ""
         return GitResult(exitCode: 0, stdout: out, stderr: "")
     }
     /// Stub untracked counters; parameters are repo/paths; returns no counts.
@@ -109,6 +109,45 @@ final class RecoveringRunner: GitRunner, @unchecked Sendable {
     }
     /// Stub untracked counters; parameters are repo/paths; returns no counts.
     func countUntrackedAdditions(repo: String, paths: [String]) async -> [String: Int] { [:] }
+}
+actor ReviewProbeRunner: GitRunner {
+    private var calls: [[String]] = []
+    private var head = String(repeating: "a", count: 40)
+    private var blockNames = false
+    private var gate: CheckedContinuation<Void, Never>?
+    private var observers: [CheckedContinuation<Void, Never>] = []
+    /// Record fixture reads with a controllable list gate; inputs mirror GitRunner; returns literal Git output.
+    func run(_ args: [String], cwd: String?, timeout: GitTimeout) async throws -> GitResult {
+        calls.append(args)
+        if args.first == "rev-parse" { return GitResult(exitCode: 0, stdout: head + "\n", stderr: "") }
+        if args.contains("--name-status") {
+            if blockNames {
+                blockNames = false
+                await withCheckedContinuation { gate = $0; observers.forEach { $0.resume() }; observers.removeAll() }
+            }
+            return GitResult(exitCode: 0, stdout: "M\0file.txt\0", stderr: "")
+        }
+        if args.contains("--numstat") { return GitResult(exitCode: 0, stdout: "1\t1\tfile.txt\0", stderr: "") }
+        if args.contains("--unified=1000000") { return GitResult(exitCode: 0, stdout: "@@ -1 +1 @@\n-old\n+new\n", stderr: "") }
+        return GitResult(exitCode: 0, stdout: "", stderr: "")
+    }
+    /// Supply empty counts; inputs are repo and paths; returns no records.
+    func countUntrackedAdditions(repo: String, paths: [String]) async -> [String: Int] { [:] }
+    /// Count one observable Git operation; input is its argv marker; returns recorded call count.
+    func count(_ marker: String) -> Int { calls.filter { $0.contains(marker) }.count }
+    /// Read baseline arguments used for file diffs; no inputs; returns their complete argv.
+    func diffs() -> [[String]] { calls.filter { $0.contains("--unified=1000000") } }
+    /// Change the next HEAD result; input is a complete OID; returns nothing.
+    func setHead(_ oid: String) { head = oid }
+    /// Suspend the next names request; no inputs or return value.
+    func blockNextList() { blockNames = true }
+    /// Observe the names request actually suspended; no inputs; returns after reaching the gate.
+    func waitForList() async {
+        if gate != nil { return }
+        await withCheckedContinuation { observers.append($0) }
+    }
+    /// Resume the controlled list request; no inputs or return value.
+    func releaseList() { let old = gate; gate = nil; old?.resume() }
 }
 struct TreeNode {
     /// Stand in for UI tree layout; parameter is changed files; returns placeholder nodes.
@@ -151,6 +190,66 @@ struct Row: Encodable { let path: String; let kind: String; let additions: Int; 
                 print("false")
             } catch { print("true") }
             return
+        }
+        if args[1] == "partial-model" {
+            let model = ReviewModel(repo: "unused", title: "Partial", scopes: [.workingTree], runner: FailureRunner(stage: "ls-files"))
+            await model.reload()
+            print(String(decoding: try JSONEncoder().encode([model.files.count == 1, model.filesError == nil, model.selected?.path == "file.txt", model.filesWarning != nil]), as: UTF8.self))
+            return
+        }
+        if args[1] == "baseline-model" {
+            let runner = ReviewProbeRunner()
+            let model = ReviewModel(repo: "unused", title: "Baseline", scopes: [.workingTree], runner: runner)
+            await model.reload()
+            await model.select(model.files[0])
+            let first = await runner.count("rev-parse") == 1
+            await runner.setHead(String(repeating: "b", count: 40))
+            await model.reload()
+            let second = await runner.count("rev-parse") == 2
+            let diffs = await runner.diffs()
+            let pinned = diffs.count == 3 && diffs[0].contains(String(repeating: "a", count: 40)) && diffs[1].contains(String(repeating: "a", count: 40)) && diffs[2].contains(String(repeating: "b", count: 40))
+            print(String(decoding: try JSONEncoder().encode([first, second, pinned]), as: UTF8.self)); return
+        }
+        if args[1] == "loading-model" {
+            let runner = ReviewProbeRunner()
+            let model = ReviewModel(repo: "unused", title: "Loading", scopes: [.workingTree], runner: runner)
+            await model.reload()
+            let old = model.files[0]
+            await runner.blockNextList()
+            let reload = Task { await model.reload() }
+            await runner.waitForList()
+            let loading = model.loadingFiles && model.diffText.isEmpty && model.selected == nil
+            let before = await runner.count("--unified=1000000")
+            await model.select(old)
+            let ignored = await runner.count("--unified=1000000") == before
+            await runner.releaseList()
+            await reload.value
+            let loaded = !model.loadingFiles && !model.loadingDiff && model.selected?.path == "file.txt" && !model.diffText.isEmpty
+            print(String(decoding: try JSONEncoder().encode([loading, ignored, loaded]), as: UTF8.self)); return
+        }
+        if args[1] == "overlap-model" {
+            let runner = ReviewProbeRunner()
+            let model = ReviewModel(repo: "unused", title: "Overlap", scopes: [.workingTree], runner: runner)
+            await runner.blockNextList()
+            let old = Task { await model.reload() }
+            await runner.waitForList()
+            await runner.setHead(String(repeating: "b", count: 40))
+            await model.reload()
+            await runner.releaseList()
+            await old.value
+            await model.select(model.files[0])
+            let diffs = await runner.diffs()
+            let newest = diffs.last?.contains(String(repeating: "b", count: 40)) == true
+            print(String(decoding: try JSONEncoder().encode([newest, !model.loadingFiles, !model.loadingDiff]), as: UTF8.self)); return
+        }
+        if args[1] == "snapshot-real" {
+            let git = GitService()
+            let first = try await git.reviewChanges(repo: args[2], scope: .workingTree)
+            _ = try await git.git(["add", "."], cwd: args[2], timeout: .read)
+            _ = try await git.git(["commit", "-qm", "advance HEAD"], cwd: args[2], timeout: .read)
+            let diff = try await git.fileDiff(repo: args[2], scope: .workingTree, file: first.files[0], baseline: first.baseline)
+            let second = try await git.reviewChanges(repo: args[2], scope: .workingTree)
+            print(String(decoding: try JSONEncoder().encode(["pinned": diff.contains("-before") && diff.contains("+after"), "reload": first.baseline != second.baseline && second.files.isEmpty]), as: UTF8.self)); return
         }
         if args[1] == "model" {
             let runner = RecoveringRunner()
@@ -200,6 +299,29 @@ struct Row: Encodable { let path: String; let kind: String; let additions: Int; 
     assert.equal(rows.find(row => row.path === 'binary.dat').binary, true);
   });
 
+  check('untracked enumeration failure keeps tracked changes available in Review', () => {
+    assert.deepEqual(JSON.parse(run(executable, ['partial-model'])), [true, true, true, true]);
+  });
+  check('Review resolves a baseline once per reload and pins file selections to that OID', () => {
+    assert.deepEqual(JSON.parse(run(executable, ['baseline-model'])), [true, true, true]);
+  });
+  check('Review refresh clears obsolete content and rejects old rows while the list is loading', () => {
+    assert.deepEqual(JSON.parse(run(executable, ['loading-model'])), [true, true, true]);
+  });
+  check('late file-list loads cannot overwrite the newest comparison baseline', () => {
+    assert.deepEqual(JSON.parse(run(executable, ['overlap-model'])), [true, true, true]);
+  });
+  const changing = join(scratch, 'changing');
+  run('/usr/bin/git', ['init', '-q', changing]);
+  run('/usr/bin/git', ['-C', changing, 'config', 'user.name', 'Regression']);
+  run('/usr/bin/git', ['-C', changing, 'config', 'user.email', 'regression@example.invalid']);
+  writeFileSync(join(changing, 'file.txt'), 'before\n');
+  run('/usr/bin/git', ['-C', changing, 'add', '.']);
+  run('/usr/bin/git', ['-C', changing, 'commit', '-qm', 'before']);
+  writeFileSync(join(changing, 'file.txt'), 'after\n');
+  check('a real commit between listing and selection does not change the loaded baseline', () => {
+    assert.deepEqual(JSON.parse(run(executable, ['snapshot-real', changing])), { pinned: true, reload: true });
+  });
   const unborn = join(scratch, 'unborn');
   run('/usr/bin/git', ['init', '-q', unborn]);
   writeFileSync(join(unborn, 'first.txt'), 'first change\n');
@@ -236,7 +358,7 @@ struct Row: Encodable { let path: String; let kind: String; let additions: Int; 
   check('broken existing HEAD is not treated as an unborn branch', () => {
     assert.deepEqual(JSON.parse(run(executable, ['working', broken])), { error: true });
   });
-  for (const stage of ['--name-status', '--numstat', 'ls-files', 'diff', 'launch', 'signal', 'head-permission', 'ref-permission']) {
+  for (const stage of ['--name-status', '--numstat', 'diff', 'launch', 'signal', 'head-permission', 'ref-permission']) {
     check(`Git failure is surfaced for ${stage}`, () => {
       assert.equal(JSON.parse(run(executable, ['failure', stage])), true);
     });

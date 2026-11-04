@@ -1198,7 +1198,10 @@ final class WorkspaceStore: ObservableObject {
         didSet {
             UserDefaults.standard.set(externalControlEnabled, forKey: "glint.externalControlEnabled")
             if externalControlEnabled { ControlBridge.shared.start() }
-            else { ControlBridge.shared.stop() }
+            else {
+                ControlBridge.shared.stop()
+                clearExternalControlActivity()
+            }
         }
     }
 
@@ -1236,6 +1239,84 @@ final class WorkspaceStore: ObservableObject {
 
     @Published private(set) var webRemoteStatus: WebRemoteStatus = .stopped
     @Published private var webRemoteControlledPanes = Set<WorkspacePaneKey>()
+    @Published private var externalControlledPanes = Set<WorkspacePaneKey>()
+    private var externalControlExpiry: [WorkspacePaneKey: Date] = [:]
+    private var externalControlExpiryWork: DispatchWorkItem?
+    private let externalControlNow: () -> Date
+
+    enum WorkspaceControlSource: Hashable {
+        case local, web
+
+        var title: String {
+            switch self {
+            case .local: return String(localized: "Local control")
+            case .web: return String(localized: "Remote control active")
+            }
+        }
+
+        var detail: String {
+            switch self {
+            case .local:
+                return String(localized: "Local apps can read and send input to this terminal.")
+            case .web:
+                return String(localized: "Layout may be inaccurate while controlled. It will restore automatically after disconnecting.")
+            }
+        }
+    }
+
+    func paneControlSources(workspaceID: UUID, paneID: PaneID) -> [WorkspaceControlSource] {
+        let key = WorkspacePaneKey(workspace: workspaceID, pane: paneID)
+        var sources: [WorkspaceControlSource] = []
+        if externalControlledPanes.contains(key) { sources.append(.local) }
+        if webRemoteControlledPanes.contains(key) { sources.append(.web) }
+        return sources
+    }
+
+    func workspaceControlSources(_ id: UUID) -> [WorkspaceControlSource] {
+        var sources: [WorkspaceControlSource] = []
+        if externalControlledPanes.contains(where: { $0.workspace == id }) { sources.append(.local) }
+        if webRemoteControlledPanes.contains(where: { $0.workspace == id }) { sources.append(.web) }
+        return sources
+    }
+
+    func isWorkspaceRemotelyControlled(_ id: UUID) -> Bool {
+        !workspaceControlSources(id).isEmpty
+    }
+
+    private func noteExternalControlActivity(_ key: WorkspacePaneKey) {
+        externalControlExpiry[key] = externalControlNow().addingTimeInterval(30)
+        if !externalControlledPanes.contains(key) { externalControlledPanes.insert(key) }
+        scheduleExternalControlExpiry()
+    }
+
+    private func scheduleExternalControlExpiry() {
+        // Polling refreshes only a timestamp: retain the current wakeup until it fires.
+        guard externalControlExpiryWork == nil,
+              let next = externalControlExpiry.values.min() else { return }
+        let expiry = DispatchWorkItem { [weak self] in self?.expireExternalControlActivity() }
+        externalControlExpiryWork = expiry
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, next.timeIntervalSince(externalControlNow())),
+                                      execute: expiry)
+    }
+
+    func expireExternalControlActivity() {
+        externalControlExpiryWork?.cancel()
+        externalControlExpiryWork = nil
+        let now = externalControlNow()
+        let expired = Set(externalControlExpiry.compactMap { $0.value <= now ? $0.key : nil })
+        if !expired.isEmpty {
+            externalControlledPanes.subtract(expired)
+            for key in expired { externalControlExpiry.removeValue(forKey: key) }
+        }
+        scheduleExternalControlExpiry()
+    }
+
+    private func clearExternalControlActivity() {
+        externalControlExpiryWork?.cancel()
+        externalControlExpiryWork = nil
+        externalControlExpiry.removeAll()
+        if !externalControlledPanes.isEmpty { externalControlledPanes.removeAll() }
+    }
 
     var webRemoteAccessURLs: [String] {
         guard case let .ready(urls) = webRemoteStatus else { return [] }
@@ -1675,7 +1756,10 @@ final class WorkspaceStore: ObservableObject {
         self.init(activity: PaneActivityStore())
     }
 
-    init(activity: PaneActivityStore) {
+    /// Load the initial workspace snapshot and wire live updates; activity owns
+    /// pane status and externalControlNow supplies the clock; initializes the store.
+    init(activity: PaneActivityStore, externalControlNow: @escaping () -> Date = Date.init) {
+        self.externalControlNow = externalControlNow
         self.activity = activity
         let loaded = Persistence.load() ?? PersistedState.fresh
         self.workspaces = loaded.workspaces
@@ -1698,7 +1782,12 @@ final class WorkspaceStore: ObservableObject {
         // Drain paths Launch Services handed us before the store existed (cold
         // launch with a folder/file/glint:// URL). No-op when nothing's pending;
         // AppDelegate.deliver also calls flush() for warm-launch opens.
-        DispatchQueue.main.async { AppDelegate.flush() }
+        // Recovery needs AppKit ready and must precede pending URL opens that
+        // could otherwise create temporary workspaces before restoration.
+        DispatchQueue.main.async { [weak self] in
+            self?.offerSavedSessionRecovery()
+            AppDelegate.flush()
+        }
 
         // Reconcile the zsh-side inline-suggestion install on every launch:
         // first-ever launch installs from the current default; subsequent
@@ -1762,7 +1851,9 @@ final class WorkspaceStore: ObservableObject {
                     ScrollbackArchive.fileID(forPaneKey: "\(ws.id.uuidString):\(paneID.value)"))
             }
         }
-        ScrollbackArchive.prune(keeping: liveScrollbackIDs)
+        if !Persistence.requiresLoadRetry {
+            ScrollbackArchive.prune(keeping: liveScrollbackIDs)
+        }
 
         // Block-based observers hold their tokens in `observerTokens`; the
         // store currently lives as long as the app, but if it's ever torn
@@ -1927,6 +2018,7 @@ final class WorkspaceStore: ObservableObject {
     }
 
     deinit {
+        externalControlExpiryWork?.cancel()
         fallbackTimer?.invalidate()
         for token in observerTokens {
             NotificationCenter.default.removeObserver(token)
@@ -1953,7 +2045,7 @@ final class WorkspaceStore: ObservableObject {
         guard freeIdleTerminalsEnabled else { return }
         let timeout = TimeInterval(idleTerminalTimeoutSeconds)
         for (key, view) in surfaceViews {
-            guard !webRemoteControlledPanes.contains(key) else { continue }
+            guard !webRemoteControlledPanes.contains(key), !externalControlledPanes.contains(key) else { continue }
             view.takeOfflineIfEligible(
                 enabled: true,
                 timeout: timeout,
@@ -1996,16 +2088,8 @@ final class WorkspaceStore: ObservableObject {
         // previous session instead of collapsing onto the most-recent one
         // (#45). No id captured ⇒ fall back to "resume most recent" — handles
         // pre-fix data and panes where no hook fired before shutdown.
-        let restoreCommand: String? = {
-            if let pending = pendingInitialInput.removeValue(forKey: key) { return pending }
-            guard let pane = workspaces.first(where: { $0.id == workspaceID })?.panes[paneID],
-                  let token = pane.lastAgent,
-                  let kind = PaneAgentKind(rawValue: token),
-                  restoreEnabled(for: kind) else { return nil }
-            let sid = pane.sessionIds[kind.rawValue]
-                .flatMap { Self.isValidSessionId($0) ? $0 : nil }
-            return kind.restoreCommand(sessionId: sid, codexHome: pane.codexHome)
-        }()
+        let restoreCommand = initialCommand(for: key)
+        pendingInitialInput.removeValue(forKey: key)
         let v = GhosttySurfaceView(
             frame: .zero,
             initialCwd: cwd,
@@ -2016,6 +2100,44 @@ final class WorkspaceStore: ObservableObject {
         )
         surfaceViews[key] = v
         return v
+    }
+
+    private func initialCommand(for key: WorkspacePaneKey) -> String? {
+        if let pending = pendingInitialInput[key] { return pending }
+        guard let pane = workspaces.first(where: { $0.id == key.workspace })?.panes[key.pane],
+              let token = pane.lastAgent, let kind = PaneAgentKind(rawValue: token),
+              restoreEnabled(for: kind) else { return nil }
+        let sid = pane.sessionIds[kind.rawValue].flatMap { Self.isValidSessionId($0) ? $0 : nil }
+        return kind.restoreCommand(sessionId: sid, codexHome: pane.codexHome)
+    }
+
+    /// Remote control may wake an ordinary shell without selecting its workspace.
+    /// Agent restoration and one-shot commands require an explicit local mount.
+    private func remoteControlView(
+        for key: WorkspacePaneKey,
+        source: WorkspaceControlSource = .local
+    ) -> Result<GhosttySurfaceView, RemoteControlError> {
+        let view: GhosttySurfaceView
+        if let existing = surfaceViews[key] {
+            view = existing
+        } else {
+            guard initialCommand(for: key) == nil else { return .failure(.requiresLocalOpen) }
+            let cwd = workspaces.first(where: { $0.id == key.workspace })?.panes[key.pane]?.workingDirectory
+            view = surfaceView(workspaceID: key.workspace, paneID: key.pane, cwd: cwd)
+        }
+        guard view.hasLiveSurface || !view.hasPendingInitialInput else {
+            return .failure(.requiresLocalOpen)
+        }
+        // Check before ensureLiveSurface: creating a zero-sized shell now and
+        // restoring history on its eventual mount would invert output order.
+        if source == .local && view.requiresLocalScrollbackRestore {
+            return .failure(.requiresLocalOpen)
+        }
+        return .success(view)
+    }
+
+    private enum RemoteControlError: String, Error {
+        case requiresLocalOpen = "pane-requires-local-open"
     }
 
     /// Walks the split tree to decide whether `target` sits flush with the
@@ -2555,6 +2677,73 @@ final class WorkspaceStore: ObservableObject {
         return WorkspacePaneKey(workspace: ws, pane: PaneID(value: seq))
     }
 
+    /// Offer an explicit retry before replacing a temporary startup session;
+    /// no parameters; returns without changing terminals or save protection on cancellation.
+    private func offerSavedSessionRecovery() {
+        var temporarySessionChanged = false
+        while Persistence.requiresLoadRetry {
+            let workspaceIDs = Set(workspaces.map { $0.id })
+            let paneKeys = Set(workspaces.flatMap { workspace in
+                workspace.panes.keys.map { WorkspacePaneKey(workspace: workspace.id, pane: $0) }
+            })
+            let identities = surfaceViews.mapValues { ObjectIdentifier($0) }
+            let busyPanes = Set(paneKeys.filter { paneNeedsCloseConfirmation($0) })
+
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = String(localized: "Saved Session Unavailable")
+            alert.informativeText = String(localized: "Your saved session is still on disk. Retry will restore it, replacing this temporary workspace session and closing its terminals. Continuing without saving keeps the original untouched; temporary workspace changes will not be saved.")
+            if temporarySessionChanged {
+                alert.informativeText += "\n\n" + String(localized: "The temporary session changed while the dialog was open. Review it before trying again.")
+            }
+            alert.addButton(withTitle: String(localized: "Retry and Restore"))
+            alert.addButton(withTitle: String(localized: "Continue Without Saving"))
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+            let currentPaneKeys = Set(workspaces.flatMap { workspace in
+                workspace.panes.keys.map { WorkspacePaneKey(workspace: workspace.id, pane: $0) }
+            })
+            let currentBusy = Set(currentPaneKeys.filter { paneNeedsCloseConfirmation($0) })
+            guard workspaceIDs == Set(workspaces.map { $0.id }), paneKeys == currentPaneKeys,
+                  identities == surfaceViews.mapValues({ ObjectIdentifier($0) }),
+                  currentBusy.isSubset(of: busyPanes) else {
+                temporarySessionChanged = true
+                continue
+            }
+            // Read only after the modal and identity checks. A successful load
+            // permits saving, so adopt it synchronously without another modal
+            // or await that could let a temporary-state autosave run first.
+            guard let restored = Persistence.load() else { continue }
+            captureCwdsFromLiveSurfaces()
+            flushScrollback(force: true)
+            ScrollbackArchive.drain()
+            surfaceViews.removeAll()
+            paneAgentState.removeAll()
+            paneProcesses.removeAll()
+            pendingInitialInput.removeAll()
+            gitStatuses.removeAll()
+            webRemoteControlledPanes.removeAll()
+            clearExternalControlActivity()
+            clearDockBadge()
+            workspaces = restored.workspaces
+            let firstActiveID = workspaces.first(where: { !$0.archived })?.id ?? workspaces.first?.id
+            let shouldRestore = (UserDefaults.standard.object(forKey: "glint.restoreLastWorkspace") as? Bool) ?? true
+            let selected = shouldRestore ? (restored.selectedWorkspaceID ?? firstActiveID) : firstActiveID
+            selectedWorkspaceID = workspaces.first(where: { $0.id == selected })?.archived == true
+                ? firstActiveID : selected
+            sidebarCollapsed = restored.sidebarCollapsed
+            syncGitWatchers()
+            refreshAllGitStatuses()
+            let liveIDs = Set(workspaces.flatMap { workspace in
+                workspace.panes.keys.map {
+                    ScrollbackArchive.fileID(forPaneKey: "\(workspace.id.uuidString):\($0.value)")
+                }
+            })
+            ScrollbackArchive.prune(keeping: liveIDs)
+            return
+        }
+    }
+
     func persist() {
         let state = PersistedState(
             workspaces: workspaces,
@@ -2825,6 +3014,9 @@ final class WorkspaceStore: ObservableObject {
         // ghost entries forever.
         paneAgentState.removeValue(forKey: key)
         paneProcesses.removeValue(forKey: key)
+        webRemoteControlledPanes.remove(key)
+        externalControlExpiry.removeValue(forKey: key)
+        externalControlledPanes.remove(key)
         clearDockBadge(for: key)
         workspaces[i].tabs[t].focusedPane = survivor
             ?? workspaces[i].tabs[t].root.leaves.first
@@ -2938,13 +3130,15 @@ final class WorkspaceStore: ObservableObject {
     func controlSendText(pane: String, text: String, enter: Bool) -> String? {
         guard let key = Self.parsePaneKey(pane) else { return "bad-request" }
         guard paneExists(key) else { return "unknown-pane" }
-        // surfaceViews only holds panes that have actually rendered; a real
-        // pane in a background tab/workspace may have no live surface yet.
-        // Report that distinctly instead of dropping the inject and lying with
-        // {"ok":true}, or misreporting it as a nonexistent pane.
-        guard let view = surfaceViews[key], view.hasLiveSurface else { return "pane-not-ready" }
+        let view: GhosttySurfaceView
+        switch remoteControlView(for: key) {
+        case let .success(value): view = value
+        case let .failure(error): return error.rawValue
+        }
+        guard view.ensureLiveForWebRemoteControl() else { return "pane-not-ready" }
         view.injectText(text)
         if enter { view.injectKey(.special(keycode: 36)) }
+        noteExternalControlActivity(key)
         return nil
     }
 
@@ -2958,9 +3152,38 @@ final class WorkspaceStore: ObservableObject {
             parsed.append(ik)
         }
         guard paneExists(key) else { return "unknown-pane" }
-        guard let view = surfaceViews[key], view.hasLiveSurface else { return "pane-not-ready" }
+        let view: GhosttySurfaceView
+        switch remoteControlView(for: key) {
+        case let .success(value): view = value
+        case let .failure(error): return error.rawValue
+        }
+        guard view.ensureLiveForWebRemoteControl() else { return "pane-not-ready" }
         for ik in parsed { view.injectKey(ik) }
+        noteExternalControlActivity(key)
         return nil
+    }
+
+    enum ControlGridResult {
+        case success(Data)
+        case failure(String)
+    }
+
+    func controlReadGrid(pane: String, scrollback: Bool, maxLines: Int) -> ControlGridResult {
+        guard let key = Self.parsePaneKey(pane), (1...10_000).contains(maxLines) else {
+            return .failure("bad-request")
+        }
+        guard paneExists(key) else { return .failure("unknown-pane") }
+        let view: GhosttySurfaceView
+        switch remoteControlView(for: key) {
+        case let .success(value): view = value
+        case let .failure(error): return .failure(error.rawValue)
+        }
+        guard view.ensureLiveForWebRemoteControl(),
+              let grid = view.controlReadGrid(scrollback: scrollback, maxLines: maxLines) else {
+            return .failure("pane-not-ready")
+        }
+        noteExternalControlActivity(key)
+        return .success(grid)
     }
 
     func controlFocus(pane: String, activateApp: Bool = true) -> String? {
@@ -3072,14 +3295,16 @@ final class WorkspaceStore: ObservableObject {
         guard paneExists(key) else {
             completion(.failure("unknown-pane")); return
         }
-        guard let view = surfaceViews[key] else {
-            completion(.failure("pane-not-ready")); return
+        let view: GhosttySurfaceView
+        switch remoteControlView(for: key, source: .web) {
+        case let .success(value): view = value
+        case let .failure(error): completion(.failure(error.rawValue)); return
         }
-        webRemoteControlledPanes.insert(key)
-        view.webRemoteSnapshot(size: size) { snapshot in
-            guard let snapshot else {
+        view.webRemoteSnapshot(size: size) { [weak self] snapshot in
+            guard let self, self.paneExists(key), let snapshot else {
                 completion(.failure("pane-not-ready")); return
             }
+            if !self.webRemoteControlledPanes.contains(key) { self.webRemoteControlledPanes.insert(key) }
             completion(.success(snapshot))
         }
     }
@@ -3319,6 +3544,8 @@ final class WorkspaceStore: ObservableObject {
         paneAgentState.removeValue(forKey: key)
         paneProcesses.removeValue(forKey: key)
         webRemoteControlledPanes.remove(key)
+        externalControlExpiry.removeValue(forKey: key)
+        externalControlledPanes.remove(key)
         clearDockBadge(for: key)
     }
 
@@ -3413,6 +3640,11 @@ final class WorkspaceStore: ObservableObject {
         // Drop every surface tied to this workspace (their ghostty surfaces
         // get freed in GhosttySurfaceView.deinit when the dict releases them).
         surfaceViews = surfaceViews.filter { $0.key.workspace != id }
+        webRemoteControlledPanes = webRemoteControlledPanes.filter { $0.workspace != id }
+        for key in Array(externalControlExpiry.keys) where key.workspace == id {
+            externalControlExpiry.removeValue(forKey: key)
+            externalControlledPanes.remove(key)
+        }
         clearDockBadges(for: workspaces[idx].panes.keys.map { WorkspacePaneKey(workspace: id, pane: $0) })
         // And their scrollback snapshots.
         for paneID in workspaces[idx].panes.keys {
@@ -3466,7 +3698,9 @@ final class WorkspaceStore: ObservableObject {
         if !busyPanes.isEmpty,
            !Self.confirmDestruction(
                message: String(format: String(localized: "Archive “%@”?"), workspaces[idx].displayName),
-               informative: String(format: String(localized: "%d of its panes still have something running; archiving will terminate their processes."), busyPanes.count),
+               informative: busyPanes.count == 1
+                   ? String(localized: "1 of its panes still has something running; archiving will terminate its processes.")
+                   : String(format: String(localized: "%lld of its panes still have something running; archiving will terminate their processes."), Int64(busyPanes.count)),
                confirmTitle: String(localized: "Archive Workspace"),
                suppressionKey: "glint.suppressArchiveWorkspaceConfirm"
            ) {

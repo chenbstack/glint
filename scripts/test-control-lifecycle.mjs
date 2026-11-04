@@ -31,6 +31,8 @@ enum ControlTestGate {
 final class WorkspaceStore {
     static let current: WorkspaceStore? = WorkspaceStore()
     var injections = 0
+    var externalControlEnabled = true
+    enum ControlGridResult { case success(Data), failure(String) }
     /// List stub panes; no inputs; returns an empty list.
     func controlListPanes() -> [[String: Any]] { [] }
     /// Focus a stub pane; pane is its identifier; returns no error.
@@ -39,6 +41,12 @@ final class WorkspaceStore {
     func controlSendText(pane: String, text: String, enter: Bool) -> String? { injections += 1; return nil }
     /// Accept stub keys; arguments match production; returns no error.
     func controlSendKeys(pane: String, keys: [String]) -> String? { nil }
+    /// Stand in for terminal-grid export; arguments match production; returns a safe unavailable result.
+    func controlReadGrid(pane: String, scrollback: Bool, maxLines: Int) -> ControlGridResult { .failure("pane-not-ready") }
+}
+enum GhosttySurfaceView {
+    /// Stand in for grid decoding; inputs match production; returns no text without a real engine.
+    static func controlText(fromRenderGrid data: Data, scrollback: Bool, maxLines: Int) -> String? { nil }
 }
 extension ControlBridge {
     /// Construct an isolated bridge; no inputs; returns a bridge without starting it.
@@ -98,6 +106,15 @@ DispatchQueue.global().async {
     let next = connectSocket(bridge.socketPath)
     check(request(next, oldToken)?["error"] as? String == "unauthorized", "new connection rejects old token")
     check(request(next, newToken)?["ok"] as? Bool == true, "new token succeeds")
+    let mainBlocked = DispatchSemaphore(value: 0)
+    let unblockMain = DispatchSemaphore(value: 0)
+    DispatchQueue.main.async { mainBlocked.signal(); unblockMain.wait() }
+    check(mainBlocked.wait(timeout: .now() + 3) == .success, "main queue is deliberately occupied")
+    let unauthorized = connectSocket(bridge.socketPath)
+    let rejected = request(unauthorized, "not-the-token")
+    unblockMain.signal()
+    close(unauthorized)
+    check(rejected?["error"] as? String == "unauthorized", "invalid token is rejected without waiting for the main queue")
     let reachedGate = DispatchSemaphore(value: 0)
     let resumeRequest = DispatchSemaphore(value: 0)
     let handled = DispatchSemaphore(value: 0)
@@ -126,7 +143,7 @@ try {
     .replace('        return response\n    }', '        ControlTestGate.invokeAfter()\n        return response\n    }');
   fs.writeFileSync(path.join(dir, 'Bridge.swift'), source + support);
   fs.writeFileSync(path.join(dir, 'main.swift'), main);
-  const build = spawnSync('swiftc', ['-swift-version', '5', '-module-cache-path', path.join(dir, 'cache'), path.join(dir, 'Bridge.swift'), path.join(root, 'Glint/Agent/SafeJSON.swift'), path.join(dir, 'main.swift'), '-o', path.join(dir, 'test')], { encoding: 'utf8', timeout: 60000 });
+  const build = spawnSync('swiftc', ['-swift-version', '5', '-module-cache-path', path.join(dir, 'cache'), path.join(dir, 'Bridge.swift'), path.join(root, 'Glint/Agent/SafeJSON.swift'), path.join(root, 'Shared/CLIInstallation.swift'), path.join(dir, 'main.swift'), '-o', path.join(dir, 'test')], { encoding: 'utf8', timeout: 60000 });
   process.stdout.write(build.stdout ?? ''); process.stderr.write(build.stderr ?? '');
   if (build.status !== 0) process.exitCode = 1;
   else {

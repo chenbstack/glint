@@ -727,6 +727,19 @@ private struct WorkspaceCard: View {
                         .truncationMode(.tail)
                 }
                 secondaryRow(summary: summary, active: active)
+                ForEach(store.workspaceControlSources(ws.id), id: \.self) { source in
+                    Label {
+                        Text(verbatim: source.title)
+                    } icon: {
+                        Image(systemName: "dot.radiowaves.left.and.right")
+                    }
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.orange)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Theme.orange.opacity(0.14)))
+                    .help("Reads and input keep your local workspace unchanged. Local activity stays marked for 30 seconds; browser control stays marked while connected.")
+                }
             }
             Spacer(minLength: 4)
             if !multiInfos.isEmpty {
@@ -820,9 +833,11 @@ private struct WorkspaceCard: View {
         .accessibilityAddTraits(active ? [.isButton, .isSelected] : [.isButton])
         .accessibilityIdentifier("workspace-\(ws.id.uuidString)")
         .accessibilityLabel(Text(verbatim: ws.displayName))
-        .accessibilityValue(Text(verbatim: archived
+        .accessibilityValue(Text(verbatim: (archived
                                  ? String(localized: "Archived")
-                                 : accessibilityStatus(summary: summary)))
+                                 : accessibilityStatus(summary: summary))
+                                 + store.workspaceControlSources(ws.id)
+                                    .map { ", " + $0.title }.joined()))
         // Lift the dragged card above its neighbours.
         .scaleEffect(isDragging ? 1.03 : 1.0, anchor: .center)
         .shadow(color: Color.black.opacity(isDragging ? 0.35 : 0),

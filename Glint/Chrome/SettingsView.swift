@@ -991,6 +991,8 @@ private struct TerminalPane: View {
     @State private var confirmingWebRemoteKeyReset = false
     @State private var resettingWebRemoteCredentials = false
     @State private var webRemoteAlert: WebRemoteAlert?
+    @State private var cliMessage: String?
+    @State private var cliInstallationState = ControlCLIIntegration.installationState
 
     private let scrollbackSizeChoices: [Int] = [5, 10, 25, 50, 100, 250]
         .map { $0 * 1_000_000 }
@@ -1122,7 +1124,7 @@ private struct TerminalPane: View {
         }
 
         SettingsCard("External control",
-                     footer: "Exposes a local socket under ~/.glint/run/ so other apps on this Mac can focus panes and inject text/keys. Any process that can read the 0600 token file may drive your terminals — off by default. Toggling takes effect immediately.") {
+                     footer: "Exposes a local socket under ~/.glint/run/ so other apps on this Mac can focus panes, read terminal contents and inject text/keys. Reading and input require the 0600 token file. Ordinary reads and input do not switch workspaces. Off by default; toggling takes effect immediately.") {
             SettingsRow("Allow external control",
                         subtitle: store.externalControlEnabled
                         ? "Listening for external commands."
@@ -1130,6 +1132,51 @@ private struct TerminalPane: View {
                 Toggle("", isOn: $store.externalControlEnabled)
                     .toggleStyle(.switch).labelsHidden()
             }
+            SettingsDivider()
+            SettingsRow("Command-line access",
+                        subtitle: cliInstallationSubtitle) {
+                HStack(spacing: 8) {
+                    StatusPill(label: cliInstallationLabel,
+                               tone: cliInstallationState == .installed ? .ok
+                                    : ((cliInstallationState == .conflict || cliInstallationState == .repairable) ? .warn : .neutral))
+                    Button("Install CLI") {
+                        defer { refreshCLIInstallation() }
+                        do {
+                            let path = try ControlCLIIntegration.install()
+                            cliMessage = String(format: String(localized: "Installed at %@. Add ~/.local/bin to PATH if needed. External control remains governed by the switch above."), path.path)
+                        } catch { cliMessage = error.localizedDescription }
+                    }
+                    .disabled(cliInstallationState != .notInstalled && cliInstallationState != .repairable)
+                    if cliInstallationState == .installed || cliInstallationState == .repairable {
+                        Button("Uninstall") {
+                            defer { refreshCLIInstallation() }
+                            do {
+                                try ControlCLIIntegration.uninstall()
+                                cliMessage = String(localized: "CLI link removed from ~/.local/bin/glint.")
+                            } catch { cliMessage = error.localizedDescription }
+                        }
+                    }
+                }
+                .controlSize(.small)
+            }
+            SettingsDivider()
+            SettingsRow("Agent instructions", subtitle: "Copies CLI commands for an agent. No token is copied.") {
+                Button("Copy Agent instructions") {
+                    copyWebRemoteValue(ControlCLIIntegration.agentInstructions)
+                }
+                .controlSize(.small)
+            }
+        }
+        .onAppear { refreshCLIInstallation() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshCLIInstallation()
+        }
+        .alert("Glint CLI", isPresented: Binding(
+            get: { cliMessage != nil }, set: { if !$0 { cliMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { cliMessage = nil }
+        } message: {
+            Text(verbatim: cliMessage ?? "")
         }
 
         SettingsCard("Web remote control",
@@ -1369,6 +1416,35 @@ private struct TerminalPane: View {
         // clipboard alongside the address. The key is copied separately via
         // the "Access key" row.
         copyWebRemoteValue(WebRemoteAccessURL.redacted(from: value))
+    }
+
+    private var cliInstallationLabel: String {
+        switch cliInstallationState {
+        case .installed: return String(localized: "Installed")
+        case .notInstalled: return String(localized: "Not installed")
+        case .conflict: return String(localized: "Command name in use")
+        case .repairable: return String(localized: "Needs repair")
+        case .linkedElsewhere: return String(localized: "Linked to another Glint")
+        }
+    }
+
+    private var cliInstallationSubtitle: String {
+        switch cliInstallationState {
+        case .installed:
+            return String(localized: "Installed at ~/.local/bin/glint. Uninstall removes only the command link.")
+        case .repairable:
+            return String(localized: "The CLI link points to a missing Glint installation. Install again to repair it, or uninstall the link.")
+        case .linkedElsewhere:
+            return String(localized: "The CLI is linked to another existing Glint installation. It was left unchanged.")
+        case .notInstalled:
+            return String(localized: "Installs ~/.local/bin/glint. Installation does not enable external control.")
+        case .conflict:
+            return String(localized: "Another command already uses ~/.local/bin/glint.")
+        }
+    }
+
+    private func refreshCLIInstallation() {
+        cliInstallationState = ControlCLIIntegration.installationState
     }
 
     private func copyWebRemoteValue(_ value: String) {
